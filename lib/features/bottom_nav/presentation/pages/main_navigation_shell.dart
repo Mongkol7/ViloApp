@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../feed/presentation/pages/home_feed_page.dart';
 import '../../../profile/presentation/pages/people_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 import '../widgets/vilo_floating_bottom_bar.dart';
@@ -27,7 +28,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   double _accumulatedDelta = 0.0;
 
   final List<Widget> _pages = const [
-    _PlaceholderPage(title: 'Home Feed', icon: Icons.home_rounded),
+    HomeFeedPage(),
     PeopleScreen(),
     _PlaceholderPage(title: 'Chat & Messages', icon: Icons.chat_bubble_rounded),
     ProfileScreen(),
