@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../feed/presentation/pages/home_feed_page.dart';
 import '../widgets/vilo_floating_bottom_bar.dart';
 
 class MainNavigationShell extends StatefulWidget {
@@ -14,7 +15,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   bool _isAddActive = false;
 
   final List<Widget> _pages = const [
-    _PlaceholderPage(title: 'Home Feed', icon: Icons.home_rounded),
+    HomeFeedPage(),
     _PlaceholderPage(title: 'People & Friends', icon: Icons.people_alt_rounded),
     _PlaceholderPage(title: 'Chat & Messages', icon: Icons.chat_bubble_rounded),
     _PlaceholderPage(title: 'User Profile', icon: Icons.person_rounded),
