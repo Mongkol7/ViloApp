@@ -8,6 +8,7 @@ import 'offline_videos_screen.dart';
 import 'qr_code_screen.dart';
 import 'tiktok_studio_screen.dart';
 import 'promote_screen.dart';
+import 'settings_and_privacy_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -96,7 +97,12 @@ class SettingsScreen extends StatelessWidget {
           _buildSettingsTile(
             icon: Icons.settings_outlined,
             title: 'Settings and privacy',
-            onTap: () {},
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsAndPrivacyScreen()),
+              );
+            },
           ),
         ],
       ),

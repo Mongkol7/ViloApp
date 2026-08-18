@@ -8,6 +8,7 @@ import '../pages/qr_code_screen.dart';
 import '../pages/tiktok_studio_screen.dart';
 import '../pages/promote_screen.dart';
 import '../pages/settings_screen.dart';
+import '../pages/settings_and_privacy_screen.dart';
 
 class ProfileMenuDrawer extends StatelessWidget {
   const ProfileMenuDrawer({super.key});
@@ -80,9 +81,7 @@ class ProfileMenuDrawer extends StatelessWidget {
                     context,
                     icon: Icons.settings_outlined,
                     title: 'Settings and privacy',
-                    onTap: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
-                    },
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsAndPrivacyScreen())),
                   ),
                 ],
               ),

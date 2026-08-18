@@ -11,7 +11,10 @@ class PromoteScreen extends StatelessWidget {
         backgroundColor: Colors.black,
         appBar: AppBar(
           backgroundColor: Colors.black,
-          leading: const Icon(Icons.menu, color: Colors.white),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white, size: 26),
+            onPressed: () => Navigator.pop(context),
+          ),
           title: const Text('Promote', style: TextStyle(color: Colors.white)),
           actions: [
             const Icon(Icons.search, color: Colors.white),
@@ -49,7 +52,7 @@ class PromoteScreen extends StatelessWidget {
                         ],
                       ),
                     ),
-                    Container(width: 40, height: 40, color: Colors.redAccent.withOpacity(0.2)),
+                    Container(width: 40, height: 40, color: Colors.redAccent.withValues(alpha: 0.2)),
                   ],
                 ),
               ),
@@ -77,7 +80,7 @@ class PromoteScreen extends StatelessWidget {
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: 3,
-                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                  separatorBuilder: (context, index) => const SizedBox(width: 12),
                   itemBuilder: (context, index) => Container(
                     width: 120,
                     decoration: BoxDecoration(color: Colors.grey[900], borderRadius: BorderRadius.circular(8)),
@@ -98,7 +101,7 @@ class PromoteScreen extends StatelessWidget {
               const SizedBox(height: 24),
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(color: Colors.redAccent.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
