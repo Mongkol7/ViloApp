@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../search_discover/presentation/pages/search_screen.dart';
 import '../../data/datasources/static_people_data.dart';
 import '../../domain/entities/person_suggestion.dart';
 import '../widgets/person_card.dart';
@@ -60,7 +61,13 @@ class _PeopleScreenState extends State<PeopleScreen> {
               color: Colors.white,
               size: 26,
             ),
-            onPressed: () {},
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const SearchScreen(),
+                ),
+              );
+            },
           ),
           const SizedBox(width: 8),
         ],

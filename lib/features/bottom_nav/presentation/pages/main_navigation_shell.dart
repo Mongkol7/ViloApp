@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../inbox_activity/presentation/pages/inbox_screen.dart';
 import '../../../profile/presentation/pages/people_screen.dart';
 import '../widgets/vilo_floating_bottom_bar.dart';
 
@@ -28,7 +29,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   final List<Widget> _pages = const [
     _PlaceholderPage(title: 'Home Feed', icon: Icons.home_rounded),
     PeopleScreen(),
-    _PlaceholderPage(title: 'Chat & Messages', icon: Icons.chat_bubble_rounded),
+    InboxScreen(),
     _PlaceholderPage(title: 'User Profile', icon: Icons.person_rounded),
   ];
 
