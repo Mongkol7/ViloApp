@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:video_player/video_player.dart';
+import '../../../../app/app.dart';
 import '../widgets/share_bottom_sheet.dart';
 import '../widgets/comment_bottom_sheet.dart';
 import 'sound_detail_page.dart';
 
-class VideoFeedPage extends StatelessWidget {
+class VideoFeedPage extends StatefulWidget {
   const VideoFeedPage({super.key});
+
+  @override
+  State<VideoFeedPage> createState() => _VideoFeedPageState();
+}
+
+class _VideoFeedPageState extends State<VideoFeedPage> {
+  int _currentPage = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -87,8 +95,16 @@ class VideoFeedPage extends StatelessWidget {
         child: PageView.builder(
           scrollDirection: Axis.vertical,
           itemCount: mockVideos.length,
+          onPageChanged: (index) {
+            setState(() {
+              _currentPage = index;
+            });
+          },
           itemBuilder: (context, index) {
-            return _VideoPostWidget(data: mockVideos[index]);
+            return _VideoPostWidget(
+              data: mockVideos[index],
+              isCurrentPage: _currentPage == index,
+            );
           },
         ),
       ),
@@ -98,32 +114,113 @@ class VideoFeedPage extends StatelessWidget {
 
 class _VideoPostWidget extends StatefulWidget {
   final Map<String, dynamic> data;
+  final bool isCurrentPage;
 
-  const _VideoPostWidget({required this.data});
+  const _VideoPostWidget({
+    required this.data,
+    required this.isCurrentPage,
+  });
 
   @override
   State<_VideoPostWidget> createState() => _VideoPostWidgetState();
 }
 
-class _VideoPostWidgetState extends State<_VideoPostWidget> {
+class _VideoPostWidgetState extends State<_VideoPostWidget>
+    with RouteAware, WidgetsBindingObserver {
   late VideoPlayerController _controller;
+  bool _manuallyPaused = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = VideoPlayerController.asset(widget.data['videoUrl'])
       ..initialize().then((_) {
-        // Ensure the first frame is shown after the video is initialized, even before the play button has been pressed.
+        if (!mounted) return;
         setState(() {});
         _controller.setLooping(true);
-        _controller.play();
+        if (widget.isCurrentPage && !_manuallyPaused) {
+          _controller.play();
+        }
       });
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final modalRoute = ModalRoute.of(context);
+    if (modalRoute != null) {
+      routeObserver.subscribe(this, modalRoute);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _VideoPostWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isCurrentPage != widget.isCurrentPage) {
+      if (widget.isCurrentPage) {
+        if (!_manuallyPaused && _controller.value.isInitialized) {
+          _controller.play();
+        }
+      } else {
+        if (_controller.value.isInitialized) {
+          _controller.pause();
+        }
+      }
+    }
+  }
+
+  @override
+  void didPushNext() {
+    // Automatically pause video when navigating to another page (like SearchScreen)
+    if (_controller.value.isInitialized && _controller.value.isPlaying) {
+      _controller.pause();
+      if (mounted) setState(() {});
+    }
+  }
+
+  @override
+  void didPopNext() {
+    // Automatically resume video when returning back to Home feed from SearchScreen
+    if (widget.isCurrentPage && !_manuallyPaused && _controller.value.isInitialized) {
+      _controller.play();
+      if (mounted) setState(() {});
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      if (_controller.value.isInitialized && _controller.value.isPlaying) {
+        _controller.pause();
+        if (mounted) setState(() {});
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      if (widget.isCurrentPage && !_manuallyPaused && _controller.value.isInitialized) {
+        _controller.play();
+        if (mounted) setState(() {});
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    routeObserver.unsubscribe(this);
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
+  }
+
+  void _togglePlayPause() {
+    setState(() {
+      if (_controller.value.isPlaying) {
+        _manuallyPaused = true;
+        _controller.pause();
+      } else {
+        _manuallyPaused = false;
+        _controller.play();
+      }
+    });
   }
 
   @override
@@ -134,13 +231,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget> {
         Positioned.fill(
           child: _controller.value.isInitialized
               ? GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _controller.value.isPlaying
-                          ? _controller.pause()
-                          : _controller.play();
-                    });
-                  },
+                  onTap: _togglePlayPause,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
