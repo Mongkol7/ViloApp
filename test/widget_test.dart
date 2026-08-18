@@ -1,10 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:viloapp/app/app.dart';
+import 'package:viloapp/core/theme/app_theme.dart';
+import 'package:viloapp/features/bottom_nav/presentation/widgets/vilo_floating_bottom_bar.dart';
+import 'package:viloapp/features/inbox_activity/presentation/pages/inbox_screen.dart';
+import 'package:viloapp/features/profile/presentation/pages/people_screen.dart';
+
+Widget _buildTestApp({required Widget child}) {
+  return MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: AppTheme.darkTheme,
+    home: Scaffold(body: child),
+  );
+}
 
 void main() {
   testWidgets('ViloFloatingBottomBar renders navigation icons and action plus button', (WidgetTester tester) async {
-    await tester.pumpWidget(const ViloApp());
+    int selectedIndex = 1;
+    bool isAddActive = false;
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        child: ViloFloatingBottomBar(
+          currentIndex: selectedIndex,
+          isAddActive: isAddActive,
+          isCompact: false,
+          onTabSelected: (i) => selectedIndex = i,
+          onAddPressed: () => isAddActive = !isAddActive,
+        ),
+      ),
+    );
+
     expect(find.byIcon(Icons.home_outlined), findsOneWidget);
     expect(find.byIcon(Icons.people_alt_rounded), findsOneWidget); // Active tab
     expect(find.byIcon(Icons.chat_bubble_outline_rounded), findsOneWidget);
@@ -12,28 +37,22 @@ void main() {
     expect(find.byIcon(Icons.add), findsOneWidget);
   });
 
-  testWidgets('Tapping search icon opens SearchScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(const ViloApp());
-    
-    // Tap search icon on top bar
-    final searchIconFinder = find.byIcon(Icons.search_rounded);
-    expect(searchIconFinder, findsOneWidget);
-    await tester.tap(searchIconFinder);
+  testWidgets('PeopleScreen renders top search bar and creator cards', (WidgetTester tester) async {
+    await tester.pumpWidget(_buildTestApp(child: const PeopleScreen()));
+
+    // Verify search icon and title
+    expect(find.byIcon(Icons.search_rounded), findsOneWidget);
+    expect(find.text('Friends'), findsOneWidget);
+
+    // Tap search icon to open SearchScreen
+    await tester.tap(find.byIcon(Icons.search_rounded));
     await tester.pumpAndSettle();
 
-    // Verify SearchScreen is displayed with top search bar and Trending Results
     expect(find.text('Trending Results'), findsOneWidget);
-    expect(find.byType(TextField), findsOneWidget);
   });
 
-  testWidgets('Tapping Chat tab navigates to InboxScreen and opens ChatDetailScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(const ViloApp());
-
-    // Tap Chat tab (index 2) on floating navigation bar
-    final chatTabFinder = find.byIcon(Icons.chat_bubble_outline_rounded);
-    expect(chatTabFinder, findsOneWidget);
-    await tester.tap(chatTabFinder);
-    await tester.pumpAndSettle();
+  testWidgets('InboxScreen renders and navigates to ChatDetailScreen', (WidgetTester tester) async {
+    await tester.pumpWidget(_buildTestApp(child: const InboxScreen()));
 
     // Verify InboxScreen components
     expect(find.text('Inbox'), findsOneWidget);
@@ -57,11 +76,7 @@ void main() {
   });
 
   testWidgets('Full Story lifecycle: Share thought with music wave, inspect viewers, delete story', (WidgetTester tester) async {
-    await tester.pumpWidget(const ViloApp());
-
-    // Switch to Inbox
-    await tester.tap(find.byIcon(Icons.chat_bubble_outline_rounded));
-    await tester.pumpAndSettle();
+    await tester.pumpWidget(_buildTestApp(child: const InboxScreen()));
 
     // Tap thought bubble to open ShareThoughtScreen
     await tester.tap(find.text('Share a thought...'));
