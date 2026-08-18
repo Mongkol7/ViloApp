@@ -6,6 +6,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../widgets/vilo_input_field.dart';
 import '../widgets/vilo_primary_button.dart';
 import '../widgets/vilo_social_login_section.dart';
+import '../../../bottom_nav/presentation/pages/main_navigation_shell.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 
@@ -80,11 +81,15 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _handleLogin() async {
-    if (!_validate()) return;
     HapticFeedback.lightImpact();
-    setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 2));
-    if (mounted) setState(() => _isLoading = false);
+    
+    // Ensure the widget is still mounted before navigating
+    if (!mounted) return;
+    
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const MainNavigationShell()),
+      (route) => false,
+    );
   }
 
   void _goToRegister() => Navigator.of(context).push(_slideRoute(const RegisterScreen()));
@@ -182,8 +187,8 @@ class _LoginScreenState extends State<LoginScreen>
                     // ── Login CTA ─────────────────────────────────────
                     ViloPrimaryButton(
                       label: 'Login',
-                      onPressed: _isLoading ? null : _handleLogin,
-                      isLoading: _isLoading,
+                      onPressed: _handleLogin,
+                      isLoading: false,
                     ),
                     const SizedBox(height: 28),
 
