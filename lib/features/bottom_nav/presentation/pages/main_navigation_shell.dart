@@ -12,7 +12,7 @@ class MainNavigationShell extends StatefulWidget {
 
   const MainNavigationShell({
     super.key,
-    this.initialIndex = 1, // Default to 'People' as shown in design
+    this.initialIndex = 0, // Default to Home Feed Page (Index 0)
   });
 
   @override
