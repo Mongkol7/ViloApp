@@ -3,12 +3,14 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Floating Bottom Navigation Bar with Apple Liquid Glass / Fluid Spring motion model
+/// Floating Bottom Navigation Bar with Apple Liquid Glass / Fluid Spring motion
+/// and Instagram Dynamic Scroll & Scale Behavior (Compact / Expanded Morphing)
 class ViloFloatingBottomBar extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onTabSelected;
   final VoidCallback onAddPressed;
   final bool isAddActive;
+  final bool isCompact;
 
   const ViloFloatingBottomBar({
     super.key,
@@ -16,6 +18,7 @@ class ViloFloatingBottomBar extends StatefulWidget {
     required this.onTabSelected,
     required this.onAddPressed,
     this.isAddActive = false,
+    this.isCompact = false,
   });
 
   @override
@@ -82,13 +85,13 @@ class _ViloFloatingBottomBarState extends State<ViloFloatingBottomBar>
   }
 
   void _setupAnimations() {
-    // 1. Leading edge accelerates fast (high initial velocity spring)
+    // 1. Leading edge accelerates fast
     _leadingAnimation = CurvedAnimation(
       parent: _fluidController,
       curve: const Interval(0.0, 0.72, curve: Curves.fastLinearToSlowEaseIn),
     );
 
-    // 2. Trailing edge resists & snaps forward with overshoot
+    // 2. Trailing edge resists & snaps forward with spring overshoot
     _trailingAnimation = CurvedAnimation(
       parent: _fluidController,
       curve: const Interval(0.20, 1.0, curve: Curves.easeOutBack),
@@ -137,253 +140,301 @@ class _ViloFloatingBottomBarState extends State<ViloFloatingBottomBar>
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Main Navigation Capsule
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(32),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                child: Container(
-                  height: 64,
+    // Dynamic Geometry: Full vs Compact State
+    final double targetHeight = widget.isCompact ? 48.0 : 64.0;
+    final double targetScale = widget.isCompact ? 0.94 : 1.0;
+    final double targetRadius = widget.isCompact ? 24.0 : 32.0;
+    final double actionBtnSize = widget.isCompact ? 48.0 : 64.0;
+    final double actionIconSize = widget.isCompact ? 24.0 : 32.0;
+
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.fastEaseInToSlowEaseOut,
+      opacity: widget.isCompact ? 0.70 : 1.0,
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.fastEaseInToSlowEaseOut,
+        scale: targetScale,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Main Navigation Capsule (Glassy Dark)
+              Expanded(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 320),
+                  curve: Curves.fastEaseInToSlowEaseOut,
+                  height: targetHeight,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF5E5E62).withValues(alpha: 0.88),
-                    borderRadius: BorderRadius.circular(32),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.12),
-                      width: 1.0,
-                    ),
+                    borderRadius: BorderRadius.circular(targetRadius),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
+                        color: Colors.black.withValues(alpha: widget.isCompact ? 0.5 : 0.45),
+                        blurRadius: widget.isCompact ? 24 : 20,
+                        offset: Offset(0, widget.isCompact ? 10 : 8),
                       ),
                     ],
                   ),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final totalWidth = constraints.maxWidth;
-                      final tabWidth = totalWidth / _tabs.length;
-                      const double restingPillWidth = 56.0;
-                      const double restingPillHeight = 56.0;
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(targetRadius),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(
+                        sigmaX: widget.isCompact ? 32 : 28,
+                        sigmaY: widget.isCompact ? 32 : 28,
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF161618).withValues(
+                            alpha: widget.isCompact ? 0.75 : 0.82,
+                          ),
+                          borderRadius: BorderRadius.circular(targetRadius),
+                          border: Border.all(
+                            color: Colors.white.withValues(
+                              alpha: widget.isCompact ? 0.12 : 0.15,
+                            ),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final totalWidth = constraints.maxWidth;
+                            final tabWidth = totalWidth / _tabs.length;
+                            final double restingPillWidth = widget.isCompact ? 44.0 : 56.0;
+                            final double restingPillHeight = targetHeight - 8.0;
 
-                      return AnimatedBuilder(
-                        animation: _fluidController,
-                        builder: (context, child) {
-                          // Compute dynamic fluid pill coordinates
-                          final fromCenter = (_fromIndex * tabWidth) + (tabWidth / 2);
-                          final toCenter = (_toIndex * tabWidth) + (tabWidth / 2);
-                          final isMovingRight = toCenter >= fromCenter;
+                            return AnimatedBuilder(
+                              animation: _fluidController,
+                              builder: (context, child) {
+                                // Compute dynamic fluid pill coordinates
+                                final fromCenter = (_fromIndex * tabWidth) + (tabWidth / 2);
+                                final toCenter = (_toIndex * tabWidth) + (tabWidth / 2);
+                                final isMovingRight = toCenter >= fromCenter;
 
-                          // Anticipation / Tension pull if user is pressing down on another tab
-                          double anticipationPull = 0.0;
-                          if (_pressedIndex != null && !_fluidController.isAnimating) {
-                            final pullDir = _pressedIndex! > widget.currentIndex ? 1.0 : -1.0;
-                            anticipationPull = pullDir * 6.0;
-                          }
+                                // Anticipation / Tension pull on tap down
+                                double anticipationPull = 0.0;
+                                if (_pressedIndex != null && !_fluidController.isAnimating) {
+                                  final pullDir = _pressedIndex! > widget.currentIndex ? 1.0 : -1.0;
+                                  anticipationPull = pullDir * 6.0;
+                                }
 
-                          double leftEdge;
-                          double rightEdge;
+                                double leftEdge;
+                                double rightEdge;
 
-                          if (_fluidController.isAnimating) {
-                            final leadProgress = _leadingAnimation.value;
-                            final trailProgress = _trailingAnimation.value;
+                                if (_fluidController.isAnimating) {
+                                  final leadProgress = _leadingAnimation.value;
+                                  final trailProgress = _trailingAnimation.value;
 
-                            if (isMovingRight) {
-                              final startRight = fromCenter + (restingPillWidth / 2);
-                              final endRight = toCenter + (restingPillWidth / 2);
-                              final startLeft = fromCenter - (restingPillWidth / 2);
-                              final endLeft = toCenter - (restingPillWidth / 2);
+                                  if (isMovingRight) {
+                                    final startRight = fromCenter + (restingPillWidth / 2);
+                                    final endRight = toCenter + (restingPillWidth / 2);
+                                    final startLeft = fromCenter - (restingPillWidth / 2);
+                                    final endLeft = toCenter - (restingPillWidth / 2);
 
-                              rightEdge = startRight + (endRight - startRight) * leadProgress;
-                              leftEdge = startLeft + (endLeft - startLeft) * trailProgress;
-                            } else {
-                              final startLeft = fromCenter - (restingPillWidth / 2);
-                              final endLeft = toCenter - (restingPillWidth / 2);
-                              final startRight = fromCenter + (restingPillWidth / 2);
-                              final endRight = toCenter + (restingPillWidth / 2);
+                                    rightEdge = startRight + (endRight - startRight) * leadProgress;
+                                    leftEdge = startLeft + (endLeft - startLeft) * trailProgress;
+                                  } else {
+                                    final startLeft = fromCenter - (restingPillWidth / 2);
+                                    final endLeft = toCenter - (restingPillWidth / 2);
+                                    final startRight = fromCenter + (restingPillWidth / 2);
+                                    final endRight = toCenter + (restingPillWidth / 2);
 
-                              leftEdge = startLeft + (endLeft - startLeft) * leadProgress;
-                              rightEdge = startRight + (endRight - startRight) * trailProgress;
-                            }
-                          } else {
-                            final center = toCenter + anticipationPull;
-                            leftEdge = center - (restingPillWidth / 2);
-                            rightEdge = center + (restingPillWidth / 2);
-                          }
+                                    leftEdge = startLeft + (endLeft - startLeft) * leadProgress;
+                                    rightEdge = startRight + (endRight - startRight) * trailProgress;
+                                  }
+                                } else {
+                                  final center = toCenter + anticipationPull;
+                                  leftEdge = center - (restingPillWidth / 2);
+                                  rightEdge = center + (restingPillWidth / 2);
+                                }
 
-                          final pillLeft = math.min(leftEdge, rightEdge);
-                          final pillWidth = math.max((rightEdge - leftEdge).abs(), restingPillWidth * 0.85);
+                                final pillLeft = math.min(leftEdge, rightEdge);
+                                final pillWidth = math.max(
+                                  (rightEdge - leftEdge).abs(),
+                                  restingPillWidth * 0.85,
+                                );
 
-                          // Volume conservation: vertical compression during horizontal stretch (5-8%)
-                          final stretchAmount = math.max(0.0, (pillWidth - restingPillWidth) / (totalWidth * 0.6));
-                          final pillHeight = restingPillHeight * (1.0 - (0.08 * stretchAmount));
-                          final pillTop = (64 - pillHeight) / 2;
+                                // Volume conservation: vertical compression during stretch
+                                final stretchAmount = math.max(
+                                  0.0,
+                                  (pillWidth - restingPillWidth) / (totalWidth * 0.6),
+                                );
+                                final pillHeight = restingPillHeight * (1.0 - (0.08 * stretchAmount));
+                                final pillTop = (targetHeight - pillHeight) / 2;
 
-                          // Opacity modulation: drops ~12% during high velocity stretch for liquid translucency
-                          final liquidOpacity = (0.18 - (0.05 * stretchAmount)).clamp(0.10, 0.22);
+                                // Velocity opacity modulation
+                                final liquidOpacity = (0.18 - (0.05 * stretchAmount)).clamp(0.10, 0.22);
 
-                          // Bottom glowing pill coordinate
-                          final indicatorCenter = (leftEdge + rightEdge) / 2;
-                          const indicatorWidth = 18.0;
-                          final indicatorLeft = indicatorCenter - (indicatorWidth / 2);
+                                // Bottom glowing indicator coordinate
+                                final indicatorCenter = (leftEdge + rightEdge) / 2;
+                                final double indicatorWidth = widget.isCompact ? 14.0 : 18.0;
+                                final double indicatorHeight = widget.isCompact ? 2.5 : 3.5;
+                                final indicatorLeft = indicatorCenter - (indicatorWidth / 2);
 
-                          return Stack(
-                            children: [
-                              // 1. Fluid Liquid Glass Moving Capsule
-                              Positioned(
-                                left: pillLeft,
-                                top: pillTop,
-                                width: pillWidth,
-                                height: pillHeight,
-                                child: AnimatedOpacity(
-                                  duration: const Duration(milliseconds: 200),
-                                  opacity: widget.isAddActive ? 0.0 : 1.0,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: isMovingRight
-                                            ? Alignment.topLeft
-                                            : Alignment.topRight,
-                                        end: Alignment.bottomCenter,
-                                        colors: [
-                                          Colors.white.withValues(alpha: liquidOpacity + 0.05),
-                                          Colors.white.withValues(alpha: 0.04),
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(pillHeight / 2),
-                                      border: Border.all(
-                                        color: Colors.white.withValues(alpha: 0.24),
-                                        width: 0.8,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.white.withValues(alpha: 0.08 * (1.0 - stretchAmount)),
-                                          blurRadius: 12,
-                                          spreadRadius: 0.5,
+                                return Stack(
+                                  children: [
+                                    // 1. Fluid Liquid Glass Capsule
+                                    Positioned(
+                                      left: pillLeft,
+                                      top: pillTop,
+                                      width: pillWidth,
+                                      height: pillHeight,
+                                      child: AnimatedOpacity(
+                                        duration: const Duration(milliseconds: 200),
+                                        opacity: widget.isAddActive ? 0.0 : 1.0,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              begin: isMovingRight
+                                                  ? Alignment.topLeft
+                                                  : Alignment.topRight,
+                                              end: Alignment.bottomCenter,
+                                              colors: [
+                                                Colors.white.withValues(alpha: liquidOpacity + 0.05),
+                                                Colors.white.withValues(alpha: 0.04),
+                                              ],
+                                            ),
+                                            borderRadius: BorderRadius.circular(pillHeight / 2),
+                                            border: Border.all(
+                                              color: Colors.white.withValues(alpha: 0.24),
+                                              width: 0.8,
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.08 * (1.0 - stretchAmount),
+                                                ),
+                                                blurRadius: 12,
+                                                spreadRadius: 0.5,
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                ),
-                              ),
 
-                              // 2. Synchronized Fluid Glowing Bottom Pill Indicator
-                              Positioned(
-                                left: indicatorLeft,
-                                bottom: 6,
-                                width: indicatorWidth,
-                                height: 3.5,
-                                child: AnimatedOpacity(
-                                  duration: const Duration(milliseconds: 200),
-                                  opacity: widget.isAddActive ? 0.0 : 1.0,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(2),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.white.withValues(alpha: 0.95),
-                                          blurRadius: 8,
-                                          spreadRadius: 1,
+                                    // 2. Synchronized Glowing Bottom Pill Indicator
+                                    Positioned(
+                                      left: indicatorLeft,
+                                      bottom: widget.isCompact ? 4.0 : 6.0,
+                                      width: indicatorWidth,
+                                      height: indicatorHeight,
+                                      child: AnimatedOpacity(
+                                        duration: const Duration(milliseconds: 200),
+                                        opacity: widget.isAddActive ? 0.0 : 1.0,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(2),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.white.withValues(alpha: 0.95),
+                                                blurRadius: widget.isCompact ? 6 : 8,
+                                                spreadRadius: 1,
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                ),
-                              ),
 
-                              // 3. Tab Items Row
-                              Row(
-                                children: List.generate(_tabs.length, (index) {
-                                  final tab = _tabs[index];
-                                  final isCurrent = !widget.isAddActive && widget.currentIndex == index;
-                                  final isPressed = _pressedIndex == index;
+                                    // 3. Tab Items Row
+                                    Row(
+                                      children: List.generate(_tabs.length, (index) {
+                                        final tab = _tabs[index];
+                                        final isCurrent = !widget.isAddActive &&
+                                            widget.currentIndex == index;
+                                        final isPressed = _pressedIndex == index;
 
-                                  return Expanded(
-                                    child: _LiquidNavItem(
-                                      tabData: tab,
-                                      isSelected: isCurrent,
-                                      isPressed: isPressed,
-                                      onTapDown: () => _onTabTapDown(index),
-                                      onTapCancel: _onTabTapCancel,
-                                      onTap: () {
-                                        _onTabTapCancel();
-                                        widget.onTabSelected(index);
-                                      },
+                                        return Expanded(
+                                          child: _LiquidNavItem(
+                                            tabData: tab,
+                                            isSelected: isCurrent,
+                                            isPressed: isPressed,
+                                            isCompact: widget.isCompact,
+                                            onTapDown: () => _onTabTapDown(index),
+                                            onTapCancel: _onTabTapCancel,
+                                            onTap: () {
+                                              _onTabTapCancel();
+                                              widget.onTabSelected(index);
+                                            },
+                                          ),
+                                        );
+                                      }),
                                     ),
-                                  );
-                                }),
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                    },
+                                  ],
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
 
-          const SizedBox(width: 10),
+              const SizedBox(width: 10),
 
-          // Action Plus Button
-          GestureDetector(
-            onTap: () {
-              HapticFeedback.mediumImpact();
-              widget.onAddPressed();
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 260),
-              curve: Curves.easeOutBack,
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: widget.isAddActive
-                    ? Colors.white
-                    : const Color(0xFF5E5E62).withValues(alpha: 0.88),
-                border: Border.all(
-                  color: widget.isAddActive
-                      ? Colors.white.withValues(alpha: 0.6)
-                      : Colors.white.withValues(alpha: 0.12),
-                  width: 1.0,
+              // Action Plus Button (Glassy Dark in resting mode)
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  widget.onAddPressed();
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 320),
+                  curve: Curves.fastEaseInToSlowEaseOut,
+                  width: actionBtnSize,
+                  height: actionBtnSize,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: widget.isAddActive
+                        ? Colors.white
+                        : const Color(0xFF161618).withValues(
+                            alpha: widget.isCompact ? 0.75 : 0.82,
+                          ),
+                    border: Border.all(
+                      color: widget.isAddActive
+                          ? Colors.white.withValues(alpha: 0.6)
+                          : Colors.white.withValues(
+                              alpha: widget.isCompact ? 0.12 : 0.15,
+                            ),
+                      width: 0.8,
+                    ),
+                    boxShadow: widget.isAddActive
+                        ? [
+                            BoxShadow(
+                              color: Colors.white.withValues(alpha: 0.45),
+                              blurRadius: 24,
+                              spreadRadius: 2,
+                              offset: const Offset(0, 4),
+                            ),
+                          ]
+                        : [
+                            BoxShadow(
+                              color: Colors.black.withValues(
+                                alpha: widget.isCompact ? 0.5 : 0.45,
+                              ),
+                              blurRadius: widget.isCompact ? 24 : 20,
+                              offset: Offset(0, widget.isCompact ? 10 : 8),
+                            ),
+                          ],
+                  ),
+                  child: AnimatedRotation(
+                    duration: const Duration(milliseconds: 260),
+                    turns: widget.isAddActive ? 0.125 : 0.0,
+                    child: Icon(
+                      Icons.add,
+                      size: actionIconSize,
+                      color: widget.isAddActive ? Colors.black : Colors.white,
+                    ),
+                  ),
                 ),
-                boxShadow: widget.isAddActive
-                    ? [
-                        BoxShadow(
-                          color: Colors.white.withValues(alpha: 0.45),
-                          blurRadius: 24,
-                          spreadRadius: 2,
-                          offset: const Offset(0, 4),
-                        ),
-                      ]
-                    : [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
               ),
-              child: AnimatedRotation(
-                duration: const Duration(milliseconds: 260),
-                turns: widget.isAddActive ? 0.125 : 0.0,
-                child: Icon(
-                  Icons.add,
-                  size: 32,
-                  color: widget.isAddActive ? Colors.black : Colors.white,
-                ),
-              ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -393,6 +444,7 @@ class _LiquidNavItem extends StatelessWidget {
   final _TabItemData tabData;
   final bool isSelected;
   final bool isPressed;
+  final bool isCompact;
   final VoidCallback onTapDown;
   final VoidCallback onTapCancel;
   final VoidCallback onTap;
@@ -401,6 +453,7 @@ class _LiquidNavItem extends StatelessWidget {
     required this.tabData,
     required this.isSelected,
     required this.isPressed,
+    required this.isCompact,
     required this.onTapDown,
     required this.onTapCancel,
     required this.onTap,
@@ -411,7 +464,8 @@ class _LiquidNavItem extends StatelessWidget {
     const activeColor = Colors.white;
     final inactiveColor = const Color(0xFFD1D1D6).withValues(alpha: 0.85);
 
-    // Scale calculation: 0.92x on touch-down anticipation, 1.15x micro-bounce on select, 1.0x at rest
+    // Icon & Scale Dimensions
+    final double iconBaseSize = isCompact ? 22.0 : 26.0;
     final double targetScale = isPressed ? 0.92 : (isSelected ? 1.08 : 1.0);
 
     return GestureDetector(
@@ -419,47 +473,33 @@ class _LiquidNavItem extends StatelessWidget {
       onTapDown: (_) => onTapDown(),
       onTapUp: (_) => onTap(),
       onTapCancel: onTapCancel,
-      child: AnimatedScale(
-        duration: const Duration(milliseconds: 200),
-        scale: targetScale,
-        curve: Curves.easeOutBack,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Morphing Icon
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
-              transitionBuilder: (child, anim) => FadeTransition(
-                opacity: anim,
-                child: ScaleTransition(
-                  scale: Tween<double>(begin: 0.92, end: 1.0).animate(anim),
-                  child: child,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+        child: AnimatedScale(
+          duration: const Duration(milliseconds: 200),
+          scale: targetScale,
+          curve: Curves.easeOutBack,
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: isCompact ? 4.0 : 6.0),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                transitionBuilder: (child, anim) => FadeTransition(
+                  opacity: anim,
+                  child: ScaleTransition(
+                    scale: Tween<double>(begin: 0.92, end: 1.0).animate(anim),
+                    child: child,
+                  ),
+                ),
+                child: Icon(
+                  isSelected ? tabData.filledIcon : tabData.outlinedIcon,
+                  key: ValueKey('${tabData.label}_${isSelected}_$isCompact'),
+                  size: iconBaseSize,
+                  color: isSelected ? activeColor : inactiveColor,
                 ),
               ),
-              child: Icon(
-                isSelected ? tabData.filledIcon : tabData.outlinedIcon,
-                key: ValueKey(isSelected),
-                size: 24,
-                color: isSelected ? activeColor : inactiveColor,
-              ),
             ),
-            const SizedBox(height: 2),
-
-            // Text Label
-            AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 180),
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? activeColor : inactiveColor,
-                height: 1.1,
-              ),
-              child: Text(tabData.label),
-            ),
-
-            const SizedBox(height: 8),
-          ],
+          ),
         ),
       ),
     );
