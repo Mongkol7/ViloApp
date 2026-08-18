@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../mock/profile_mock_data.dart';
 import '../style/pulse_tokens.dart';
 import '../widgets/profile_tab_content.dart';
+import '../widgets/profile_menu_drawer.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.isOwnProfile = true});
@@ -13,6 +14,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -29,7 +31,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: PulseColors.background,
+      endDrawer: const ProfileMenuDrawer(),
       appBar: AppBar(
         backgroundColor: PulseColors.background,
         elevation: 0,
@@ -38,7 +42,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         actions: [
           IconButton(
             icon: const Icon(Icons.menu_rounded, color: PulseColors.onSurface),
-            onPressed: () {},
+            onPressed: () {
+              _scaffoldKey.currentState?.openEndDrawer();
+            },
           ),
         ],
       ),
