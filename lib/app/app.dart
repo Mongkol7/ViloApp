@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_theme.dart';
-import '../features/bottom_nav/presentation/pages/main_navigation_shell.dart';
+import '../features/auth/presentation/pages/login_screen.dart';
 
 class ViloApp extends StatelessWidget {
   const ViloApp({super.key});
@@ -11,7 +11,7 @@ class ViloApp extends StatelessWidget {
       title: 'Vilo',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      home: const MainNavigationShell(),
+      home: const LoginScreen(),
     );
   }
 }

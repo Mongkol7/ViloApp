@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../feed/presentation/pages/home_feed_page.dart';
 import '../../../inbox_activity/presentation/pages/inbox_screen.dart';
 import '../../../profile/presentation/pages/people_screen.dart';
+import '../../../profile/presentation/screens/profile_screen.dart';
 import '../widgets/vilo_floating_bottom_bar.dart';
 
 class MainNavigationShell extends StatefulWidget {
@@ -27,10 +29,10 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   double _accumulatedDelta = 0.0;
 
   final List<Widget> _pages = const [
-    _PlaceholderPage(title: 'Home Feed', icon: Icons.home_rounded),
+    HomeFeedPage(),
     PeopleScreen(),
     InboxScreen(),
-    _PlaceholderPage(title: 'User Profile', icon: Icons.person_rounded),
+    ProfileScreen(),
   ];
 
   @override
@@ -148,34 +150,6 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _PlaceholderPage extends StatelessWidget {
-  final String title;
-  final IconData icon;
-
-  const _PlaceholderPage({required this.title, required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 56, color: AppColors.onSurfaceVariant),
-          const SizedBox(height: 16),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.onSurface,
-            ),
-          ),
-        ],
       ),
     );
   }
