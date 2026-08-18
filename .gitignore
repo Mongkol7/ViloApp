@@ -47,3 +47,9 @@ app.*.map.json
 # Documentation
 # (docs/ is tracked)
 
+# AI & Editor Assistants
+.ai/
+.cursor/
+.agents/
+.gemini/
+.run/
