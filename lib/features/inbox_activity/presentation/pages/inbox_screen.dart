@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../search_discover/presentation/pages/search_screen.dart';
 import '../../data/datasources/static_inbox_data.dart';
+import '../../data/datasources/thought_story_manager.dart';
 import '../../domain/entities/inbox_item.dart';
 import '../../domain/entities/shared_thought_story.dart';
+import '../widgets/animated_mini_music_wave.dart';
 import 'chat_detail_screen.dart';
 import 'share_thought_screen.dart';
 import 'story_viewer_screen.dart';
@@ -16,22 +18,18 @@ class InboxScreen extends StatefulWidget {
 }
 
 class _InboxScreenState extends State<InboxScreen> {
-  // Temporary in-memory stored shared thought story
-  SharedThoughtStory? _myStory;
-
   Future<void> _handleCreateOrViewStory() async {
-    if (_myStory != null) {
+    final currentStory = ThoughtStoryManager.instance.currentStory;
+    if (currentStory != null) {
       // If already shared, open StoryViewerScreen and listen for delete action
       final result = await Navigator.of(context).push<String>(
         MaterialPageRoute(
-          builder: (_) => StoryViewerScreen(story: _myStory!),
+          builder: (_) => StoryViewerScreen(story: currentStory),
         ),
       );
 
       if (result == 'delete' && mounted) {
-        setState(() {
-          _myStory = null;
-        });
+        ThoughtStoryManager.instance.deleteStory();
       }
     } else {
       // If not shared yet, open ShareThoughtScreen
@@ -42,9 +40,7 @@ class _InboxScreenState extends State<InboxScreen> {
       );
 
       if (result != null && mounted) {
-        setState(() {
-          _myStory = result;
-        });
+        ThoughtStoryManager.instance.setStory(result);
       }
     }
   }
@@ -150,58 +146,61 @@ class _InboxScreenState extends State<InboxScreen> {
 
   Widget _buildStoryCircle(BuildContext context, StoryItem story) {
     if (story.isCreate) {
-      final isStoryActive = _myStory != null;
-      final messageText = isStoryActive ? _myStory!.message : 'Share a thought...';
-      final hasMusic = isStoryActive && _myStory!.musicTrack != null;
+      return ValueListenableBuilder<SharedThoughtStory?>(
+        valueListenable: ThoughtStoryManager.instance.storyNotifier,
+        builder: (context, myStory, _) {
+          final isStoryActive = myStory != null;
+          final messageText = isStoryActive ? myStory.message : 'Share a thought...';
+          final hasMusic = isStoryActive && myStory.musicTrack != null;
 
-      // "Create / Active Story" Bubble with Floating Thought Box & Music Wave
-      return GestureDetector(
-        onTap: _handleCreateOrViewStory,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Floating Thought Message Box (with animated music wave if attached)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-              constraints: const BoxConstraints(maxWidth: 95),
-              decoration: BoxDecoration(
-                color: isStoryActive ? const Color(0xFF222228) : Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: isStoryActive
-                    ? Border.all(color: const Color(0xFF383842), width: 1.0)
-                    : null,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      messageText,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: isStoryActive ? Colors.white : const Color(0xFF141416),
+          // "Create / Active Story" Bubble with Floating Thought Box & Music Wave
+          return GestureDetector(
+            onTap: _handleCreateOrViewStory,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Floating Thought Message Box (with animated music wave if attached)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                  constraints: const BoxConstraints(maxWidth: 95),
+                  decoration: BoxDecoration(
+                    color: isStoryActive ? const Color(0xFF222228) : Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: isStoryActive
+                        ? Border.all(color: const Color(0xFF383842), width: 1.0)
+                        : null,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
                       ),
-                    ),
+                    ],
                   ),
-                  if (hasMusic) ...[
-                    const SizedBox(width: 4),
-                    const _AnimatedMiniMusicWave(),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          messageText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: isStoryActive ? Colors.white : const Color(0xFF141416),
+                          ),
+                        ),
+                      ),
+                      if (hasMusic) ...[
+                        const SizedBox(width: 4),
+                        const AnimatedMiniMusicWave(),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
 
             // Cloud Avatar with Story Ring (if active) or Plus Badge
             SizedBox(
@@ -292,7 +291,9 @@ class _InboxScreenState extends State<InboxScreen> {
           ],
         ),
       );
-    }
+    },
+  );
+}
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -563,75 +564,6 @@ class _InboxScreenState extends State<InboxScreen> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _AnimatedMiniMusicWave extends StatefulWidget {
-  const _AnimatedMiniMusicWave();
-
-  @override
-  State<_AnimatedMiniMusicWave> createState() => _AnimatedMiniMusicWaveState();
-}
-
-class _AnimatedMiniMusicWaveState extends State<_AnimatedMiniMusicWave>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _waveController;
-
-  @override
-  void initState() {
-    super.initState();
-    _waveController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 650),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _waveController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _waveController,
-      builder: (context, child) {
-        final v = _waveController.value;
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Container(
-              width: 2.0,
-              height: 3.5 + (v * 7),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2F80ED),
-                borderRadius: BorderRadius.circular(1),
-              ),
-            ),
-            const SizedBox(width: 1.5),
-            Container(
-              width: 2.0,
-              height: 3.5 + ((1.0 - v) * 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF56CCF2),
-                borderRadius: BorderRadius.circular(1),
-              ),
-            ),
-            const SizedBox(width: 1.5),
-            Container(
-              width: 2.0,
-              height: 4.0 + (v * 5),
-              decoration: BoxDecoration(
-                color: const Color(0xFF9B51E0),
-                borderRadius: BorderRadius.circular(1),
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 }

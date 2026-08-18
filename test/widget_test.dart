@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viloapp/core/theme/app_theme.dart';
 import 'package:viloapp/features/bottom_nav/presentation/widgets/vilo_floating_bottom_bar.dart';
+import 'package:viloapp/features/inbox_activity/data/datasources/thought_story_manager.dart';
 import 'package:viloapp/features/inbox_activity/presentation/pages/inbox_screen.dart';
 import 'package:viloapp/features/profile/presentation/pages/people_screen.dart';
+import 'package:viloapp/features/profile/presentation/screens/profile_screen.dart';
 
 Widget _buildTestApp({required Widget child}) {
   return MaterialApp(
@@ -14,6 +16,10 @@ Widget _buildTestApp({required Widget child}) {
 }
 
 void main() {
+  setUp(() {
+    ThoughtStoryManager.instance.deleteStory();
+  });
+
   testWidgets('ViloFloatingBottomBar renders navigation icons and action plus button', (WidgetTester tester) async {
     int selectedIndex = 1;
     bool isAddActive = false;
@@ -132,5 +138,49 @@ void main() {
 
     // Verify story was removed and reverted back to "Share a thought..."
     expect(find.text('Share a thought...'), findsOneWidget);
+  });
+
+  testWidgets('ProfileScreen Share Mind: Share thought from Profile and verify shared state synchronization', (WidgetTester tester) async {
+    await tester.pumpWidget(_buildTestApp(child: const ProfileScreen()));
+
+    // Verify initial "Share a thought..." balloon on ProfileScreen
+    expect(find.text('Share a thought...'), findsOneWidget);
+
+    // Tap thought balloon on ProfileScreen to open ShareThoughtScreen
+    await tester.tap(find.text('Share a thought...'));
+    await tester.pumpAndSettle();
+
+    // Tap "Your Story" button to share story and return
+    await tester.tap(find.text('Your Story'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // Verify ProfileScreen now displays shared thought message
+    expect(find.text("Today's vibe..."), findsOneWidget);
+
+    // Verify ThoughtStoryManager state is populated
+    expect(ThoughtStoryManager.instance.currentStory, isNotNull);
+    expect(ThoughtStoryManager.instance.currentStory!.message, "Today's vibe...");
+
+    // Tap thought on ProfileScreen to view story
+    await tester.tap(find.text("Today's vibe..."));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // Verify StoryViewerScreen is displayed
+    expect(find.text('418 views'), findsOneWidget);
+
+    // Tap delete from StoryViewerScreen
+    await tester.tap(find.byIcon(Icons.more_vert_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    await tester.tap(find.text('Delete story'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // Verify story was removed from ProfileScreen and ThoughtStoryManager
+    expect(find.text('Share a thought...'), findsOneWidget);
+    expect(ThoughtStoryManager.instance.currentStory, isNull);
   });
 }
