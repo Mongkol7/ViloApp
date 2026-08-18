@@ -29,7 +29,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
 
   void _handleBack() {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const MainNavigationShell()),
+      MaterialPageRoute(builder: (_) => const MainNavigationShell(initialIndex: 0)),
       (route) => false,
     );
   }

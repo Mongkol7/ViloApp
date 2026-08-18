@@ -5,6 +5,7 @@ import '../../../../app/app.dart';
 import '../widgets/share_bottom_sheet.dart';
 import '../widgets/comment_bottom_sheet.dart';
 import 'sound_detail_page.dart';
+import '../../../profile/presentation/screens/public_profile_screen.dart';
 
 class VideoFeedPage extends StatefulWidget {
   final bool isActive;
@@ -17,6 +18,15 @@ class VideoFeedPage extends StatefulWidget {
 
 class _VideoFeedPageState extends State<VideoFeedPage> {
   int _currentPage = 0;
+
+  void _goToProfile() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const PublicProfileScreen(),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -225,6 +235,15 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
     });
   }
 
+  void _goToProfile() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const PublicProfileScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -302,33 +321,36 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
             mainAxisSize: MainAxisSize.min,
             children: [
               // Profile Avatar with + button
-              SizedBox(
-                height: 56,
-                width: 48,
-                child: Stack(
-                  alignment: Alignment.topCenter,
-                  children: [
-                    CircleAvatar(
-                      radius: 22,
-                      backgroundImage: NetworkImage(widget.data['avatar']),
-                      backgroundColor: Colors.grey,
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: const BoxDecoration(
-                          color: Colors.blue,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.add,
-                          color: Colors.white,
-                          size: 14,
+              GestureDetector(
+                onTap: _goToProfile,
+                child: SizedBox(
+                  height: 56,
+                  width: 48,
+                  child: Stack(
+                    alignment: Alignment.topCenter,
+                    children: [
+                      CircleAvatar(
+                        radius: 22,
+                        backgroundImage: NetworkImage(widget.data['avatar']),
+                        backgroundColor: Colors.grey,
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            color: Colors.blue,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            color: Colors.white,
+                            size: 14,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -408,12 +430,15 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                widget.data['username'],
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+              GestureDetector(
+                onTap: _goToProfile,
+                child: Text(
+                  widget.data['username'],
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -479,6 +504,15 @@ class _InteractionButtonState extends State<_InteractionButton> {
     if (widget.onTap != null) {
       widget.onTap!();
     }
+  }
+
+  void _goToProfile() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const PublicProfileScreen(),
+      ),
+    );
   }
 
   @override

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../search_discover/presentation/pages/search_screen.dart';
+import '../../../shop/presentation/pages/shop_page.dart';
 import 'community_feed_page.dart';
 import 'video_feed_page.dart';
 
@@ -49,7 +50,7 @@ class _HomeFeedPageState extends State<HomeFeedPage> with SingleTickerProviderSt
               const CommunityFeedPage(),
               VideoFeedPage(isActive: widget.isActive && _tabController.index == 1), // Following
               VideoFeedPage(isActive: widget.isActive && _tabController.index == 2), // For You
-              const Center(child: Text("Shop Page Placeholder", style: TextStyle(color: Colors.white))),
+              const ShopPage(),
             ],
           ),
 

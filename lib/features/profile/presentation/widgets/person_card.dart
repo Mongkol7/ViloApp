@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../domain/entities/person_suggestion.dart';
+import '../screens/public_profile_screen.dart';
 
 class PersonCard extends StatelessWidget {
   final PersonSuggestion person;
@@ -16,6 +17,12 @@ class PersonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    void goToProfile() {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const PublicProfileScreen()),
+      );
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -30,46 +37,49 @@ class PersonCard extends StatelessWidget {
       child: Row(
         children: [
           // 1. Avatar with subtle 1px border
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.15),
-                width: 1.0,
+          GestureDetector(
+            onTap: goToProfile,
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  width: 1.0,
+                ),
               ),
-            ),
-            child: ClipOval(
-              child: Image.network(
-                person.avatarUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: AppColors.surfaceElevated,
-                    child: const Icon(
-                      Icons.person_rounded,
-                      color: AppColors.onSurfaceVariant,
-                      size: 28,
-                    ),
-                  );
-                },
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Container(
-                    color: AppColors.surfaceElevated,
-                    child: const Center(
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.outline,
+              child: ClipOval(
+                child: Image.network(
+                  person.avatarUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: AppColors.surfaceElevated,
+                      child: const Icon(
+                        Icons.person_rounded,
+                        color: AppColors.onSurfaceVariant,
+                        size: 28,
+                      ),
+                    );
+                  },
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Container(
+                      color: AppColors.surfaceElevated,
+                      child: const Center(
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.outline,
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
           ),
@@ -78,47 +88,51 @@ class PersonCard extends StatelessWidget {
 
           // 2. Name & Subtitle
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  person.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  person.subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w400,
-                    color: AppColors.outline,
-                  ),
-                ),
-                if (person.followsYou) ...[
-                  const SizedBox(height: 2),
-                  const Text(
-                    'Follows you',
-                    style: TextStyle(
+            child: GestureDetector(
+              onTap: goToProfile,
+              behavior: HitTestBehavior.opaque,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    person.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
                       fontFamily: 'Inter',
-                      fontSize: 11,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    person.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 13,
                       fontWeight: FontWeight.w400,
                       color: AppColors.outline,
                     ),
                   ),
+                  if (person.followsYou) ...[
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Follows you',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.outline,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
 
