@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../search_discover/presentation/pages/search_screen.dart';
 import '../../data/datasources/static_people_data.dart';
 import '../../domain/entities/person_suggestion.dart';
 import '../widgets/person_card.dart';
-import '../widgets/profile_menu_drawer.dart';
 
 class PeopleScreen extends StatefulWidget {
   const PeopleScreen({super.key});
@@ -13,7 +13,6 @@ class PeopleScreen extends StatefulWidget {
 }
 
 class _PeopleScreenState extends State<PeopleScreen> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   late List<PersonSuggestion> _peopleList;
 
   @override
@@ -40,9 +39,7 @@ class _PeopleScreenState extends State<PeopleScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      key: _scaffoldKey,
       backgroundColor: AppColors.voidBackground,
-      drawer: const ProfileMenuDrawer(),
       appBar: AppBar(
         backgroundColor: AppColors.voidBackground,
         elevation: 0,
@@ -54,7 +51,7 @@ class _PeopleScreenState extends State<PeopleScreen> {
             size: 26,
           ),
           onPressed: () {
-            _scaffoldKey.currentState?.openDrawer();
+            // Do not redirect anywhere
           },
         ),
         title: const Text(
@@ -74,7 +71,13 @@ class _PeopleScreenState extends State<PeopleScreen> {
               color: Colors.white,
               size: 26,
             ),
-            onPressed: () {},
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const SearchScreen(),
+                ),
+              );
+            },
           ),
           const SizedBox(width: 8),
         ],

@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../../inbox_activity/data/datasources/thought_story_manager.dart';
+import '../../../inbox_activity/domain/entities/shared_thought_story.dart';
+import '../../../inbox_activity/presentation/pages/share_thought_screen.dart';
+import '../../../inbox_activity/presentation/pages/story_viewer_screen.dart';
+import '../../../inbox_activity/presentation/widgets/animated_mini_music_wave.dart';
 import '../mock/profile_mock_data.dart';
 import '../style/pulse_tokens.dart';
 import '../widgets/profile_tab_content.dart';
@@ -28,6 +33,33 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     super.dispose();
   }
 
+  Future<void> _handleCreateOrViewStory() async {
+    final currentStory = ThoughtStoryManager.instance.currentStory;
+    if (currentStory != null) {
+      // If story exists, open StoryViewerScreen and handle deletion
+      final result = await Navigator.of(context).push<String>(
+        MaterialPageRoute(
+          builder: (_) => StoryViewerScreen(story: currentStory),
+        ),
+      );
+
+      if (result == 'delete' && mounted) {
+        ThoughtStoryManager.instance.deleteStory();
+      }
+    } else {
+      // If no story, open ShareThoughtScreen
+      final result = await Navigator.of(context).push<SharedThoughtStory>(
+        MaterialPageRoute(
+          builder: (_) => const ShareThoughtScreen(),
+        ),
+      );
+
+      if (result != null && mounted) {
+        ThoughtStoryManager.instance.setStory(result);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -54,12 +86,164 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             SliverToBoxAdapter(
               child: Column(
                 children: [
-                  const SizedBox(height: 20),
-                  // Avatar
-                  CircleAvatar(
-                    radius: 48,
-                    backgroundImage: NetworkImage(ProfileMockData.avatarUrl),
-                    backgroundColor: PulseColors.surfaceContainer,
+                  const SizedBox(height: 16),
+                  // Avatar with Share Mind Thought Balloon & Story Ring
+                  ValueListenableBuilder<SharedThoughtStory?>(
+                    valueListenable: ThoughtStoryManager.instance.storyNotifier,
+                    builder: (context, currentStory, _) {
+                      final isStoryActive = currentStory != null;
+                      final messageText =
+                          isStoryActive ? currentStory.message : 'Share a thought...';
+                      final hasMusic = isStoryActive && currentStory.musicTrack != null;
+
+                      return GestureDetector(
+                        onTap: _handleCreateOrViewStory,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Floating Thought Message Balloon on top of Profile Avatar
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              constraints: const BoxConstraints(maxWidth: 160),
+                              decoration: BoxDecoration(
+                                color: isStoryActive
+                                    ? const Color(0xFF222228)
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: isStoryActive
+                                    ? Border.all(
+                                        color: const Color(0xFF383842),
+                                        width: 1.2,
+                                      )
+                                    : null,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.35),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      messageText,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontFamily: 'Inter',
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: isStoryActive
+                                            ? Colors.white
+                                            : const Color(0xFF141416),
+                                      ),
+                                    ),
+                                  ),
+                                  if (hasMusic) ...[
+                                    const SizedBox(width: 6),
+                                    const AnimatedMiniMusicWave(),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            // Speech balloon triangle pointer
+                            CustomPaint(
+                              size: const Size(10, 6),
+                              painter: _SpeechTrianglePainter(
+                                color: isStoryActive
+                                    ? const Color(0xFF222228)
+                                    : Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+
+                            // Profile Avatar with Instagram-style Story Gradient Ring (if active) or Plus Badge
+                            Container(
+                              width: 106,
+                              height: 106,
+                              padding: isStoryActive
+                                  ? const EdgeInsets.all(3.0)
+                                  : EdgeInsets.zero,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: isStoryActive
+                                    ? const LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          Color(0xFFFE2C55),
+                                          Color(0xFFFF9F43),
+                                          Color(0xFF9B51E0),
+                                          Color(0xFF2F80ED),
+                                        ],
+                                      )
+                                    : null,
+                              ),
+                              child: Container(
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: PulseColors.background,
+                                ),
+                                padding: isStoryActive
+                                    ? const EdgeInsets.all(2.5)
+                                    : EdgeInsets.zero,
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    ClipOval(
+                                      child: SizedBox(
+                                        width: 96,
+                                        height: 96,
+                                        child: Image.network(
+                                          ProfileMockData.avatarUrl,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) => Container(
+                                            color: PulseColors.surfaceContainer,
+                                            child: const Icon(
+                                              Icons.person_rounded,
+                                              color: Colors.white70,
+                                              size: 48,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    if (!isStoryActive)
+                                      Positioned(
+                                        bottom: 0,
+                                        right: 0,
+                                        child: Container(
+                                          width: 26,
+                                          height: 26,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: const Color(0xFF2F80ED),
+                                            border: Border.all(
+                                              color: PulseColors.background,
+                                              width: 2.5,
+                                            ),
+                                          ),
+                                          child: const Icon(
+                                            Icons.add,
+                                            color: Colors.white,
+                                            size: 16,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 12),
                   // Username
@@ -168,6 +352,29 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       ),
     );
   }
+}
+
+class _SpeechTrianglePainter extends CustomPainter {
+  final Color color;
+
+  _SpeechTrianglePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..lineTo(size.width, 0)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SpeechTrianglePainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
