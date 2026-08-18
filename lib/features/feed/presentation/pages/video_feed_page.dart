@@ -7,7 +7,9 @@ import '../widgets/comment_bottom_sheet.dart';
 import 'sound_detail_page.dart';
 
 class VideoFeedPage extends StatefulWidget {
-  const VideoFeedPage({super.key});
+  final bool isActive;
+
+  const VideoFeedPage({super.key, this.isActive = true});
 
   @override
   State<VideoFeedPage> createState() => _VideoFeedPageState();
@@ -104,6 +106,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
             return _VideoPostWidget(
               data: mockVideos[index],
               isCurrentPage: _currentPage == index,
+              isActive: widget.isActive,
             );
           },
         ),
@@ -115,10 +118,12 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
 class _VideoPostWidget extends StatefulWidget {
   final Map<String, dynamic> data;
   final bool isCurrentPage;
+  final bool isActive;
 
   const _VideoPostWidget({
     required this.data,
     required this.isCurrentPage,
+    required this.isActive,
   });
 
   @override
@@ -139,7 +144,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
         if (!mounted) return;
         setState(() {});
         _controller.setLooping(true);
-        if (widget.isCurrentPage && !_manuallyPaused) {
+        if (widget.isActive && widget.isCurrentPage && !_manuallyPaused) {
           _controller.play();
         }
       });
@@ -157,15 +162,12 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   @override
   void didUpdateWidget(covariant _VideoPostWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isCurrentPage != widget.isCurrentPage) {
-      if (widget.isCurrentPage) {
-        if (!_manuallyPaused && _controller.value.isInitialized) {
-          _controller.play();
-        }
-      } else {
-        if (_controller.value.isInitialized) {
-          _controller.pause();
-        }
+    final shouldPlay = widget.isActive && widget.isCurrentPage && !_manuallyPaused;
+    if (_controller.value.isInitialized) {
+      if (shouldPlay && !_controller.value.isPlaying) {
+        _controller.play();
+      } else if (!shouldPlay && _controller.value.isPlaying) {
+        _controller.pause();
       }
     }
   }
@@ -182,7 +184,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   @override
   void didPopNext() {
     // Automatically resume video when returning back to Home feed from SearchScreen
-    if (widget.isCurrentPage && !_manuallyPaused && _controller.value.isInitialized) {
+    if (widget.isActive && widget.isCurrentPage && !_manuallyPaused && _controller.value.isInitialized) {
       _controller.play();
       if (mounted) setState(() {});
     }
@@ -196,7 +198,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
         if (mounted) setState(() {});
       }
     } else if (state == AppLifecycleState.resumed) {
-      if (widget.isCurrentPage && !_manuallyPaused && _controller.value.isInitialized) {
+      if (widget.isActive && widget.isCurrentPage && !_manuallyPaused && _controller.value.isInitialized) {
         _controller.play();
         if (mounted) setState(() {});
       }

@@ -4,7 +4,9 @@ import 'community_feed_page.dart';
 import 'video_feed_page.dart';
 
 class HomeFeedPage extends StatefulWidget {
-  const HomeFeedPage({super.key});
+  final bool isActive;
+
+  const HomeFeedPage({super.key, this.isActive = true});
 
   @override
   State<HomeFeedPage> createState() => _HomeFeedPageState();
@@ -18,10 +20,18 @@ class _HomeFeedPageState extends State<HomeFeedPage> with SingleTickerProviderSt
     super.initState();
     // We have 4 tabs: Community, Following, For You, Shop
     _tabController = TabController(length: 4, vsync: this, initialIndex: 2); // default to For You
+    _tabController.addListener(_onTabChanged);
+  }
+
+  void _onTabChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     super.dispose();
   }
@@ -35,11 +45,11 @@ class _HomeFeedPageState extends State<HomeFeedPage> with SingleTickerProviderSt
           // Tab Bar View content
           TabBarView(
             controller: _tabController,
-            children: const [
-              CommunityFeedPage(),
-              VideoFeedPage(), // Following
-              VideoFeedPage(), // For You
-              Center(child: Text("Shop Page Placeholder", style: TextStyle(color: Colors.white))),
+            children: [
+              const CommunityFeedPage(),
+              VideoFeedPage(isActive: widget.isActive && _tabController.index == 1), // Following
+              VideoFeedPage(isActive: widget.isActive && _tabController.index == 2), // For You
+              const Center(child: Text("Shop Page Placeholder", style: TextStyle(color: Colors.white))),
             ],
           ),
 

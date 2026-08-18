@@ -28,11 +28,11 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   double _lastScrollOffset = 0.0;
   double _accumulatedDelta = 0.0;
 
-  final List<Widget> _pages = const [
-    HomeFeedPage(),
-    PeopleScreen(),
-    InboxScreen(),
-    ProfileScreen(),
+  List<Widget> get _pages => [
+    HomeFeedPage(isActive: _currentIndex == 0),
+    const PeopleScreen(),
+    const InboxScreen(),
+    const ProfileScreen(),
   ];
 
   @override
