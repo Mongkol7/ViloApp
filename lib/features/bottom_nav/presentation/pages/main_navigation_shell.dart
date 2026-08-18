@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../profile/presentation/pages/people_screen.dart';
+import '../../../profile/presentation/screens/profile_screen.dart';
 import '../widgets/vilo_floating_bottom_bar.dart';
 
 class MainNavigationShell extends StatefulWidget {
@@ -29,7 +30,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     _PlaceholderPage(title: 'Home Feed', icon: Icons.home_rounded),
     PeopleScreen(),
     _PlaceholderPage(title: 'Chat & Messages', icon: Icons.chat_bubble_rounded),
-    _PlaceholderPage(title: 'User Profile', icon: Icons.person_rounded),
+    ProfileScreen(),
   ];
 
   @override
