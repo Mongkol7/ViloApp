@@ -141,15 +141,39 @@ class _VideoPostWidgetState extends State<_VideoPostWidget> {
                           : _controller.play();
                     });
                   },
-                  child: SizedBox.expand(
-                    child: FittedBox(
-                      fit: BoxFit.cover,
-                      child: SizedBox(
-                        width: _controller.value.size.width,
-                        height: _controller.value.size.height,
-                        child: VideoPlayer(_controller),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox.expand(
+                        child: FittedBox(
+                          fit: BoxFit.cover,
+                          child: SizedBox(
+                            width: _controller.value.size.width,
+                            height: _controller.value.size.height,
+                            child: VideoPlayer(_controller),
+                          ),
+                        ),
                       ),
-                    ),
+                      // Center Pause / Play indicator icon when paused
+                      if (!_controller.value.isPlaying)
+                        Container(
+                          width: 68,
+                          height: 68,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.5),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.play_arrow_rounded,
+                            color: Colors.white,
+                            size: 44,
+                          ),
+                        ),
+                    ],
                   ),
                 )
               : const Center(

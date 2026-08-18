@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import '../../../search_discover/presentation/pages/search_screen.dart';
 import 'community_feed_page.dart';
 import 'video_feed_page.dart';
 
@@ -86,7 +86,11 @@ class _HomeFeedPageState extends State<HomeFeedPage> with SingleTickerProviderSt
                   child: IconButton(
                     icon: const Icon(Icons.search, color: Colors.white),
                     onPressed: () {
-                      // Search action
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const SearchScreen(),
+                        ),
+                      );
                     },
                   ),
                 ),
