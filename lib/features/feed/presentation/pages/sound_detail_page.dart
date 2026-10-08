@@ -7,18 +7,18 @@ class SoundDetailPage extends StatelessWidget {
   Widget build(BuildContext context) {
     // Mock data for videos using this sound
     final List<String> mockVideos = [
-      'https://picsum.photos/seed/s1/400/600',
-      'https://picsum.photos/seed/s2/400/600',
-      'https://picsum.photos/seed/s3/400/600',
-      'https://picsum.photos/seed/s4/400/600',
-      'https://picsum.photos/seed/s5/400/600',
-      'https://picsum.photos/seed/s6/400/600',
-      'https://picsum.photos/seed/s7/400/600',
-      'https://picsum.photos/seed/s8/400/600',
-      'https://picsum.photos/seed/s9/400/600',
-      'https://picsum.photos/seed/s10/400/600',
-      'https://picsum.photos/seed/s11/400/600',
-      'https://picsum.photos/seed/s12/400/600',
+      'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=500&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=500&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=500&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=500&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=500&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=500&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500&auto=format&fit=crop&q=80',
     ];
 
     return Scaffold(

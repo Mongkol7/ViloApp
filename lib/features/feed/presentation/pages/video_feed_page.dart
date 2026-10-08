@@ -149,15 +149,28 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _controller = VideoPlayerController.asset(widget.data['videoUrl'])
-      ..initialize().then((_) {
-        if (!mounted) return;
-        setState(() {});
-        _controller.setLooping(true);
-        if (widget.isActive && widget.isCurrentPage && !_manuallyPaused) {
-          _controller.play();
-        }
-      });
+    _controller = VideoPlayerController.asset(widget.data['videoUrl']);
+    _controller.addListener(_videoListener);
+    _controller.initialize().then((_) {
+      if (!mounted) return;
+      _controller.setLooping(true);
+      setState(() {});
+      if (widget.isActive && widget.isCurrentPage && !_manuallyPaused) {
+        _controller.play();
+      }
+    });
+  }
+
+  void _videoListener() {
+    if (!mounted || !_controller.value.isInitialized) return;
+    final value = _controller.value;
+    // Guarantee non-stop continuous looping even across short video bounds
+    if (value.duration > Duration.zero && value.position >= value.duration) {
+      _controller.seekTo(Duration.zero);
+      if (widget.isActive && widget.isCurrentPage && !_manuallyPaused) {
+        _controller.play();
+      }
+    }
   }
 
   @override
@@ -219,6 +232,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   void dispose() {
     routeObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
+    _controller.removeListener(_videoListener);
     _controller.dispose();
     super.dispose();
   }

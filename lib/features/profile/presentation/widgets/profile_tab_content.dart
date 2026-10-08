@@ -49,10 +49,7 @@ List<Widget> buildProfileTabSlivers(int selectedIndex) {
         ),
       ];
 
-    case 1: // Grid / Videos
-    case 3: // Saved
-    case 4: // Liked
-    default:
+    case 1: // Grid / Postings
       final thumbnails = ProfileMockData.videoThumbnails;
       return [
         SliverPadding(
@@ -73,7 +70,61 @@ List<Widget> buildProfileTabSlivers(int selectedIndex) {
               (context, i) => VideoGridItem(
                 thumbnailUrl: thumbnails[i % thumbnails.length],
               ),
-              // Static mock count — swap for real list length later.
+              childCount: 12,
+            ),
+          ),
+        ),
+      ];
+
+    case 3: // Saved
+      final savedThumbnails = ProfileMockData.savedThumbnails;
+      return [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            PulseSpacing.inlineGap,
+            PulseSpacing.stackGap,
+            PulseSpacing.inlineGap,
+            PulseSpacing.sectionMargin,
+          ),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: 4,
+              crossAxisSpacing: 4,
+              childAspectRatio: 0.62,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, i) => VideoGridItem(
+                thumbnailUrl: savedThumbnails[i % savedThumbnails.length],
+              ),
+              childCount: 12,
+            ),
+          ),
+        ),
+      ];
+
+    case 4: // Liked
+    default:
+      final likedThumbnails = ProfileMockData.likedThumbnails;
+      return [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            PulseSpacing.inlineGap,
+            PulseSpacing.stackGap,
+            PulseSpacing.inlineGap,
+            PulseSpacing.sectionMargin,
+          ),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: 4,
+              crossAxisSpacing: 4,
+              childAspectRatio: 0.62,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, i) => VideoGridItem(
+                thumbnailUrl: likedThumbnails[i % likedThumbnails.length],
+              ),
               childCount: 12,
             ),
           ),

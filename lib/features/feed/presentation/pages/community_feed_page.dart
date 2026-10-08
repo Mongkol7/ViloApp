@@ -9,7 +9,7 @@ class CommunityFeedPage extends StatelessWidget {
     // Mock data for the staggered grid
     final List<Map<String, dynamic>> mockPosts = [
       {
-        'imageUrl': 'https://picsum.photos/seed/c1/600/800',
+        'imageUrl': 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=600&auto=format&fit=crop&q=80',
         'title': 'Beautiful rustic coffee shop atmosphere in the morning',
         'avatar': 'https://i.pravatar.cc/100?img=1',
         'username': 'Linaa',
@@ -17,7 +17,7 @@ class CommunityFeedPage extends StatelessWidget {
         'height': 220.0,
       },
       {
-        'imageUrl': 'https://picsum.photos/seed/c2/600/800',
+        'imageUrl': 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&auto=format&fit=crop&q=80',
         'title': 'Exclusive handmade furniture collection for your home',
         'avatar': 'https://i.pravatar.cc/100?img=2',
         'username': 'Khmer Furniture',
@@ -25,7 +25,7 @@ class CommunityFeedPage extends StatelessWidget {
         'height': 180.0,
       },
       {
-        'imageUrl': 'https://picsum.photos/seed/c3/600/800',
+        'imageUrl': 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80',
         'title': 'Find your calm as the day comes to an end.',
         'avatar': 'https://i.pravatar.cc/100?img=3',
         'username': 'Mariko Matcha',
@@ -33,7 +33,7 @@ class CommunityFeedPage extends StatelessWidget {
         'height': 250.0,
       },
       {
-        'imageUrl': 'https://picsum.photos/seed/c4/600/800',
+        'imageUrl': 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=600&auto=format&fit=crop&q=80',
         'title': 'New arrivals! Stylish outfit sets available now',
         'avatar': 'https://i.pravatar.cc/100?img=4',
         'username': 'SHINE\'s Store',
@@ -41,7 +41,7 @@ class CommunityFeedPage extends StatelessWidget {
         'height': 200.0,
       },
       {
-        'imageUrl': 'https://picsum.photos/seed/c5/600/800',
+        'imageUrl': 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80',
         'title': 'Exploring ancient temples in the jungle',
         'avatar': 'https://i.pravatar.cc/100?img=5',
         'username': 'Traveler',
@@ -49,7 +49,7 @@ class CommunityFeedPage extends StatelessWidget {
         'height': 240.0,
       },
       {
-        'imageUrl': 'https://picsum.photos/seed/c6/600/800',
+        'imageUrl': 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&auto=format&fit=crop&q=80',
         'title': 'A fresh cup of coffee to start the day right',
         'avatar': 'https://i.pravatar.cc/100?img=6',
         'username': 'CafeLover',
@@ -57,7 +57,7 @@ class CommunityFeedPage extends StatelessWidget {
         'height': 190.0,
       },
       {
-        'imageUrl': 'https://picsum.photos/seed/c7/600/800',
+        'imageUrl': 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=600&auto=format&fit=crop&q=80',
         'title': 'Winter fashion guide for the upcoming cold season',
         'avatar': 'https://i.pravatar.cc/100?img=7',
         'username': 'StyleInspo',
@@ -65,7 +65,7 @@ class CommunityFeedPage extends StatelessWidget {
         'height': 230.0,
       },
       {
-        'imageUrl': 'https://picsum.photos/seed/c8/600/800',
+        'imageUrl': 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=600&auto=format&fit=crop&q=80',
         'title': 'Minimalist workspace setup for productivity',
         'avatar': 'https://i.pravatar.cc/100?img=8',
         'username': 'TechGeek',
@@ -73,7 +73,7 @@ class CommunityFeedPage extends StatelessWidget {
         'height': 180.0,
       },
       {
-        'imageUrl': 'https://picsum.photos/seed/c9/600/800',
+        'imageUrl': 'https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=600&auto=format&fit=crop&q=80',
         'title': 'Delicious homemade pasta recipe 🍝',
         'avatar': 'https://i.pravatar.cc/100?img=9',
         'username': 'ChefMario',
@@ -81,7 +81,7 @@ class CommunityFeedPage extends StatelessWidget {
         'height': 250.0,
       },
       {
-        'imageUrl': 'https://picsum.photos/seed/c10/600/800',
+        'imageUrl': 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=600&auto=format&fit=crop&q=80',
         'title': 'Road trip through the canyon',
         'avatar': 'https://i.pravatar.cc/100?img=10',
         'username': 'Wanderlust',
