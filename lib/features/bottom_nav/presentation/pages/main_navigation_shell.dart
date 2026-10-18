@@ -5,6 +5,7 @@ import '../../../feed/presentation/pages/home_feed_page.dart';
 import '../../../inbox_activity/presentation/pages/inbox_screen.dart';
 import '../../../profile/presentation/pages/people_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
+import '../../../creator/presentation/widgets/vilo_creation_speed_dial.dart';
 import '../widgets/vilo_floating_bottom_bar.dart';
 
 class MainNavigationShell extends StatefulWidget {
@@ -131,6 +132,13 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                 index: _currentIndex,
                 children: _pages,
               ),
+            ),
+
+            // Quick Creation Speed Dial Overlay (Camera, Photo, Upload, Story, LIVE)
+            ViloCreationSpeedDial(
+              isOpen: _isAddActive,
+              onClose: () => setState(() => _isAddActive = false),
+              bottomOffset: bottomMargin + (_isCompact ? 48.0 : 64.0),
             ),
 
             // Dynamic Scroll-Aware Floating Bottom Navigation Bar Dock
