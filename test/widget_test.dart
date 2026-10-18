@@ -5,6 +5,7 @@ import 'package:viloapp/features/bottom_nav/presentation/widgets/vilo_floating_b
 import 'package:viloapp/features/inbox_activity/data/datasources/thought_story_manager.dart';
 import 'package:viloapp/features/inbox_activity/presentation/pages/inbox_screen.dart';
 import 'package:viloapp/features/profile/presentation/pages/people_screen.dart';
+import 'package:viloapp/features/profile/presentation/pages/settings_and_privacy_screen.dart';
 import 'package:viloapp/features/profile/presentation/screens/profile_screen.dart';
 
 Widget _buildTestApp({required Widget child}) {
@@ -182,5 +183,39 @@ void main() {
     // Verify story was removed from ProfileScreen and ThoughtStoryManager
     expect(find.text('Share a thought...'), findsOneWidget);
     expect(ThoughtStoryManager.instance.currentStory, isNull);
+  });
+
+  testWidgets('SettingsAndPrivacyScreen: Log out button opens confirmation dialog and handles cancel/confirm', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(_buildTestApp(child: const SettingsAndPrivacyScreen()));
+
+    // Scroll to the bottom to find 'Log out' tile
+    final logoutFinder = find.text('Log out');
+    await tester.scrollUntilVisible(logoutFinder, 200, scrollable: find.byType(Scrollable));
+    await tester.pumpAndSettle();
+    expect(logoutFinder, findsOneWidget);
+
+    // Tap 'Log out' tile
+    await tester.tap(logoutFinder);
+    await tester.pumpAndSettle();
+
+    // Verify confirmation dialog is displayed
+    expect(find.text('Log out of Vilo?'), findsOneWidget);
+    expect(find.text('Are you sure you want to log out? You will need to log back in to access your profile and feed.'), findsOneWidget);
+    expect(find.text('Cancel'), findsOneWidget);
+
+    // Tap 'Cancel'
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    // Verify dialog was dismissed
+    expect(find.text('Log out of Vilo?'), findsNothing);
+    expect(logoutFinder, findsOneWidget);
   });
 }

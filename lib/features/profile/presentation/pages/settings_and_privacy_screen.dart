@@ -1,9 +1,53 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../auth/presentation/dialogs/logout_dialog.dart';
+import '../../../auth/presentation/pages/login_screen.dart';
 
 class SettingsAndPrivacyScreen extends StatelessWidget {
   const SettingsAndPrivacyScreen({super.key});
+
+  Future<void> _showLogoutDialog(BuildContext context) async {
+    await showViloLogoutDialog(context);
+  }
+
+  void _showSwitchAccountDialog(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surfaceContainerHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Switch account',
+                style: AppTypography.headlineSm.copyWith(color: AppColors.onSurface, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.add, color: AppColors.primary),
+                title: Text(
+                  'Add existing account',
+                  style: AppTypography.bodyLg.copyWith(color: AppColors.primary),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context, rootNavigator: true).push(
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,8 +118,19 @@ class SettingsAndPrivacyScreen extends StatelessWidget {
             _buildTile(Icons.description_outlined, 'Terms and policies'),
           ]),
           _buildSection('Login', [
-            _buildTile(Icons.group_outlined, 'Switch account', profileImage: 'https://i.pravatar.cc/150?u=a'),
-            _buildTile(Icons.logout, 'Log out'),
+            _buildTile(
+              Icons.group_outlined,
+              'Switch account',
+              profileImage: 'https://i.pravatar.cc/150?u=a',
+              onTap: () => _showSwitchAccountDialog(context),
+            ),
+            _buildTile(
+              Icons.logout,
+              'Log out',
+              titleColor: AppColors.error,
+              iconColor: AppColors.error,
+              onTap: () => _showLogoutDialog(context),
+            ),
           ]),
           const SizedBox(height: 40),
           Center(
@@ -107,16 +162,41 @@ class SettingsAndPrivacyScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTile(IconData icon, String title, {String? trailingText, bool showRedDot = false, String? profileImage}) {
+  Widget _buildTile(
+    IconData icon,
+    String title, {
+    String? trailingText,
+    bool showRedDot = false,
+    String? profileImage,
+    VoidCallback? onTap,
+    Color? titleColor,
+    Color? iconColor,
+  }) {
     return ListTile(
-      leading: profileImage != null 
-        ? CircleAvatar(radius: 12, backgroundImage: NetworkImage(profileImage))
-        : Icon(icon, color: Colors.white, size: 22),
-      title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 15)),
+      leading: profileImage != null
+          ? ClipOval(
+              child: Image.network(
+                profileImage,
+                width: 24,
+                height: 24,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Icon(icon, color: iconColor ?? Colors.white, size: 22),
+              ),
+            )
+          : Icon(icon, color: iconColor ?? Colors.white, size: 22),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: titleColor ?? Colors.white,
+          fontSize: 15,
+          fontWeight: titleColor != null ? FontWeight.w600 : FontWeight.normal,
+        ),
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (showRedDot) Container(width: 6, height: 6, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle)),
+          if (showRedDot)
+            Container(width: 6, height: 6, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle)),
           if (trailingText != null) ...[
             Text(trailingText, style: const TextStyle(color: Colors.grey, fontSize: 14)),
             const SizedBox(width: 4),
@@ -124,7 +204,7 @@ class SettingsAndPrivacyScreen extends StatelessWidget {
           const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
         ],
       ),
-      onTap: () {},
+      onTap: onTap ?? () {},
     );
   }
 

@@ -9,6 +9,7 @@ import '../pages/tiktok_studio_screen.dart';
 import '../pages/promote_screen.dart';
 import '../pages/settings_screen.dart';
 import '../pages/settings_and_privacy_screen.dart';
+import '../../../auth/presentation/dialogs/logout_dialog.dart';
 
 class ProfileMenuDrawer extends StatelessWidget {
   const ProfileMenuDrawer({super.key});
@@ -83,6 +84,17 @@ class ProfileMenuDrawer extends StatelessWidget {
                     title: 'Settings and privacy',
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsAndPrivacyScreen())),
                   ),
+                  _buildMenuTile(
+                    context,
+                    icon: Icons.logout,
+                    title: 'Log out',
+                    iconColor: AppColors.error,
+                    titleColor: AppColors.error,
+                    onTap: () {
+                      Navigator.pop(context);
+                      showViloLogoutDialog(context);
+                    },
+                  ),
                 ],
               ),
             ),
@@ -111,13 +123,15 @@ class ProfileMenuDrawer extends StatelessWidget {
     required IconData icon,
     required String title,
     required VoidCallback onTap,
+    Color? iconColor,
+    Color? titleColor,
   }) {
     return ListTile(
-      leading: Icon(icon, color: Colors.white, size: 24),
+      leading: Icon(icon, color: iconColor ?? Colors.white, size: 24),
       title: Text(
         title,
         style: AppTypography.bodyLg.copyWith(
-          color: Colors.white,
+          color: titleColor ?? Colors.white,
           fontSize: 15,
           fontWeight: FontWeight.w500,
         ),
