@@ -46,8 +46,8 @@ class ProfileMockData {
   static const bool isVerified = true;
 
   static const List<ProfileStat> stats = [
-    ProfileStat(label: 'Following', value: 284),
-    ProfileStat(label: 'Followers', value: 12800),
+    ProfileStat(label: 'Following', value: 2),
+    ProfileStat(label: 'Followers', value: 4),
     ProfileStat(label: 'Likes', value: 154000),
   ];
 

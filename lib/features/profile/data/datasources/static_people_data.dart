@@ -12,9 +12,9 @@ class StaticPeopleData {
     PersonSuggestion(
       id: '2',
       name: 'Hyperion_9:',
-      subtitle: 'Follows you',
+      subtitle: 'Suggested for you',
       avatarUrl: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=150&auto=format&fit=crop&q=80',
-      followsYou: true,
+      followsYou: false,
     ),
     PersonSuggestion(
       id: '3',
@@ -47,9 +47,9 @@ class StaticPeopleData {
     PersonSuggestion(
       id: '7',
       name: 'Onyx_Edge',
-      subtitle: 'Follows you',
+      subtitle: 'Suggested for you',
       avatarUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80',
-      followsYou: true,
+      followsYou: false,
     ),
     PersonSuggestion(
       id: '8',
@@ -68,9 +68,9 @@ class StaticPeopleData {
     PersonSuggestion(
       id: '10',
       name: 'Zephyr_Neo',
-      subtitle: 'Follows you',
+      subtitle: 'Suggested for you',
       avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-      followsYou: true,
+      followsYou: false,
     ),
     PersonSuggestion(
       id: '11',
@@ -89,9 +89,9 @@ class StaticPeopleData {
     PersonSuggestion(
       id: '13',
       name: 'Vespera_99',
-      subtitle: 'Follows you',
+      subtitle: 'Suggested for you',
       avatarUrl: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150&auto=format&fit=crop&q=80',
-      followsYou: true,
+      followsYou: false,
     ),
     PersonSuggestion(
       id: '14',
@@ -110,9 +110,9 @@ class StaticPeopleData {
     PersonSuggestion(
       id: '16',
       name: 'Nexus_Pulse',
-      subtitle: 'Follows you',
+      subtitle: 'Suggested for you',
       avatarUrl: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80',
-      followsYou: true,
+      followsYou: false,
     ),
     PersonSuggestion(
       id: '17',

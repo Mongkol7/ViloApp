@@ -1,11 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../../auth/data/models/user_model.dart';
 import '../../../bottom_nav/presentation/pages/main_navigation_shell.dart';
+import '../../data/datasources/profile_remote_data_source.dart';
+import '../../data/datasources/profile_sync_service.dart';
 import '../mock/profile_mock_data.dart';
+import '../pages/followers_following_screen.dart';
 import '../style/pulse_tokens.dart';
 import '../widgets/profile_tab_content.dart';
 
 class PublicProfileScreen extends StatefulWidget {
-  const PublicProfileScreen({super.key});
+  final int? userId;
+  final String? username;
+  final String? displayName;
+  final String? avatarUrl;
+  final String? bio;
+  final bool isFollowing;
+
+  const PublicProfileScreen({
+    super.key,
+    this.userId,
+    this.username,
+    this.displayName,
+    this.avatarUrl,
+    this.bio,
+    this.isFollowing = false,
+  });
 
   @override
   State<PublicProfileScreen> createState() => _PublicProfileScreenState();
@@ -13,12 +33,38 @@ class PublicProfileScreen extends StatefulWidget {
 
 class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  bool _isFollowing = false;
+  late bool _isFollowing;
+  int _followersCount = ProfileSyncService.instance.mockFollowersCount;
+  UserModel? _loadedUser;
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this, initialIndex: 1);
+    _isFollowing = widget.isFollowing;
+    if (widget.userId != null) {
+      _fetchPublicProfile();
+    }
+  }
+
+  Future<void> _fetchPublicProfile() async {
+    if (widget.userId == null) return;
+    setState(() => _isLoading = true);
+    try {
+      final user = await ProfileRemoteDataSource.instance.getUserById(widget.userId!);
+      if (mounted) {
+        setState(() {
+          _loadedUser = user;
+          _isFollowing = user.isFollowing;
+          _followersCount = user.followersCount;
+        });
+      }
+    } catch (_) {
+      // Fallback to widget initial properties
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -28,14 +74,85 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
   }
 
   void _handleBack() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const MainNavigationShell(initialIndex: 0)),
-      (route) => false,
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainNavigationShell(initialIndex: 0)),
+        (route) => false,
+      );
+    }
+  }
+
+  Future<void> _handleToggleFollow() async {
+    HapticFeedback.lightImpact();
+    final newFollowState = !_isFollowing;
+    setState(() {
+      _isFollowing = newFollowState;
+      if (newFollowState) {
+        _followersCount++;
+      } else if (_followersCount > 0) {
+        _followersCount--;
+      }
+    });
+
+    final targetUid = _loadedUser?.id ?? widget.userId;
+    // Broadcast follow change immediately so own profile followingCount updates
+    ProfileSyncService.instance.notifyFollowChanged(
+      targetUserId: targetUid ?? 0,
+      isFollowing: newFollowState,
     );
+
+    if (targetUid != null && targetUid > 0) {
+      try {
+        if (newFollowState) {
+          await ProfileRemoteDataSource.instance.toggleFollow(targetUid);
+        } else {
+          await ProfileRemoteDataSource.instance.unfollow(targetUid);
+        }
+      } catch (_) {
+        // Revert on error
+        if (mounted) {
+          setState(() {
+            _isFollowing = !newFollowState;
+            if (newFollowState) {
+              _followersCount--;
+            } else {
+              _followersCount++;
+            }
+          });
+          ProfileSyncService.instance.notifyFollowChanged(
+            targetUserId: targetUid,
+            isFollowing: !newFollowState,
+          );
+        }
+      }
+    }
+  }
+
+  String _formatCount(int count) {
+    if (count >= 1000000) {
+      return '${(count / 1000000).toStringAsFixed(1)}M';
+    } else if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1)}K';
+    }
+    return '$count';
   }
 
   @override
   Widget build(BuildContext context) {
+    final username = _loadedUser?.username ?? widget.username ?? ProfileMockData.username;
+    final displayName = _loadedUser?.displayName.isNotEmpty == true
+        ? _loadedUser!.displayName
+        : (widget.displayName?.isNotEmpty == true ? widget.displayName! : username);
+    final avatarUrl = _loadedUser?.avatarUrl?.isNotEmpty == true
+        ? _loadedUser!.avatarUrl!
+        : (widget.avatarUrl?.isNotEmpty == true ? widget.avatarUrl! : ProfileMockData.avatarUrl);
+    final bio = _loadedUser?.bio?.isNotEmpty == true
+        ? _loadedUser!.bio!
+        : (widget.bio?.isNotEmpty == true ? widget.bio! : ProfileMockData.bio);
+    final isVerified = _loadedUser?.isVerified ?? false;
+
     return Scaffold(
       backgroundColor: PulseColors.background,
       appBar: AppBar(
@@ -45,8 +162,27 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: PulseColors.onSurface),
           onPressed: _handleBack,
         ),
-        title: Text(ProfileMockData.username, style: PulseTypography.bodyLg),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(displayName, style: PulseTypography.bodyLg),
+            if (isVerified) ...[
+              const SizedBox(width: 4),
+              const Icon(Icons.verified_rounded, color: Color(0xFF2F80ED), size: 16),
+            ],
+          ],
+        ),
         centerTitle: true,
+        bottom: _isLoading
+            ? const PreferredSize(
+                preferredSize: Size.fromHeight(2),
+                child: LinearProgressIndicator(
+                  backgroundColor: Colors.transparent,
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2F80ED)),
+                  minHeight: 2,
+                ),
+              )
+            : null,
         actions: [
           IconButton(
             icon: const Icon(Icons.more_horiz_rounded, color: PulseColors.onSurface),
@@ -61,23 +197,67 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
               child: Column(
                 children: [
                   const SizedBox(height: 20),
-                  // Avatar
-                  CircleAvatar(
-                    radius: 48,
-                    backgroundImage: NetworkImage(ProfileMockData.avatarUrl),
-                    backgroundColor: PulseColors.surfaceContainer,
+                  ClipOval(
+                    child: SizedBox(
+                      width: 96,
+                      height: 96,
+                      child: Image.network(
+                        avatarUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: PulseColors.surfaceContainer,
+                          child: const Icon(
+                            Icons.person_rounded,
+                            color: Colors.white70,
+                            size: 48,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   // Username
-                  Text(ProfileMockData.username, style: PulseTypography.headlineSm),
+                  Text('@$username', style: PulseTypography.headlineSm),
                   const SizedBox(height: 20),
                   // Stats Row
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _buildStatItem('Following', '284'),
+                      _buildStatItem(
+                        'Following',
+                        '${_loadedUser?.followingCount ?? ProfileSyncService.instance.mockFollowingCount}',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => FollowersFollowingScreen(
+                                userId: _loadedUser?.id ?? widget.userId,
+                                username: username,
+                                initialTabIndex: 1,
+                                initialFollowingCount: _loadedUser?.followingCount,
+                                initialFollowersCount: _loadedUser?.followersCount ?? _followersCount,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                       _buildDivider(),
-                      _buildStatItem('Followers', '12.8K'),
+                      _buildStatItem(
+                        'Followers',
+                        _formatCount(_followersCount),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => FollowersFollowingScreen(
+                                userId: _loadedUser?.id ?? widget.userId,
+                                username: username,
+                                initialTabIndex: 0,
+                                initialFollowersCount: _loadedUser?.followersCount ?? _followersCount,
+                                initialFollowingCount: _loadedUser?.followingCount,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                       _buildDivider(),
                       _buildStatItem('Likes', '154K'),
                     ],
@@ -88,12 +268,24 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       _buildPillButton(
-                        _isFollowing ? 'Following' : 'Follow', 
+                        _isFollowing ? 'Following' : 'Follow',
                         isPrimary: !_isFollowing,
-                        onTap: () => setState(() => _isFollowing = !_isFollowing),
+                        onTap: _handleToggleFollow,
                       ),
                       const SizedBox(width: 8),
-                      _buildPillButton('Message', isPrimary: false, onTap: () {}),
+                      _buildPillButton(
+                        'Message',
+                        isPrimary: false,
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Direct message with @$username coming soon!'),
+                              backgroundColor: const Color(0xFF2A2A30),
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                      ),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -101,7 +293,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 40),
                     child: Text(
-                      ProfileMockData.bio,
+                      bio,
                       textAlign: TextAlign.center,
                       style: PulseTypography.bodyMd,
                     ),
@@ -144,15 +336,19 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
     );
   }
 
-  Widget _buildStatItem(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 15),
-      child: Column(
-        children: [
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
-          const SizedBox(height: 4),
-          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-        ],
+  Widget _buildStatItem(String label, String value, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 15),
+        child: Column(
+          children: [
+            Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
+            const SizedBox(height: 4),
+            Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          ],
+        ),
       ),
     );
   }

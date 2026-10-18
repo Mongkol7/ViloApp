@@ -19,7 +19,18 @@ class PersonCard extends StatelessWidget {
   Widget build(BuildContext context) {
     void goToProfile() {
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const PublicProfileScreen()),
+        MaterialPageRoute(
+          builder: (_) => PublicProfileScreen(
+            userId: int.tryParse(person.id),
+            username: (person.username != null && person.username!.isNotEmpty)
+                ? person.username!
+                : person.name.toLowerCase().replaceAll(' ', '_'),
+            displayName: person.name,
+            bio: person.subtitle,
+            avatarUrl: person.avatarUrl,
+            isFollowing: person.isFollowed,
+          ),
+        ),
       );
     }
 

@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;
 
@@ -25,45 +26,160 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     @Override
+    @Transactional
     public void run(String... args) {
-        if (userRepository.count() == 0) {
-            log.info("Database is empty. Seeding initial team users...");
+        if (userRepository.count() < 20) {
+            log.info("Database has fewer than 20 users. Seeding 20 real platform users...");
 
-            User mongkol = User.builder()
-                    .username("mongkol")
-                    .email("mongkol@vilo.app")
-                    .password(passwordEncoder.encode("password123"))
-                    .displayName("Thoeung Sereymongkol")
-                    .bio("Flutter & Spring Boot Engineer | Vilo Core Team")
-                    .avatarUrl("https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80")
-                    .isVerified(true)
-                    .roles(Set.of(Role.ROLE_USER, Role.ROLE_CREATOR))
+            User mongkol = getOrCreateUser("mongkol", "mongkol@vilo.app", "password123",
+                    "Thoeung Sereymongkol", "Flutter & Spring Boot Engineer | Vilo Core Team",
+                    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80",
+                    true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+            User bunheng = getOrCreateUser("bunheng", "bunheng@vilo.app", "password123",
+                    "Lim Bunheng", "Video Engine & Feed Specialist | Vilo Team",
+                    "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80",
+                    true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+            User rithysak = getOrCreateUser("rithysak", "rithysak@vilo.app", "password123",
+                    "Chhuon Rithysak", "Mobile UI/UX Developer & Orders Lead",
+                    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80",
+                    true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+            User kimliza = getOrCreateUser("kimliza", "kimliza@vilo.app", "password123",
+                    "Kim Liza", "Social Stories & Real-Time Chat Specialist",
+                    "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80",
+                    true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+            getOrCreateUser("mono_t", "mono@vilo.app", "password123",
+                    "Mono T", "Search, Sounds & Discovery Specialist",
+                    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop&q=80",
+                    true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+            getOrCreateUser("admin", "admin@vilo.app", "admin123",
+                    "Vilo System Admin", "System Administrator",
+                    "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80",
+                    true, Set.of(Role.ROLE_USER, Role.ROLE_ADMIN));
+
+            User sophia = getOrCreateUser("sophia_art", "sophia@vilo.app", "password123",
+                    "Sophia Vance", "Digital Artist & Visual Storyteller",
+                    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80",
+                    true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+            getOrCreateUser("alex_dancer", "alex@vilo.app", "password123",
+                    "Alex Rivers", "Choreographer & Movement Director",
+                    "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=500&auto=format&fit=crop&q=80",
+                    false, Set.of(Role.ROLE_USER));
+
+            getOrCreateUser("linda_travel", "linda@vilo.app", "password123",
+                    "Linda Chen", "Wanderlust | Visiting 40+ countries",
+                    "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500&auto=format&fit=crop&q=80",
+                    true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+            User davi = getOrCreateUser("davi_beats", "davi@vilo.app", "password123",
+                    "David Miller", "Lo-fi producer & sound designer",
+                    "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500&auto=format&fit=crop&q=80",
+                    true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+            getOrCreateUser("sarah_fit", "sarah@vilo.app", "password123",
+                    "Sarah Connor", "Daily HIIT & Mindful Wellness",
+                    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80",
+                    false, Set.of(Role.ROLE_USER));
+
+            getOrCreateUser("michael_vlogs", "michael@vilo.app", "password123",
+                    "Michael Scott", "Urban life & cinematic mini-docs",
+                    "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=500&auto=format&fit=crop&q=80",
+                    false, Set.of(Role.ROLE_USER));
+
+            getOrCreateUser("emily_chef", "emily@vilo.app", "password123",
+                    "Emily Watson", "Pastry arts & sourdough adventures",
+                    "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=500&auto=format&fit=crop&q=80",
+                    true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+            getOrCreateUser("johnny_skate", "johnny@vilo.app", "password123",
+                    "Johnny Blaze", "Street skate clips & skatepark tours",
+                    "https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?w=500&auto=format&fit=crop&q=80",
+                    false, Set.of(Role.ROLE_USER));
+
+            getOrCreateUser("cloe_design", "cloe@vilo.app", "password123",
+                    "Chloe Martin", "Product Designer & 3D Blender enthusiast",
+                    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop&q=80",
+                    true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+            getOrCreateUser("kevin_tech", "kevin@vilo.app", "password123",
+                    "Kevin Zhang", "Next-gen tech breakdown & desk setups",
+                    "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=500&auto=format&fit=crop&q=80",
+                    true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+            getOrCreateUser("anna_photo", "anna@vilo.app", "password123",
+                    "Anna Petrova", "Film portraits & street photography",
+                    "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500&auto=format&fit=crop&q=80",
+                    false, Set.of(Role.ROLE_USER));
+
+            getOrCreateUser("lucas_gaming", "lucas@vilo.app", "password123",
+                    "Lucas Silva", "Speedrunner & competitive gamer",
+                    "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=500&auto=format&fit=crop&q=80",
+                    false, Set.of(Role.ROLE_USER));
+
+            getOrCreateUser("maya_music", "maya@vilo.app", "password123",
+                    "Maya Lin", "Acoustic guitar & indie songwriting",
+                    "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80",
+                    true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+            getOrCreateUser("ryan_explores", "ryan@vilo.app", "password123",
+                    "Ryan Walker", "Wild camping & drone aerial shots",
+                    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80",
+                    false, Set.of(Role.ROLE_USER));
+
+            // Set up initial follow relationships for mongkol:
+            // 4 followers: bunheng, rithysak, kimliza, sophia
+            ensureFollow(bunheng, mongkol);
+            ensureFollow(rithysak, mongkol);
+            ensureFollow(kimliza, mongkol);
+            ensureFollow(sophia, mongkol);
+
+            // 3 following: bunheng, sophia, davi
+            ensureFollow(mongkol, bunheng);
+            ensureFollow(mongkol, sophia);
+            ensureFollow(mongkol, davi);
+
+            log.info("20 Platform users seeded successfully with verified initial follow graphs!");
+        }
+    }
+
+    private User getOrCreateUser(String username, String email, String password,
+                                 String displayName, String bio, String avatarUrl,
+                                 boolean isVerified, Set<Role> roles) {
+        return userRepository.findByUsername(username).orElseGet(() -> {
+            User u = User.builder()
+                    .username(username)
+                    .email(email)
+                    .password(passwordEncoder.encode(password))
+                    .displayName(displayName)
+                    .bio(bio)
+                    .avatarUrl(avatarUrl)
+                    .isVerified(isVerified)
+                    .roles(roles)
                     .build();
+            return userRepository.save(u);
+        });
+    }
 
-            User bunheng = User.builder()
-                    .username("bunheng")
-                    .email("bunheng@vilo.app")
-                    .password(passwordEncoder.encode("password123"))
-                    .displayName("Lim Bunheng")
-                    .bio("Video Engine & Feed Specialist | Vilo Team")
-                    .avatarUrl("https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80")
-                    .isVerified(true)
-                    .roles(Set.of(Role.ROLE_USER, Role.ROLE_CREATOR))
-                    .build();
+    private void ensureFollow(User follower, User target) {
+        if (follower == null || target == null || follower.getId().equals(target.getId())) {
+            return;
+        }
+        User reloadedFollower = userRepository.findById(follower.getId()).orElse(follower);
+        User reloadedTarget = userRepository.findById(target.getId()).orElse(target);
 
-            User admin = User.builder()
-                    .username("admin")
-                    .email("admin@vilo.app")
-                    .password(passwordEncoder.encode("admin123"))
-                    .displayName("Vilo System Admin")
-                    .bio("System Administrator")
-                    .avatarUrl("https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80")
-                    .isVerified(true)
-                    .roles(Set.of(Role.ROLE_USER, Role.ROLE_ADMIN))
-                    .build();
+        boolean alreadyFollowed = reloadedTarget.getFollowers().stream()
+                .anyMatch(f -> f.getId().equals(reloadedFollower.getId()));
 
-            userRepository.saveAll(java.util.List.of(mongkol, bunheng, admin));
-            log.info("Default seed users created successfully: 'mongkol', 'bunheng', 'admin' (passwords: 'password123' / 'admin123')");
+        if (!alreadyFollowed) {
+            reloadedTarget.getFollowers().add(reloadedFollower);
+            reloadedFollower.getFollowing().add(reloadedTarget);
+            userRepository.save(reloadedTarget);
+            userRepository.save(reloadedFollower);
         }
     }
 }

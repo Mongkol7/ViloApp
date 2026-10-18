@@ -15,6 +15,8 @@ public class UserResponse {
     private String bio;
     private String avatarUrl;
     private Boolean isVerified;
+    private Boolean isFollowing;
+    private Boolean followsYou;
     private Set<Role> roles;
     private int followersCount;
     private int followingCount;
@@ -26,6 +28,18 @@ public class UserResponse {
     public UserResponse(Long id, String username, String email, String displayName, String bio,
                         String avatarUrl, Boolean isVerified, Set<Role> roles,
                         int followersCount, int followingCount, Instant createdAt) {
+        this(id, username, email, displayName, bio, avatarUrl, isVerified, false, false, roles, followersCount, followingCount, createdAt);
+    }
+
+    public UserResponse(Long id, String username, String email, String displayName, String bio,
+                        String avatarUrl, Boolean isVerified, Boolean isFollowing, Set<Role> roles,
+                        int followersCount, int followingCount, Instant createdAt) {
+        this(id, username, email, displayName, bio, avatarUrl, isVerified, isFollowing, false, roles, followersCount, followingCount, createdAt);
+    }
+
+    public UserResponse(Long id, String username, String email, String displayName, String bio,
+                        String avatarUrl, Boolean isVerified, Boolean isFollowing, Boolean followsYou, Set<Role> roles,
+                        int followersCount, int followingCount, Instant createdAt) {
         this.id = id;
         this.username = username;
         this.email = email;
@@ -33,6 +47,8 @@ public class UserResponse {
         this.bio = bio;
         this.avatarUrl = avatarUrl;
         this.isVerified = isVerified;
+        this.isFollowing = isFollowing;
+        this.followsYou = followsYou;
         this.roles = roles;
         this.followersCount = followersCount;
         this.followingCount = followingCount;
@@ -51,6 +67,22 @@ public class UserResponse {
                 .roles(user.getRoles())
                 .followersCount(user.getFollowers() != null ? user.getFollowers().size() : 0)
                 .followingCount(user.getFollowing() != null ? user.getFollowing().size() : 0)
+                .createdAt(user.getCreatedAt())
+                .build();
+    }
+
+    public static UserResponse fromEntitySummary(User user) {
+        return UserResponse.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .displayName(user.getDisplayName() != null ? user.getDisplayName() : user.getUsername())
+                .bio(user.getBio())
+                .avatarUrl(user.getAvatarUrl())
+                .isVerified(user.getIsVerified() != null ? user.getIsVerified() : false)
+                .roles(user.getRoles())
+                .followersCount(0)
+                .followingCount(0)
                 .createdAt(user.getCreatedAt())
                 .build();
     }
@@ -115,6 +147,22 @@ public class UserResponse {
         this.isVerified = isVerified;
     }
 
+    public Boolean getIsFollowing() {
+        return isFollowing;
+    }
+
+    public void setIsFollowing(Boolean isFollowing) {
+        this.isFollowing = isFollowing;
+    }
+
+    public Boolean getFollowsYou() {
+        return followsYou != null ? followsYou : false;
+    }
+
+    public void setFollowsYou(Boolean followsYou) {
+        this.followsYou = followsYou;
+    }
+
     public Set<Role> getRoles() {
         return roles;
     }
@@ -155,6 +203,8 @@ public class UserResponse {
         private String bio;
         private String avatarUrl;
         private Boolean isVerified = false;
+        private Boolean isFollowing = false;
+        private Boolean followsYou = false;
         private Set<Role> roles;
         private int followersCount;
         private int followingCount;
@@ -195,6 +245,16 @@ public class UserResponse {
             return this;
         }
 
+        public Builder isFollowing(Boolean isFollowing) {
+            this.isFollowing = isFollowing;
+            return this;
+        }
+
+        public Builder followsYou(Boolean followsYou) {
+            this.followsYou = followsYou;
+            return this;
+        }
+
         public Builder roles(Set<Role> roles) {
             this.roles = roles;
             return this;
@@ -216,7 +276,7 @@ public class UserResponse {
         }
 
         public UserResponse build() {
-            return new UserResponse(id, username, email, displayName, bio, avatarUrl, isVerified, roles, followersCount, followingCount, createdAt);
+            return new UserResponse(id, username, email, displayName, bio, avatarUrl, isVerified, isFollowing, followsYou, roles, followersCount, followingCount, createdAt);
         }
     }
 }

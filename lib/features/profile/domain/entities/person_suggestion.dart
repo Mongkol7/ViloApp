@@ -1,5 +1,6 @@
 class PersonSuggestion {
   final String id;
+  final String? username;
   final String name;
   final String subtitle;
   final String avatarUrl;
@@ -8,6 +9,7 @@ class PersonSuggestion {
 
   const PersonSuggestion({
     required this.id,
+    this.username,
     required this.name,
     required this.subtitle,
     required this.avatarUrl,
@@ -17,6 +19,7 @@ class PersonSuggestion {
 
   PersonSuggestion copyWith({
     String? id,
+    String? username,
     String? name,
     String? subtitle,
     String? avatarUrl,
@@ -25,6 +28,7 @@ class PersonSuggestion {
   }) {
     return PersonSuggestion(
       id: id ?? this.id,
+      username: username ?? this.username,
       name: name ?? this.name,
       subtitle: subtitle ?? this.subtitle,
       avatarUrl: avatarUrl ?? this.avatarUrl,

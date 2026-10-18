@@ -4,9 +4,13 @@ import 'package:viloapp/core/theme/app_theme.dart';
 import 'package:viloapp/features/bottom_nav/presentation/widgets/vilo_floating_bottom_bar.dart';
 import 'package:viloapp/features/inbox_activity/data/datasources/thought_story_manager.dart';
 import 'package:viloapp/features/inbox_activity/presentation/pages/inbox_screen.dart';
+import 'package:viloapp/features/auth/data/models/user_model.dart';
+import 'package:viloapp/features/profile/presentation/pages/edit_profile_screen.dart';
+import 'package:viloapp/features/profile/presentation/pages/followers_following_screen.dart';
 import 'package:viloapp/features/profile/presentation/pages/people_screen.dart';
 import 'package:viloapp/features/profile/presentation/pages/settings_and_privacy_screen.dart';
 import 'package:viloapp/features/profile/presentation/screens/profile_screen.dart';
+import 'package:viloapp/features/profile/presentation/screens/public_profile_screen.dart';
 
 Widget _buildTestApp({required Widget child}) {
   return MaterialApp(
@@ -218,4 +222,107 @@ void main() {
     expect(find.text('Log out of Vilo?'), findsNothing);
     expect(logoutFinder, findsOneWidget);
   });
+
+  testWidgets('EditProfileScreen renders user details, allows editing name/bio, and opens avatar picker', (WidgetTester tester) async {
+    final testUser = UserModel(
+      id: 1,
+      username: 'mongkol',
+      email: 'mongkol@vilo.app',
+      displayName: 'Thoeung Sereymongkol',
+      bio: 'Flutter & Spring Boot Engineer',
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80',
+      isVerified: true,
+      followersCount: 12800,
+      followingCount: 284,
+    );
+
+    await tester.pumpWidget(_buildTestApp(child: EditProfileScreen(user: testUser)));
+
+    expect(find.text('Edit Profile'), findsOneWidget);
+    expect(find.text('Save'), findsOneWidget);
+    expect(find.text('Thoeung Sereymongkol'), findsOneWidget);
+    expect(find.text('@mongkol'), findsOneWidget);
+    expect(find.text('Flutter & Spring Boot Engineer'), findsOneWidget);
+    expect(find.text('Change Photo'), findsOneWidget);
+
+    // Tap Change Photo
+    await tester.tap(find.text('Change Photo'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choose Profile Picture'), findsOneWidget);
+    expect(find.text('Select a preset avatar:'), findsOneWidget);
+    expect(find.text('Enter Custom Image URL'), findsOneWidget);
+  });
+
+  testWidgets('PublicProfileScreen renders user details and toggles follow state', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      _buildTestApp(
+        child: const PublicProfileScreen(
+          username: 'bunheng',
+          displayName: 'Lim Bunheng',
+          avatarUrl: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=500&auto=format&fit=crop&q=80',
+          bio: 'Video Engine & Streaming Specialist',
+          isFollowing: false,
+        ),
+      ),
+    );
+
+    expect(find.text('Lim Bunheng'), findsOneWidget);
+    expect(find.text('@bunheng'), findsOneWidget);
+    expect(find.text('Video Engine & Streaming Specialist'), findsOneWidget);
+    expect(find.text('Follow'), findsOneWidget);
+
+    // Tap Follow
+    await tester.tap(find.text('Follow'));
+    await tester.pump();
+
+    // Verify it changed to Following (one in stats column, one in action button)
+    expect(find.text('Following'), findsNWidgets(2));
+  });
+
+  testWidgets('FollowersFollowingScreen renders tabs, searches users, and switches tabs', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      _buildTestApp(
+        child: const FollowersFollowingScreen(
+          userId: 1,
+          username: 'mongkol',
+          initialTabIndex: 0,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Check title and tabs
+    expect(find.text('@mongkol'), findsOneWidget);
+    final followersTabFinder = find.descendant(of: find.byType(TabBar), matching: find.textContaining('Followers'));
+    final followingTabFinder = find.descendant(of: find.byType(TabBar), matching: find.textContaining('Following'));
+    expect(followersTabFinder, findsOneWidget);
+    expect(followingTabFinder, findsOneWidget);
+
+    // Check search field
+    expect(find.byType(TextField), findsOneWidget);
+
+    // Verify initial users in Followers tab
+    expect(find.text('Lim Bunheng'), findsOneWidget);
+    expect(find.text('Chhuon Rithysak'), findsOneWidget);
+
+    // Search for "bunheng"
+    await tester.enterText(find.byType(TextField), 'bunheng');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Lim Bunheng'), findsOneWidget);
+    expect(find.text('Chhuon Rithysak'), findsNothing);
+
+    // Clear search
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pumpAndSettle();
+
+    // Switch to Following tab
+    await tester.tap(followingTabFinder);
+    await tester.pumpAndSettle();
+
+    // Verify Following tab content
+    expect(find.text('Sophia Vance'), findsOneWidget);
+  });
 }
+
