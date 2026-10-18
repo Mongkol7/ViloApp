@@ -9,7 +9,6 @@ import 'qr_code_screen.dart';
 import 'tiktok_studio_screen.dart';
 import 'promote_screen.dart';
 import 'settings_and_privacy_screen.dart';
-import '../../../auth/presentation/dialogs/logout_dialog.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -104,13 +103,6 @@ class SettingsScreen extends StatelessWidget {
                 MaterialPageRoute(builder: (context) => const SettingsAndPrivacyScreen()),
               );
             },
-          ),
-          _buildSettingsTile(
-            icon: Icons.logout,
-            title: 'Log out',
-            iconColor: AppColors.error,
-            titleColor: AppColors.error,
-            onTap: () => showViloLogoutDialog(context),
           ),
         ],
       ),

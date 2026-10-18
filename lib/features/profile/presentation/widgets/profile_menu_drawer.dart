@@ -9,7 +9,6 @@ import '../pages/tiktok_studio_screen.dart';
 import '../pages/promote_screen.dart';
 import '../pages/settings_screen.dart';
 import '../pages/settings_and_privacy_screen.dart';
-import '../../../auth/presentation/dialogs/logout_dialog.dart';
 
 class ProfileMenuDrawer extends StatelessWidget {
   const ProfileMenuDrawer({super.key});
@@ -83,17 +82,6 @@ class ProfileMenuDrawer extends StatelessWidget {
                     icon: Icons.settings_outlined,
                     title: 'Settings and privacy',
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsAndPrivacyScreen())),
-                  ),
-                  _buildMenuTile(
-                    context,
-                    icon: Icons.logout,
-                    title: 'Log out',
-                    iconColor: AppColors.error,
-                    titleColor: AppColors.error,
-                    onTap: () {
-                      Navigator.pop(context);
-                      showViloLogoutDialog(context);
-                    },
                   ),
                 ],
               ),
