@@ -2,18 +2,10 @@ package com.vilo.backend.dto;
 
 import com.vilo.backend.entity.Role;
 import com.vilo.backend.entity.User;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 
 import java.time.Instant;
 import java.util.Set;
 
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class UserResponse {
 
     private Long id;
@@ -27,6 +19,25 @@ public class UserResponse {
     private int followersCount;
     private int followingCount;
     private Instant createdAt;
+
+    public UserResponse() {
+    }
+
+    public UserResponse(Long id, String username, String email, String displayName, String bio,
+                        String avatarUrl, Boolean isVerified, Set<Role> roles,
+                        int followersCount, int followingCount, Instant createdAt) {
+        this.id = id;
+        this.username = username;
+        this.email = email;
+        this.displayName = displayName;
+        this.bio = bio;
+        this.avatarUrl = avatarUrl;
+        this.isVerified = isVerified;
+        this.roles = roles;
+        this.followersCount = followersCount;
+        this.followingCount = followingCount;
+        this.createdAt = createdAt;
+    }
 
     public static UserResponse fromEntity(User user) {
         return UserResponse.builder()
@@ -42,5 +53,170 @@ public class UserResponse {
                 .followingCount(user.getFollowing() != null ? user.getFollowing().size() : 0)
                 .createdAt(user.getCreatedAt())
                 .build();
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+
+    public String getBio() {
+        return bio;
+    }
+
+    public void setBio(String bio) {
+        this.bio = bio;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
+    }
+
+    public Boolean getIsVerified() {
+        return isVerified;
+    }
+
+    public void setIsVerified(Boolean isVerified) {
+        this.isVerified = isVerified;
+    }
+
+    public Set<Role> getRoles() {
+        return roles;
+    }
+
+    public void setRoles(Set<Role> roles) {
+        this.roles = roles;
+    }
+
+    public int getFollowersCount() {
+        return followersCount;
+    }
+
+    public void setFollowersCount(int followersCount) {
+        this.followersCount = followersCount;
+    }
+
+    public int getFollowingCount() {
+        return followingCount;
+    }
+
+    public void setFollowingCount(int followingCount) {
+        this.followingCount = followingCount;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public static class Builder {
+        private Long id;
+        private String username;
+        private String email;
+        private String displayName;
+        private String bio;
+        private String avatarUrl;
+        private Boolean isVerified = false;
+        private Set<Role> roles;
+        private int followersCount;
+        private int followingCount;
+        private Instant createdAt;
+
+        public Builder id(Long id) {
+            this.id = id;
+            return this;
+        }
+
+        public Builder username(String username) {
+            this.username = username;
+            return this;
+        }
+
+        public Builder email(String email) {
+            this.email = email;
+            return this;
+        }
+
+        public Builder displayName(String displayName) {
+            this.displayName = displayName;
+            return this;
+        }
+
+        public Builder bio(String bio) {
+            this.bio = bio;
+            return this;
+        }
+
+        public Builder avatarUrl(String avatarUrl) {
+            this.avatarUrl = avatarUrl;
+            return this;
+        }
+
+        public Builder isVerified(Boolean isVerified) {
+            this.isVerified = isVerified;
+            return this;
+        }
+
+        public Builder roles(Set<Role> roles) {
+            this.roles = roles;
+            return this;
+        }
+
+        public Builder followersCount(int followersCount) {
+            this.followersCount = followersCount;
+            return this;
+        }
+
+        public Builder followingCount(int followingCount) {
+            this.followingCount = followingCount;
+            return this;
+        }
+
+        public Builder createdAt(Instant createdAt) {
+            this.createdAt = createdAt;
+            return this;
+        }
+
+        public UserResponse build() {
+            return new UserResponse(id, username, email, displayName, bio, avatarUrl, isVerified, roles, followersCount, followingCount, createdAt);
+        }
     }
 }

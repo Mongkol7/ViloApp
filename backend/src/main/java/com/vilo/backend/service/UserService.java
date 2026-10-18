@@ -6,15 +6,17 @@ import com.vilo.backend.entity.User;
 import com.vilo.backend.exception.BadRequestException;
 import com.vilo.backend.exception.ResourceNotFoundException;
 import com.vilo.backend.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 public class UserService {
 
     private final UserRepository userRepository;
+
+    public UserService(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
 
     @Transactional(readOnly = true)
     public UserResponse getProfile(User currentUser) {

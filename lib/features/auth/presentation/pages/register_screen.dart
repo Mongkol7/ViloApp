@@ -77,7 +77,11 @@ class _RegisterScreenState extends State<RegisterScreen>
   bool _validate() {
     String? nameErr, emailErr, passErr, confirmErr;
 
-    if (_nameCtrl.text.trim().isEmpty) nameErr = 'Full name is required';
+    if (_nameCtrl.text.trim().isEmpty) {
+      nameErr = 'Full name is required';
+    } else if (_nameCtrl.text.trim().length < 3) {
+      nameErr = 'Name must be at least 3 characters';
+    }
     if (_emailCtrl.text.trim().isEmpty) {
       emailErr = 'Email is required';
     } else if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(_emailCtrl.text.trim())) {
@@ -113,7 +117,15 @@ class _RegisterScreenState extends State<RegisterScreen>
     try {
       final authSource = AuthRemoteDataSource();
       final fullName = _nameCtrl.text.trim();
-      final username = fullName.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
+      var username = fullName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '_');
+      if (username.length < 3) {
+        final emailPrefix = _emailCtrl.text.trim().split('@').first.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '_');
+        username = emailPrefix.length >= 3 ? emailPrefix : '${username}_user';
+      }
+      if (username.length > 50) {
+        username = username.substring(0, 50);
+      }
+
       await authSource.register(
         username: username,
         email: _emailCtrl.text.trim(),

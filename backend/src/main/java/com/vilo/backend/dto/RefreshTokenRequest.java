@@ -1,17 +1,41 @@
 package com.vilo.backend.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class RefreshTokenRequest {
 
     @NotBlank(message = "Refresh token is required")
     private String refreshToken;
+
+    public RefreshTokenRequest() {
+    }
+
+    public RefreshTokenRequest(String refreshToken) {
+        this.refreshToken = refreshToken;
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public String getRefreshToken() {
+        return refreshToken;
+    }
+
+    public void setRefreshToken(String refreshToken) {
+        this.refreshToken = refreshToken;
+    }
+
+    public static class Builder {
+        private String refreshToken;
+
+        public Builder refreshToken(String refreshToken) {
+            this.refreshToken = refreshToken;
+            return this;
+        }
+
+        public RefreshTokenRequest build() {
+            return new RefreshTokenRequest(refreshToken);
+        }
+    }
 }

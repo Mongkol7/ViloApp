@@ -3,15 +3,7 @@ package com.vilo.backend.dto;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class RegisterRequest {
 
     @NotBlank(message = "Username is required")
@@ -27,4 +19,81 @@ public class RegisterRequest {
     private String password;
 
     private String displayName;
+
+    public RegisterRequest() {
+    }
+
+    public RegisterRequest(String username, String email, String password, String displayName) {
+        this.username = username;
+        this.email = email;
+        this.password = password;
+        this.displayName = displayName;
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+
+    public static class Builder {
+        private String username;
+        private String email;
+        private String password;
+        private String displayName;
+
+        public Builder username(String username) {
+            this.username = username;
+            return this;
+        }
+
+        public Builder email(String email) {
+            this.email = email;
+            return this;
+        }
+
+        public Builder password(String password) {
+            this.password = password;
+            return this;
+        }
+
+        public Builder displayName(String displayName) {
+            this.displayName = displayName;
+            return this;
+        }
+
+        public RegisterRequest build() {
+            return new RegisterRequest(username, email, password, displayName);
+        }
+    }
 }
