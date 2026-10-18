@@ -8,6 +8,7 @@ import '../widgets/vilo_logo_mark.dart';
 import '../widgets/vilo_primary_button.dart';
 import '../widgets/vilo_social_login_section.dart';
 import '../../../bottom_nav/presentation/pages/main_navigation_shell.dart';
+import '../../data/datasources/auth_remote_data_source.dart';
 import 'login_screen.dart';
 
 /// Screen 3 — Register / Join Vilo
@@ -109,13 +110,34 @@ class _RegisterScreenState extends State<RegisterScreen>
     }
     HapticFeedback.lightImpact();
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (mounted) {
-      setState(() => _isLoading = false);
+    try {
+      final authSource = AuthRemoteDataSource();
+      final fullName = _nameCtrl.text.trim();
+      final username = fullName.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
+      await authSource.register(
+        username: username,
+        email: _emailCtrl.text.trim(),
+        password: _passwordCtrl.text,
+        displayName: fullName,
+      );
+
+      if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const MainNavigationShell(initialIndex: 0)),
         (route) => false,
       );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

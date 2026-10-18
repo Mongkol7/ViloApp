@@ -7,6 +7,7 @@ import '../widgets/vilo_input_field.dart';
 import '../widgets/vilo_primary_button.dart';
 import '../widgets/vilo_social_login_section.dart';
 import '../../../bottom_nav/presentation/pages/main_navigation_shell.dart';
+import '../../data/datasources/auth_remote_data_source.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 
@@ -67,11 +68,11 @@ class _LoginScreenState extends State<LoginScreen>
     final pass = _passwordCtrl.text;
 
     if (email.isEmpty) {
-      emailErr = 'Email is required';
-    } else if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
-      emailErr = 'Enter a valid email';
+      emailErr = 'Username or email is required';
     }
-    if (pass.isEmpty) passErr = 'Password is required';
+    if (pass.isEmpty) {
+      passErr = 'Password is required';
+    }
 
     setState(() {
       _emailError = emailErr;
@@ -82,14 +83,34 @@ class _LoginScreenState extends State<LoginScreen>
 
   Future<void> _handleLogin() async {
     HapticFeedback.lightImpact();
-    
-    // Ensure the widget is still mounted before navigating
-    if (!mounted) return;
-    
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const MainNavigationShell(initialIndex: 0)),
-      (route) => false,
-    );
+    if (!_validate()) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final authSource = AuthRemoteDataSource();
+      await authSource.login(
+        usernameOrEmail: _emailCtrl.text.trim(),
+        password: _passwordCtrl.text,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainNavigationShell(initialIndex: 0)),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   void _goToRegister() => Navigator.of(context).push(_slideRoute(const RegisterScreen()));
@@ -188,7 +209,7 @@ class _LoginScreenState extends State<LoginScreen>
                     ViloPrimaryButton(
                       label: 'Login',
                       onPressed: _handleLogin,
-                      isLoading: false,
+                      isLoading: _isLoading,
                     ),
                     const SizedBox(height: 28),
 
