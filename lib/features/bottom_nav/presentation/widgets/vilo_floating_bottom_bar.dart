@@ -198,9 +198,8 @@ class _ViloFloatingBottomBarState extends State<ViloFloatingBottomBar>
                         ),
                         child: LayoutBuilder(
                           builder: (context, constraints) {
-                            final rawWidth = constraints.maxWidth;
-                            final safeTotalWidth = (rawWidth.isFinite && rawWidth > 0) ? rawWidth : 360.0;
-                            final tabWidth = safeTotalWidth / _tabs.length;
+                            final totalWidth = constraints.maxWidth;
+                            final tabWidth = totalWidth / _tabs.length;
                             final double restingPillWidth = widget.isCompact ? 44.0 : 56.0;
                             final double restingPillHeight = targetHeight - 8.0;
 
@@ -256,12 +255,12 @@ class _ViloFloatingBottomBarState extends State<ViloFloatingBottomBar>
                                 );
 
                                 // Volume conservation: vertical compression during stretch
-                                final divisor = safeTotalWidth * 0.6;
-                                final stretchAmount = divisor > 0
-                                    ? math.max(0.0, (pillWidth - restingPillWidth) / divisor)
-                                    : 0.0;
-                                final pillHeight = (restingPillHeight * (1.0 - (0.08 * stretchAmount))).clamp(1.0, targetHeight);
-                                final pillTop = ((targetHeight - pillHeight) / 2).clamp(0.0, targetHeight);
+                                final stretchAmount = math.max(
+                                  0.0,
+                                  (pillWidth - restingPillWidth) / (totalWidth * 0.6),
+                                );
+                                final pillHeight = restingPillHeight * (1.0 - (0.08 * stretchAmount));
+                                final pillTop = (targetHeight - pillHeight) / 2;
 
                                 // Velocity opacity modulation
                                 final liquidOpacity = (0.18 - (0.05 * stretchAmount)).clamp(0.10, 0.22);
@@ -379,7 +378,6 @@ class _ViloFloatingBottomBarState extends State<ViloFloatingBottomBar>
 
               // Action Plus Button (Glassy Dark in resting mode)
               GestureDetector(
-                key: const Key('vilo_floating_action_button'),
                 onTap: () {
                   HapticFeedback.mediumImpact();
                   widget.onAddPressed();
