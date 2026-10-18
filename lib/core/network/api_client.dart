@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:http/http.dart' as http;
 import '../../features/auth/data/datasources/token_storage.dart';
 
@@ -43,11 +43,23 @@ class ApiClient {
     return headers;
   }
 
+  static const Duration _timeout = Duration(seconds: 10);
+
   Future<dynamic> get(String endpoint, {bool requireAuth = true}) async {
     final url = Uri.parse('$baseUrl$endpoint');
     final headers = await _getHeaders(requireAuth: requireAuth);
-    final response = await http.get(url, headers: headers);
-    return _handleResponse(response, () => get(endpoint, requireAuth: requireAuth));
+    final response = await http
+        .get(url, headers: headers)
+        .timeout(
+          _timeout,
+          onTimeout: () => throw ApiResponseException('Connection timed out. Check your network or server.', 408),
+        );
+    return _handleResponse(
+      response,
+      () => get(endpoint, requireAuth: requireAuth),
+      requireAuth: requireAuth,
+      endpoint: endpoint,
+    );
   }
 
   Future<dynamic> post(
@@ -56,13 +68,25 @@ class ApiClient {
     bool requireAuth = true,
   }) async {
     final url = Uri.parse('$baseUrl$endpoint');
+    debugPrint('[API] POST $url');
     final headers = await _getHeaders(requireAuth: requireAuth);
-    final response = await http.post(
-      url,
-      headers: headers,
-      body: body != null ? jsonEncode(body) : null,
+    final response = await http
+        .post(
+          url,
+          headers: headers,
+          body: body != null ? jsonEncode(body) : null,
+        )
+        .timeout(
+          _timeout,
+          onTimeout: () => throw ApiResponseException('Connection timed out. Check your network or server.', 408),
+        );
+    debugPrint('[API] POST $endpoint => status=${response.statusCode}, bodyLen=${response.body.length}');
+    return _handleResponse(
+      response,
+      () => post(endpoint, body: body, requireAuth: requireAuth),
+      requireAuth: requireAuth,
+      endpoint: endpoint,
     );
-    return _handleResponse(response, () => post(endpoint, body: body, requireAuth: requireAuth));
   }
 
   Future<dynamic> put(
@@ -72,25 +96,47 @@ class ApiClient {
   }) async {
     final url = Uri.parse('$baseUrl$endpoint');
     final headers = await _getHeaders(requireAuth: requireAuth);
-    final response = await http.put(
-      url,
-      headers: headers,
-      body: body != null ? jsonEncode(body) : null,
+    final response = await http
+        .put(
+          url,
+          headers: headers,
+          body: body != null ? jsonEncode(body) : null,
+        )
+        .timeout(
+          _timeout,
+          onTimeout: () => throw ApiResponseException('Connection timed out. Check your network or server.', 408),
+        );
+    return _handleResponse(
+      response,
+      () => put(endpoint, body: body, requireAuth: requireAuth),
+      requireAuth: requireAuth,
+      endpoint: endpoint,
     );
-    return _handleResponse(response, () => put(endpoint, body: body, requireAuth: requireAuth));
   }
 
   Future<dynamic> delete(String endpoint, {bool requireAuth = true}) async {
     final url = Uri.parse('$baseUrl$endpoint');
     final headers = await _getHeaders(requireAuth: requireAuth);
-    final response = await http.delete(url, headers: headers);
-    return _handleResponse(response, () => delete(endpoint, requireAuth: requireAuth));
+    final response = await http
+        .delete(url, headers: headers)
+        .timeout(
+          _timeout,
+          onTimeout: () => throw ApiResponseException('Connection timed out. Check your network or server.', 408),
+        );
+    return _handleResponse(
+      response,
+      () => delete(endpoint, requireAuth: requireAuth),
+      requireAuth: requireAuth,
+      endpoint: endpoint,
+    );
   }
 
   Future<dynamic> _handleResponse(
     http.Response response,
-    Future<dynamic> Function() retryCall,
-  ) async {
+    Future<dynamic> Function() retryCall, {
+    bool requireAuth = true,
+    String? endpoint,
+  }) async {
     final statusCode = response.statusCode;
     final responseBody = response.body.isNotEmpty ? jsonDecode(response.body) : {};
 
@@ -101,7 +147,12 @@ class ApiClient {
       return responseBody;
     }
 
-    if (statusCode == 401) {
+    final isAuthEndpoint = endpoint != null &&
+        (endpoint.contains('/auth/login') ||
+            endpoint.contains('/auth/register') ||
+            endpoint.contains('/auth/refresh'));
+
+    if (statusCode == 401 && requireAuth && !isAuthEndpoint) {
       final refreshed = await _tryRefreshToken();
       if (refreshed) {
         return retryCall();
@@ -123,11 +174,13 @@ class ApiClient {
       if (refreshToken == null) return false;
 
       final url = Uri.parse('$baseUrl/auth/refresh');
-      final res = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'refreshToken': refreshToken}),
-      );
+      final res = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'refreshToken': refreshToken}),
+          )
+          .timeout(_timeout);
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body)['data'];
@@ -141,3 +194,4 @@ class ApiClient {
     return false;
   }
 }
+

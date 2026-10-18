@@ -158,6 +158,8 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
       if (widget.isActive && widget.isCurrentPage && !_manuallyPaused) {
         _controller.play();
       }
+    }).catchError((error) {
+      if (mounted) setState(() {});
     });
   }
 
@@ -176,10 +178,12 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final modalRoute = ModalRoute.of(context);
-    if (modalRoute != null) {
-      routeObserver.subscribe(this, modalRoute);
-    }
+    try {
+      final modalRoute = ModalRoute.of(context);
+      if (modalRoute != null) {
+        routeObserver.subscribe(this, modalRoute);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -264,7 +268,9 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
       children: [
         // Background Video/Image
         Positioned.fill(
-          child: _controller.value.isInitialized
+          child: _controller.value.isInitialized &&
+                  _controller.value.size.width > 0 &&
+                  _controller.value.size.height > 0
               ? GestureDetector(
                   onTap: _togglePlayPause,
                   child: Stack(
@@ -302,8 +308,27 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                     ],
                   ),
                 )
-              : const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
+              : Container(
+                  color: const Color(0xFF121216),
+                  child: Center(
+                    child: _controller.value.hasError
+                        ? Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.play_circle_outline_rounded, color: Colors.white24, size: 54),
+                              const SizedBox(height: 10),
+                              Text(
+                                'Video playback paused',
+                                style: TextStyle(color: Colors.white.withValues(alpha: 0.38), fontSize: 13),
+                              ),
+                            ],
+                          )
+                        : const SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
+                          ),
+                  ),
                 ),
         ),
 
