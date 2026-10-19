@@ -490,9 +490,11 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                       context,
                       MaterialPageRoute(
                         builder: (_) => ProductDetailPage(
+                          id: productMap['id']?.toString(),
                           title: productMap['title'] as String?,
                           price: productMap['price'] as String?,
                           imageUrl: productMap['imageUrl'] as String?,
+                          seller: productMap['seller'] as String?,
                         ),
                       ),
                     );

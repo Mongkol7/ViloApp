@@ -10,6 +10,7 @@ class CartItemModel {
   final int stock;
   final String? variant;
   final String? createdAt;
+  final String? sellerName;
 
   const CartItemModel({
     required this.id,
@@ -23,6 +24,7 @@ class CartItemModel {
     required this.stock,
     this.variant,
     this.createdAt,
+    this.sellerName,
   });
 
   String get formattedPrice => '\$${price.toStringAsFixed(2)}';
@@ -41,6 +43,7 @@ class CartItemModel {
       stock: (json['stock'] as num?)?.toInt() ?? 0,
       variant: json['variant'] as String?,
       createdAt: json['createdAt'] as String?,
+      sellerName: json['sellerName'] as String? ?? json['seller'] as String?,
     );
   }
 
@@ -57,6 +60,8 @@ class CartItemModel {
       'stock': stock,
       'variant': variant,
       'createdAt': createdAt,
+      'sellerName': sellerName,
     };
   }
 }
+

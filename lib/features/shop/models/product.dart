@@ -180,6 +180,26 @@ class Product {
         return 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=800';
       case 'feed-4':
         return 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800';
+      case 'prod-001':
+        return 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800';
+      case 'prod-002':
+        return 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=800';
+      case 'prod-003':
+        return 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=800';
+      case 'prod-004':
+        return 'https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?w=800';
+      case 'prod-005':
+        return 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=800';
+      case 'prod-006':
+        return 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=800';
+      case 'prod-007':
+        return 'https://images.unsplash.com/photo-1526170315870-ef68ea653258?w=800';
+      case 'prod-008':
+        return 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800';
+      case 'prod-009':
+        return 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=800';
+      case 'prod-010':
+        return 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=800';
       default:
         return 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600';
     }
@@ -313,8 +333,13 @@ class Product {
       categoryId: 'cat-studio',
       category: 'Studio Equipment',
       price: 34.99,
+      originalPrice: 49.99,
+      rating: 4.9,
+      soldCount: 2400,
+      badge: '👍 2.8K',
+      seller: 'Vilo Studio Pro',
       description: '12-inch dimmable LED ring light with tripod stand and smartphone holder for crisp streaming.',
-      imageUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800',
+      imageUrl: 'assets/images/ring_light.jpg',
     ),
     Product(
       id: 'prod-002',
@@ -322,8 +347,13 @@ class Product {
       categoryId: 'cat-audio',
       category: 'Audio & Tech',
       price: 29.99,
+      originalPrice: 45.00,
+      rating: 4.8,
+      soldCount: 3100,
+      badge: '👍 1.5K',
+      seller: 'AudioTech Lab',
       description: 'Plug-and-play wireless lapel mic with active DSP noise reduction for mobile vlogging.',
-      imageUrl: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=800',
+      imageUrl: 'assets/images/lavalier_mic.jpg',
     ),
     Product(
       id: 'prod-003',
@@ -331,8 +361,13 @@ class Product {
       categoryId: 'cat-apparel',
       category: 'Apparel',
       price: 55.00,
+      originalPrice: 85.00,
+      rating: 4.9,
+      soldCount: 5200,
+      badge: '👍 4.2K',
+      seller: 'Obsidian Apparel',
       description: '450 GSM French Terry cotton hoodie with custom drop-shoulder fit and Obsidian dark aesthetic.',
-      imageUrl: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=800',
+      imageUrl: 'assets/images/obsidian_hoodie.jpg',
     ),
     Product(
       id: 'prod-004',
@@ -340,8 +375,13 @@ class Product {
       categoryId: 'cat-acc',
       category: 'Accessories',
       price: 19.99,
+      originalPrice: 29.99,
+      rating: 4.7,
+      soldCount: 1800,
+      badge: '👍 950',
+      seller: 'AeroMount Studio',
       description: 'CNC machined aerospace aluminum magnetic stand with 360-degree rotation for hands-free live streams.',
-      imageUrl: 'https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?w=800',
+      imageUrl: 'assets/images/magsafe_mount.jpg',
     ),
     Product(
       id: 'prod-005',
@@ -349,8 +389,13 @@ class Product {
       categoryId: 'cat-studio',
       category: 'Studio Equipment',
       price: 39.99,
+      originalPrice: 59.99,
+      rating: 4.9,
+      soldCount: 4100,
+      badge: '👍 3.1K',
+      seller: 'GlowRGB Lab',
       description: 'Smart ambient light bars with real-time sound sync, app control, and 16M color dynamics.',
-      imageUrl: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=800',
+      imageUrl: 'assets/images/rgb_light_bars.jpg',
     ),
     Product(
       id: 'prod-006',
@@ -358,8 +403,13 @@ class Product {
       categoryId: 'cat-life',
       category: 'Lifestyle',
       price: 24.99,
+      originalPrice: 35.00,
+      rating: 4.8,
+      soldCount: 2200,
+      badge: '👍 1.1K',
+      seller: 'Vilo Lifestyle',
       description: 'Heavyweight organic canvas bag with internal laptop sleeve and reinforced stitching.',
-      imageUrl: 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=800',
+      imageUrl: 'assets/images/canvas_tote.jpg',
     ),
     Product(
       id: 'prod-007',
@@ -367,8 +417,13 @@ class Product {
       categoryId: 'cat-acc',
       category: 'Accessories',
       price: 15.99,
+      originalPrice: 24.99,
+      rating: 4.6,
+      soldCount: 1600,
+      badge: '👍 820',
+      seller: 'FlexiShoot',
       description: 'Rubber-coated bendable legs that wrap around poles and uneven surfaces for outdoor shooting.',
-      imageUrl: 'https://images.unsplash.com/photo-1526170315870-ef68ea653258?w=800',
+      imageUrl: 'assets/images/octopus_tripod.jpg',
     ),
     Product(
       id: 'prod-008',
@@ -376,8 +431,13 @@ class Product {
       categoryId: 'cat-acc',
       category: 'Accessories',
       price: 12.99,
+      originalPrice: 19.99,
+      rating: 4.7,
+      soldCount: 2900,
+      badge: '👍 1.4K',
+      seller: 'UltraGrip Official',
       description: 'Ultra-thin foldable zinc-alloy kickstand and finger grip with strong adhesive.',
-      imageUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800',
+      imageUrl: 'assets/images/phone_grip.jpg',
     ),
     Product(
       id: 'prod-009',
@@ -385,8 +445,13 @@ class Product {
       categoryId: 'cat-studio',
       category: 'Studio Equipment',
       price: 22.99,
+      originalPrice: 34.99,
+      rating: 4.8,
+      soldCount: 1750,
+      badge: '👍 980',
+      seller: 'LumiPocket Lab',
       description: 'Pocket-sized biometric LED panel with adjustable color temperature (2500K-9000K) and built-in battery.',
-      imageUrl: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=800',
+      imageUrl: 'assets/images/pocket_fill_light.jpg',
     ),
     Product(
       id: 'prod-010',
@@ -394,8 +459,13 @@ class Product {
       categoryId: 'cat-merch',
       category: 'Merchandise',
       price: 8.99,
+      originalPrice: 14.99,
+      rating: 5.0,
+      soldCount: 6400,
+      badge: '👍 5.5K',
+      seller: 'Vilo Merch',
       description: 'Pack of 12 weatherproof, scratch-resistant vinyl stickers designed for creator setups and laptops.',
-      imageUrl: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=800',
+      imageUrl: 'assets/images/sticker_pack.jpg',
     ),
   ];
 }

@@ -161,18 +161,7 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
-                                child: Image.network(
-                                  item.productImageUrl,
-                                  width: 48,
-                                  height: 48,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => Container(
-                                    width: 48,
-                                    height: 48,
-                                    color: Colors.white12,
-                                    child: const Icon(Icons.image, color: Colors.white24, size: 20),
-                                  ),
-                                ),
+                                child: _buildProductThumbnail(item.productImageUrl),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -235,6 +224,37 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildProductThumbnail(String imageUrl) {
+    if (imageUrl.startsWith('assets/')) {
+      return Image.asset(
+        imageUrl,
+        width: 48,
+        height: 48,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _thumbnailPlaceholder(),
+      );
+    }
+    if (imageUrl.startsWith('http')) {
+      return Image.network(
+        imageUrl,
+        width: 48,
+        height: 48,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _thumbnailPlaceholder(),
+      );
+    }
+    return _thumbnailPlaceholder();
+  }
+
+  Widget _thumbnailPlaceholder() {
+    return Container(
+      width: 48,
+      height: 48,
+      color: Colors.white12,
+      child: const Icon(Icons.image, color: Colors.white24, size: 20),
     );
   }
 }

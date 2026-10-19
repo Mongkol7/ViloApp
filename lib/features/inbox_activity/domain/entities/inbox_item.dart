@@ -50,6 +50,28 @@ class DirectMessageThread {
     this.followersCount = '',
     this.messages = const [],
   });
+
+  DirectMessageThread copyWith({
+    String? id,
+    String? username,
+    String? avatarUrl,
+    String? lastMessage,
+    String? timeAgo,
+    bool? isVerified,
+    String? followersCount,
+    List<ChatMessage>? messages,
+  }) {
+    return DirectMessageThread(
+      id: id ?? this.id,
+      username: username ?? this.username,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      lastMessage: lastMessage ?? this.lastMessage,
+      timeAgo: timeAgo ?? this.timeAgo,
+      isVerified: isVerified ?? this.isVerified,
+      followersCount: followersCount ?? this.followersCount,
+      messages: messages ?? this.messages,
+    );
+  }
 }
 
 class ChatMessage {

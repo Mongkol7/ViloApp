@@ -4,6 +4,7 @@ import '../models/product.dart';
 import '../presentation/pages/cart_page.dart';
 import '../presentation/pages/product_detail_page.dart';
 import '../services/shop_service.dart';
+import 'shop_search_results_screen.dart';
 
 class ShopFeedScreen extends StatefulWidget {
   const ShopFeedScreen({super.key});
@@ -62,10 +63,20 @@ class _ShopFeedScreenState extends State<ShopFeedScreen> {
   }
 
   void _onSearchSubmitted(String query) {
-    setState(() {
-      _currentQuery = query.trim();
-    });
-    _loadData();
+    final trimmed = query.trim();
+    if (trimmed.isNotEmpty) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ShopSearchResultsScreen(initialQuery: trimmed),
+        ),
+      );
+    } else {
+      setState(() {
+        _currentQuery = '';
+      });
+      _loadData();
+    }
   }
 
   @override
@@ -186,7 +197,7 @@ class _ShopFeedScreenState extends State<ShopFeedScreen> {
                             animation: CartController.instance,
                             builder: (context, _) {
                               final count = CartController.instance.itemCount;
-                              final badgeDisplay = count > 0 ? count.toString() : '4';
+                              if (count <= 0) return const SizedBox.shrink();
                               return Positioned(
                                 top: -2,
                                 right: -2,
@@ -199,7 +210,7 @@ class _ShopFeedScreenState extends State<ShopFeedScreen> {
                                   constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
                                   child: Center(
                                     child: Text(
-                                      badgeDisplay,
+                                      count > 99 ? '99+' : count.toString(),
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 10,
@@ -709,9 +720,14 @@ class _ShopFeedScreenState extends State<ShopFeedScreen> {
           context,
           MaterialPageRoute(
             builder: (_) => ProductDetailPage(
+              product: product,
+              id: product.id,
               title: product.name,
               price: product.formattedPrice,
               imageUrl: product.imageUrl,
+              seller: product.seller,
+              rating: product.rating,
+              soldCount: product.soldCount,
             ),
           ),
         );
@@ -805,9 +821,14 @@ class _ShopFeedScreenState extends State<ShopFeedScreen> {
           context,
           MaterialPageRoute(
             builder: (_) => ProductDetailPage(
+              product: product,
+              id: product.id,
               title: product.name,
               price: product.formattedPrice,
               imageUrl: product.imageUrl,
+              seller: product.seller,
+              rating: product.rating,
+              soldCount: product.soldCount,
             ),
           ),
         );

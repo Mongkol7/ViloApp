@@ -139,6 +139,59 @@ class ShopRemoteDataSource {
     await _client.delete('/cart', requireAuth: true);
   }
 
+  final List<OrderModel> _localOrderHistory = [];
+
+  List<OrderModel> get localOrders => List.unmodifiable(_localOrderHistory);
+
+  void addOrder(OrderModel order) {
+    _localOrderHistory.removeWhere((o) => o.id == order.id);
+    _localOrderHistory.insert(0, order);
+  }
+
+  void clearLocalOrders() {
+    _localOrderHistory.clear();
+  }
+
+  OrderModel createOrderFromCartItems({
+    required String sellerName,
+    required List<CartItemModel> items,
+    String? customNote,
+  }) {
+    final now = DateTime.now();
+    final orderId = now.millisecondsSinceEpoch;
+    final totalAmount = items.fold<double>(0.0, (sum, i) => sum + i.subtotal);
+    final orderItems = items.map((item) {
+      return OrderItemModel(
+        id: item.id,
+        productId: item.productId,
+        productTitle: item.productTitle,
+        productImageUrl: item.productImage,
+        price: item.price,
+        quantity: item.quantity,
+        subtotal: item.subtotal,
+        variant: item.variant,
+      );
+    }).toList();
+
+    final cleanSeller = sellerName.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+    final suffix = orderId.toString().length >= 4
+        ? orderId.toString().substring(orderId.toString().length - 4)
+        : orderId.toString();
+
+    return OrderModel(
+      id: orderId,
+      orderNumber: 'ORD-${cleanSeller.isNotEmpty ? cleanSeller : "VILO"}-$suffix',
+      totalAmount: totalAmount,
+      status: 'PENDING',
+      shippingAddress: 'Direct In-App Merchant Inquiry',
+      paymentMethod: 'Merchant Inquiry / Cash on Delivery',
+      notes: customNote ?? 'Inquired via direct message with merchant',
+      items: orderItems,
+      itemCount: items.fold<int>(0, (sum, i) => sum + i.quantity),
+      createdAt: now.toIso8601String(),
+    );
+  }
+
   Future<OrderModel> checkout({
     required String shippingAddress,
     required String paymentMethod,
@@ -156,16 +209,26 @@ class ShopRemoteDataSource {
   Future<List<OrderModel>> getOrderHistory() async {
     try {
       final data = await _client.get('/orders/history', requireAuth: true);
+      List<OrderModel> remoteOrders = [];
       if (data is List) {
-        return data.map((json) => OrderModel.fromJson(json as Map<String, dynamic>)).toList();
+        remoteOrders = data.map((json) => OrderModel.fromJson(json as Map<String, dynamic>)).toList();
       }
-      return [];
+      final Set<int> existingIds = remoteOrders.map((o) => o.id).toSet();
+      final combined = [
+        ..._localOrderHistory.where((o) => !existingIds.contains(o.id)),
+        ...remoteOrders,
+      ];
+      return combined;
     } catch (_) {
-      return [];
+      return List<OrderModel>.from(_localOrderHistory);
     }
   }
 
   Future<OrderModel> getOrderById(int orderId) async {
+    final localMatch = _localOrderHistory.where((o) => o.id == orderId);
+    if (localMatch.isNotEmpty) {
+      return localMatch.first;
+    }
     final data = await _client.get('/orders/$orderId', requireAuth: true);
     return OrderModel.fromJson(data as Map<String, dynamic>);
   }

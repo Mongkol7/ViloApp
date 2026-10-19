@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../data/datasources/inbox_message_manager.dart';
 import '../../domain/entities/inbox_item.dart';
 
 class ChatDetailScreen extends StatefulWidget {
@@ -34,18 +35,20 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
+    final newMsg = ChatMessage(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      text: text,
+      isMe: true,
+      timestamp: 'Just now',
+      status: 'Sent',
+    );
+
     setState(() {
-      _messages.add(
-        ChatMessage(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          text: text,
-          isMe: true,
-          timestamp: 'Just now',
-          status: 'Sent',
-        ),
-      );
+      _messages.add(newMsg);
       _messageController.clear();
     });
+
+    InboxMessageManager.instance.addMessageToThread(widget.thread.id, newMsg);
   }
 
   @override
@@ -78,15 +81,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                 ),
               ),
               child: ClipOval(
-                child: Image.network(
-                  widget.thread.avatarUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => const Icon(
-                    Icons.storefront_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
+                child: _buildChatAvatar(widget.thread.avatarUrl),
               ),
             ),
             const SizedBox(width: 10),
@@ -413,5 +408,35 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         ),
       );
     }
+  }
+
+  Widget _buildChatAvatar(String url) {
+    if (url.startsWith('assets/')) {
+      return Image.asset(
+        url,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => const Icon(
+          Icons.storefront_rounded,
+          color: Colors.white,
+          size: 20,
+        ),
+      );
+    }
+    if (url.startsWith('http')) {
+      return Image.network(
+        url,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => const Icon(
+          Icons.storefront_rounded,
+          color: Colors.white,
+          size: 20,
+        ),
+      );
+    }
+    return const Icon(
+      Icons.storefront_rounded,
+      color: Colors.white,
+      size: 20,
+    );
   }
 }

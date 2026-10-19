@@ -19,6 +19,7 @@ class ShopProductCard extends StatelessWidget {
           context,
           MaterialPageRoute(
             builder: (_) => ProductDetailPage(
+              id: product.name.hashCode.toString(),
               title: product.name,
               price: product.price,
               imageUrl: product.imageUrl,
