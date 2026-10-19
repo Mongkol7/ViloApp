@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:viloapp/core/theme/app_theme.dart';
 import 'package:viloapp/features/bottom_nav/presentation/pages/main_navigation_shell.dart';
 import 'package:viloapp/features/feed/presentation/widgets/upload_video_sheet.dart';
@@ -122,7 +122,7 @@ void main() {
     final pickButtonRenderBox = tester.renderObject<RenderBox>(pickButtonFinder);
     expect(pickButtonRenderBox.size.width, greaterThan(0));
     expect(pickButtonRenderBox.size.height, greaterThan(0));
-    expect(find.text('Choose Video from Gallery'), findsOneWidget);
+    expect(find.text('Choose Video from Files / Downloads'), findsOneWidget);
 
     // 4. Verify Caption TextField renders visibly with non-zero size
     final captionFieldFinder = find.byKey(const Key('upload_caption_field'));
@@ -177,17 +177,21 @@ void main() {
     // Tap "Post Video" without video -> verify video selection validation error
     await tester.tap(postBtn);
     await tester.pump();
-    expect(find.text('Please select a video file from your gallery.'), findsOneWidget);
+    expect(find.text('Please select a video file.'), findsOneWidget);
 
     // Case B: Selected video state with preview tile
-    final fakeVideo = XFile('test_clip.mp4');
+    final fakeVideo = PlatformFile(
+      name: 'test_clip.mp4',
+      size: 1024 * 1024 * 2,
+      path: 'test_clip.mp4',
+    );
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.darkTheme,
         home: Scaffold(
           body: UploadVideoSheet(
             key: const ValueKey('sheet_with_video'),
-            initialVideo: fakeVideo,
+            initialFile: fakeVideo,
           ),
         ),
       ),

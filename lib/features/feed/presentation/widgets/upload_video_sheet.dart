@@ -1,5 +1,6 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../../auth/data/datasources/auth_remote_data_source.dart';
 import '../../../auth/data/datasources/token_storage.dart';
 import '../../data/datasources/feed_remote_data_source.dart';
@@ -7,23 +8,21 @@ import '../../data/models/video_model.dart';
 import '../controllers/video_feed_manager.dart';
 
 class UploadVideoSheet extends StatefulWidget {
-  final XFile? initialVideo;
-  final ImagePicker? imagePicker;
+  final PlatformFile? initialFile;
 
   const UploadVideoSheet({
     super.key,
-    this.initialVideo,
-    this.imagePicker,
+    this.initialFile,
   });
 
-  static Future<VideoModel?> show(BuildContext context, {XFile? initialVideo}) {
+  static Future<VideoModel?> show(BuildContext context, {PlatformFile? initialFile}) {
     return showModalBottomSheet<VideoModel>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black87,
-      builder: (ctx) => UploadVideoSheet(initialVideo: initialVideo),
+      builder: (ctx) => UploadVideoSheet(initialFile: initialFile),
     );
   }
 
@@ -36,9 +35,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   final AuthRemoteDataSource _authDataSource = AuthRemoteDataSource();
   final TokenStorage _tokenStorage = TokenStorage.instance;
 
-  late final ImagePicker _picker;
-  XFile? _selectedVideo;
-  int? _selectedVideoSize;
+  PlatformFile? _selectedFile;
 
   final TextEditingController _captionController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
@@ -54,14 +51,8 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   @override
   void initState() {
     super.initState();
-    _picker = widget.imagePicker ?? ImagePicker();
-    if (widget.initialVideo != null) {
-      _selectedVideo = widget.initialVideo;
-      widget.initialVideo!.length().then((size) {
-        if (mounted) {
-          setState(() => _selectedVideoSize = size);
-        }
-      }).catchError((_) {});
+    if (widget.initialFile != null) {
+      _selectedFile = widget.initialFile;
     }
     _checkAuthStatus();
   }
@@ -69,15 +60,10 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   @override
   void didUpdateWidget(UploadVideoSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialVideo != oldWidget.initialVideo && widget.initialVideo != null) {
+    if (widget.initialFile != oldWidget.initialFile && widget.initialFile != null) {
       setState(() {
-        _selectedVideo = widget.initialVideo;
+        _selectedFile = widget.initialFile;
       });
-      widget.initialVideo!.length().then((size) {
-        if (mounted) {
-          setState(() => _selectedVideoSize = size);
-        }
-      }).catchError((_) {});
     }
   }
 
@@ -133,14 +119,15 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
   Future<void> _pickVideo() async {
     try {
-      final XFile? video = await _picker.pickVideo(
-        source: ImageSource.gallery,
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.video,
+        allowMultiple: false,
+        withData: true,
       );
-      if (video != null) {
-        final size = await video.length().catchError((_) => 0);
+
+      if (result != null && result.files.isNotEmpty) {
         setState(() {
-          _selectedVideo = video;
-          _selectedVideoSize = size > 0 ? size : null;
+          _selectedFile = result.files.first;
           _errorMessage = null;
         });
       }
@@ -160,9 +147,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   }
 
   Future<void> _handleUpload() async {
-    if (_selectedVideo == null) {
+    if (_selectedFile == null) {
       setState(() {
-        _errorMessage = 'Please select a video file from your gallery.';
+        _errorMessage = 'Please select a video file.';
       });
       return;
     }
@@ -196,13 +183,19 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
         await _quickLogin();
       }
 
-      final videoBytes = await _selectedVideo!.readAsBytes();
+      List<int>? videoBytes = _selectedFile!.bytes;
+      if ((videoBytes == null || videoBytes.isEmpty) && _selectedFile!.path != null) {
+        final localFile = File(_selectedFile!.path!);
+        if (localFile.existsSync()) {
+          videoBytes = await localFile.readAsBytes();
+        }
+      }
 
       final newVideo = await _feedDataSource.uploadVideo(
         caption: caption,
-        videoPath: _selectedVideo!.path,
+        videoPath: _selectedFile!.path,
         videoBytes: videoBytes,
-        videoFilename: _selectedVideo!.name,
+        videoFilename: _selectedFile!.name,
         tags: tags,
       );
 
@@ -389,7 +382,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
                 const SizedBox(height: 18),
 
-                // Native Video Picker Section
+                // System File Picker Section
                 const Text(
                   'VIDEO FILE',
                   style: TextStyle(
@@ -401,8 +394,8 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                 ),
                 const SizedBox(height: 8),
 
-                if (_selectedVideo == null) ...[
-                  // Unselected State: Native Picker Card
+                if (_selectedFile == null) ...[
+                  // Unselected State: Files / Downloads Picker Card
                   InkWell(
                     key: const Key('upload_pick_video_button'),
                     onTap: _isUploading ? null : _pickVideo,
@@ -427,14 +420,14 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
-                              Icons.video_library_rounded,
+                              Icons.folder_open_rounded,
                               color: Colors.white,
                               size: 30,
                             ),
                           ),
                           const SizedBox(height: 12),
                           const Text(
-                            'Choose Video from Gallery',
+                            'Choose Video from Files / Downloads',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 15,
@@ -443,7 +436,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                           ),
                           const SizedBox(height: 4),
                           const Text(
-                            'Tap to pick an .mp4 or .mov from your device',
+                            'Tap to pick directly from Downloads (.mp4, .mov)',
                             style: TextStyle(
                               color: Color(0xFF8E8E93),
                               fontSize: 12,
@@ -487,7 +480,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                _selectedVideo!.name,
+                                _selectedFile!.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -498,9 +491,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                _selectedVideoSize != null
-                                    ? _formatFileSize(_selectedVideoSize!)
-                                    : 'Video ready to upload',
+                                _formatFileSize(_selectedFile!.size),
                                 style: const TextStyle(
                                   color: Color(0xFF8E8E93),
                                   fontSize: 12,
@@ -524,8 +515,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                               ? null
                               : () {
                                   setState(() {
-                                    _selectedVideo = null;
-                                    _selectedVideoSize = null;
+                                    _selectedFile = null;
                                   });
                                 },
                         ),
