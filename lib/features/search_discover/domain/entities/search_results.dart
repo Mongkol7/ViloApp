@@ -48,6 +48,9 @@ class SearchSound {
   final String videosCount;
   final String iconType; // 'music', 'equalizer', 'ambience'
   final bool isSaved;
+  final String artist;
+  final String audioUrl;
+  final String albumArtUrl;
 
   const SearchSound({
     required this.id,
@@ -55,6 +58,9 @@ class SearchSound {
     required this.videosCount,
     required this.iconType,
     this.isSaved = false,
+    this.artist = 'Original Artist',
+    this.audioUrl = '',
+    this.albumArtUrl = '',
   });
 
   SearchSound copyWith({
@@ -63,6 +69,9 @@ class SearchSound {
     String? videosCount,
     String? iconType,
     bool? isSaved,
+    String? artist,
+    String? audioUrl,
+    String? albumArtUrl,
   }) {
     return SearchSound(
       id: id ?? this.id,
@@ -70,6 +79,9 @@ class SearchSound {
       videosCount: videosCount ?? this.videosCount,
       iconType: iconType ?? this.iconType,
       isSaved: isSaved ?? this.isSaved,
+      artist: artist ?? this.artist,
+      audioUrl: audioUrl ?? this.audioUrl,
+      albumArtUrl: albumArtUrl ?? this.albumArtUrl,
     );
   }
 }

@@ -19,15 +19,6 @@ class VideoFeedPage extends StatefulWidget {
 class _VideoFeedPageState extends State<VideoFeedPage> {
   int _currentPage = 0;
 
-  void _goToProfile() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const PublicProfileScreen(),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     // Mock data for the video feed
@@ -543,15 +534,6 @@ class _InteractionButtonState extends State<_InteractionButton> {
     if (widget.onTap != null) {
       widget.onTap!();
     }
-  }
-
-  void _goToProfile() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const PublicProfileScreen(),
-      ),
-    );
   }
 
   @override

@@ -18,10 +18,17 @@ public class DataInitializer implements CommandLineRunner {
     private static final Logger log = LoggerFactory.getLogger(DataInitializer.class);
 
     private final UserRepository userRepository;
+    private final com.vilo.backend.repository.SoundRepository soundRepository;
+    private final com.vilo.backend.repository.HashtagRepository hashtagRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public DataInitializer(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public DataInitializer(UserRepository userRepository,
+                           com.vilo.backend.repository.SoundRepository soundRepository,
+                           com.vilo.backend.repository.HashtagRepository hashtagRepository,
+                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.soundRepository = soundRepository;
+        this.hashtagRepository = hashtagRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -144,6 +151,63 @@ public class DataInitializer implements CommandLineRunner {
             ensureFollow(mongkol, davi);
 
             log.info("20 Platform users seeded successfully with verified initial follow graphs!");
+        }
+
+        if (soundRepository.count() == 0) {
+            log.info("Seeding popular audio tracks & sounds...");
+            soundRepository.save(new com.vilo.backend.entity.Sound(
+                    "Midnight City Pulse", "Neon Dreams",
+                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+                    "https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=80",
+                    45, 1840000L, true));
+            soundRepository.save(new com.vilo.backend.entity.Sound(
+                    "Cyber Tokyo Bass Drop", "Akira Sound Lab",
+                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+                    "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=500&auto=format&fit=crop&q=80",
+                    30, 952000L, true));
+            soundRepository.save(new com.vilo.backend.entity.Sound(
+                    "Seven7 Team Anthem", "Seven7 Beats",
+                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+                    "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80",
+                    60, 820000L, true));
+            soundRepository.save(new com.vilo.backend.entity.Sound(
+                    "Phnom Penh Sunset Lo-Fi", "Khmer Lo-Fi Crew",
+                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+                    "https://images.unsplash.com/photo-1514565131-fce0801e5785?w=500&auto=format&fit=crop&q=80",
+                    35, 542000L, true));
+            soundRepository.save(new com.vilo.backend.entity.Sound(
+                    "Liquid Glass Motion", "Design Beats",
+                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
+                    "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=80",
+                    25, 310000L, true));
+            soundRepository.save(new com.vilo.backend.entity.Sound(
+                    "Deep Focus Coding", "DevPulse",
+                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3",
+                    "https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=500&auto=format&fit=crop&q=80",
+                    50, 295000L, false));
+            soundRepository.save(new com.vilo.backend.entity.Sound(
+                    "Retro 80s Synth Groove", "Vaporwave Boy",
+                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3",
+                    "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&auto=format&fit=crop&q=80",
+                    40, 180000L, false));
+            soundRepository.save(new com.vilo.backend.entity.Sound(
+                    "Angkor Sunrise Ambient", "Heritage Audio",
+                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
+                    "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=500&auto=format&fit=crop&q=80",
+                    55, 125000L, false));
+            log.info("Sounds seeded successfully!");
+        }
+
+        if (hashtagRepository.count() == 0) {
+            log.info("Seeding trending hashtags...");
+            hashtagRepository.save(new com.vilo.backend.entity.Hashtag("viloapp", 3200000L, true));
+            hashtagRepository.save(new com.vilo.backend.entity.Hashtag("flutterdev", 2100000L, true));
+            hashtagRepository.save(new com.vilo.backend.entity.Hashtag("tokyocoding", 1500000L, true));
+            hashtagRepository.save(new com.vilo.backend.entity.Hashtag("springsecurity", 980000L, true));
+            hashtagRepository.save(new com.vilo.backend.entity.Hashtag("cambodiavibes", 850000L, true));
+            hashtagRepository.save(new com.vilo.backend.entity.Hashtag("uiuxdesign", 620000L, false));
+            hashtagRepository.save(new com.vilo.backend.entity.Hashtag("shortvideo", 450000L, false));
+            log.info("Hashtags seeded successfully!");
         }
     }
 

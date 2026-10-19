@@ -11,6 +11,8 @@ import 'package:viloapp/features/profile/presentation/pages/people_screen.dart';
 import 'package:viloapp/features/profile/presentation/pages/settings_and_privacy_screen.dart';
 import 'package:viloapp/features/profile/presentation/screens/profile_screen.dart';
 import 'package:viloapp/features/profile/presentation/screens/public_profile_screen.dart';
+import 'package:viloapp/features/search_discover/presentation/pages/search_screen.dart';
+import 'package:viloapp/features/feed/presentation/pages/sound_detail_page.dart';
 
 Widget _buildTestApp({required Widget child}) {
   return MaterialApp(
@@ -323,6 +325,63 @@ void main() {
 
     // Verify Following tab content
     expect(find.text('Sophia Vance'), findsOneWidget);
+  });
+
+  testWidgets('SearchScreen renders search input, category chips, and handles category switching', (WidgetTester tester) async {
+    await tester.pumpWidget(_buildTestApp(child: const SearchScreen()));
+    await tester.pumpAndSettle();
+
+    // Verify search input field
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('Search videos, creators, sounds...'), findsOneWidget);
+
+    // Verify category chips
+    expect(find.text('Top'), findsOneWidget);
+    expect(find.text('Users'), findsOneWidget);
+    expect(find.text('Videos'), findsOneWidget);
+    expect(find.text('Sounds'), findsOneWidget);
+
+    // Switch to Sounds tab
+    await tester.tap(find.text('Sounds'));
+    await tester.pumpAndSettle();
+
+    // Search query
+    await tester.enterText(find.byType(TextField), 'neon');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('SoundDetailPage renders sound details, toggles favorite state, and shows Use this sound button', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      _buildTestApp(
+        child: const SoundDetailPage(
+          soundId: '101',
+          title: 'Cyberpunk Odyssey',
+          artist: 'Neon Wave Lab',
+          videosCount: '340K videos',
+          durationSeconds: 30,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Verify title and artist
+    expect(find.text('Cyberpunk Odyssey'), findsWidgets);
+    expect(find.text('Neon Wave Lab'), findsOneWidget);
+    expect(find.text('30s'), findsOneWidget);
+    expect(find.text('Use this sound'), findsOneWidget);
+
+    // Tap favorite button
+    expect(find.text('Add to Favorites'), findsOneWidget);
+    await tester.tap(find.text('Add to Favorites'));
+    await tester.pumpAndSettle();
+    expect(find.text('Favorited'), findsOneWidget);
+
+    // Tap Play Sample
+    expect(find.text('Play Sample'), findsOneWidget);
+    await tester.tap(find.text('Play Sample'));
+    await tester.pump();
+    expect(find.text('Pause Sample'), findsOneWidget);
   });
 }
 
