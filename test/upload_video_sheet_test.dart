@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:viloapp/core/theme/app_theme.dart';
 import 'package:viloapp/features/bottom_nav/presentation/pages/main_navigation_shell.dart';
 import 'package:viloapp/features/feed/presentation/widgets/upload_video_sheet.dart';
@@ -79,7 +80,7 @@ void main() {
     HttpOverrides.global = _MockHttpOverrides();
   });
 
-  testWidgets('Tapping + button in MainNavigationShell opens simplified UploadVideoSheet with video path field', (WidgetTester tester) async {
+  testWidgets('Tapping + button in MainNavigationShell opens UploadVideoSheet with native video picker button', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.0;
     addTearDown(() {
@@ -115,12 +116,13 @@ void main() {
     expect(titleRenderBox.size.width, greaterThan(0));
     expect(titleRenderBox.size.height, greaterThan(0));
 
-    // 3. Verify Video Path / Filename TextField renders visibly with non-zero size
-    final pathFieldFinder = find.byKey(const Key('upload_video_path_field'));
-    expect(pathFieldFinder, findsOneWidget);
-    final pathRenderBox = tester.renderObject<RenderBox>(pathFieldFinder);
-    expect(pathRenderBox.size.width, greaterThan(0));
-    expect(pathRenderBox.size.height, greaterThan(0));
+    // 3. Verify Native Video Picker Button renders visibly with non-zero size
+    final pickButtonFinder = find.byKey(const Key('upload_pick_video_button'));
+    expect(pickButtonFinder, findsOneWidget);
+    final pickButtonRenderBox = tester.renderObject<RenderBox>(pickButtonFinder);
+    expect(pickButtonRenderBox.size.width, greaterThan(0));
+    expect(pickButtonRenderBox.size.height, greaterThan(0));
+    expect(find.text('Choose Video from Gallery'), findsOneWidget);
 
     // 4. Verify Caption TextField renders visibly with non-zero size
     final captionFieldFinder = find.byKey(const Key('upload_caption_field'));
@@ -148,7 +150,7 @@ void main() {
     expect(postButtonRenderBox.size.height, greaterThan(0));
   });
 
-  testWidgets('Direct UploadVideoSheet allows typing video path, caption, tags and validates inputs', (WidgetTester tester) async {
+  testWidgets('UploadVideoSheet displays selected video preview tile and validates required inputs', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.0;
     addTearDown(() {
@@ -156,6 +158,7 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
+    // Case A: Unselected state validation
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.darkTheme,
@@ -168,43 +171,58 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    // 1. Verify "Upload Video" title
-    final titleFinder = find.text('Upload Video');
-    expect(titleFinder, findsOneWidget);
-
-    // 2. Locate form fields
-    final pathField = find.byKey(const Key('upload_video_path_field'));
-    final captionField = find.byKey(const Key('upload_caption_field'));
-    final tagsField = find.byKey(const Key('upload_tags_field'));
     final postBtn = find.byKey(const Key('upload_post_video_button'));
-
-    expect(pathField, findsOneWidget);
-    expect(captionField, findsOneWidget);
-    expect(tagsField, findsOneWidget);
     expect(postBtn, findsOneWidget);
 
-    // 3. Tap "Post Video" without path -> verify path validation error
+    // Tap "Post Video" without video -> verify video selection validation error
     await tester.tap(postBtn);
     await tester.pump();
-    expect(find.text('Please enter a video filename or path.'), findsOneWidget);
+    expect(find.text('Please select a video file from your gallery.'), findsOneWidget);
 
-    // 4. Enter video path
-    await tester.enterText(pathField, 'custom_spider_glass.mp4');
+    // Case B: Selected video state with preview tile
+    final fakeVideo = XFile('test_clip.mp4');
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: Scaffold(
+          body: UploadVideoSheet(
+            key: const ValueKey('sheet_with_video'),
+            initialVideo: fakeVideo,
+          ),
+        ),
+      ),
+    );
+
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
-    // 5. Tap "Post Video" without caption -> verify caption validation error
-    await tester.tap(postBtn);
+    // Verify preview tile renders with video name and action buttons
+    expect(find.byKey(const Key('upload_selected_video_tile')), findsOneWidget);
+    expect(find.text('test_clip.mp4'), findsOneWidget);
+    expect(find.byKey(const Key('upload_change_video_button')), findsOneWidget);
+    expect(find.byKey(const Key('upload_remove_video_button')), findsOneWidget);
+
+    final captionField = find.byKey(const Key('upload_caption_field'));
+    final tagsField = find.byKey(const Key('upload_tags_field'));
+
+    // Tap "Post Video" with empty caption -> verify caption error
+    await tester.tap(find.byKey(const Key('upload_post_video_button')));
     await tester.pump();
     expect(find.text('Please enter a caption for your video.'), findsOneWidget);
 
-    // 6. Enter caption & tags
-    await tester.enterText(captionField, 'Spider glass showcase #spiderglass');
-    await tester.enterText(tagsField, '#customtag, #nature');
+    // Enter caption & tags
+    await tester.enterText(captionField, 'My amazing travel clip #cambodia');
+    await tester.enterText(tagsField, '#travel, #vilo');
     await tester.pump();
 
-    // Verify all entered values in UI
-    expect(find.text('custom_spider_glass.mp4'), findsOneWidget);
-    expect(find.text('Spider glass showcase #spiderglass'), findsOneWidget);
-    expect(find.text('#customtag, #nature'), findsOneWidget);
+    expect(find.text('My amazing travel clip #cambodia'), findsOneWidget);
+    expect(find.text('#travel, #vilo'), findsOneWidget);
+
+    // Test remove video button clears preview tile and restores picker button
+    await tester.tap(find.byKey(const Key('upload_remove_video_button')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('upload_selected_video_tile')), findsNothing);
+    expect(find.byKey(const Key('upload_pick_video_button')), findsOneWidget);
   });
 }

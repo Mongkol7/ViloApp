@@ -180,7 +180,18 @@ class FeedRemoteDataSource {
     }
 
     // Video payload (either multipart file or direct videoPath reference)
-    if (videoPath != null && videoPath.trim().isNotEmpty) {
+    if (videoBytes != null && videoBytes.isNotEmpty) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'videoFile',
+          videoBytes,
+          filename: videoFilename,
+        ),
+      );
+      if (videoPath != null && videoPath.trim().isNotEmpty) {
+        request.fields['videoPath'] = videoPath.trim();
+      }
+    } else if (videoPath != null && videoPath.trim().isNotEmpty) {
       final trimmedPath = videoPath.trim();
       request.fields['videoPath'] = trimmedPath;
 
@@ -204,14 +215,6 @@ class FeedRemoteDataSource {
           );
         } catch (_) {}
       }
-    } else if (videoBytes != null && videoBytes.isNotEmpty) {
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'videoFile',
-          videoBytes,
-          filename: videoFilename,
-        ),
-      );
     } else {
       throw ApiResponseException('A video path or video file must be provided', 400);
     }
