@@ -4,6 +4,8 @@ import '../../../../core/theme/app_typography.dart';
 import '../../data/datasources/auth_remote_data_source.dart';
 import '../pages/login_screen.dart';
 import '../../../inbox_activity/data/datasources/thought_story_manager.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
+import '../../../inbox_activity/data/datasources/chat_manager.dart';
 
 Future<void> showViloLogoutDialog(BuildContext context) async {
   final shouldLogout = await showDialog<bool>(
@@ -43,6 +45,8 @@ Future<void> showViloLogoutDialog(BuildContext context) async {
       final authSource = AuthRemoteDataSource();
       await authSource.logout();
       ThoughtStoryManager.instance.deleteStory();
+      ProfileSyncService.instance.clearSession();
+      ChatManager.instance.clear();
     } catch (_) {}
 
     if (context.mounted) {

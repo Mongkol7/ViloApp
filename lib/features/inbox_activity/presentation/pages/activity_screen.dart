@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../auth/data/datasources/token_storage.dart';
+import '../../data/datasources/notification_remote_data_source.dart';
+import '../../../feed/presentation/pages/video_feed_page.dart';
 
 enum ActivityFilter { all, likes, comments, mentions }
 
@@ -12,6 +15,8 @@ class ActivityModel {
   final String text;
   final String timeAgo;
   final String mediaThumbnailUrl;
+  final int videoIndex;
+  final String? commentContent;
   bool isRead;
 
   ActivityModel({
@@ -23,6 +28,8 @@ class ActivityModel {
     required this.text,
     required this.timeAgo,
     required this.mediaThumbnailUrl,
+    this.videoIndex = 0,
+    this.commentContent,
     this.isRead = false,
   });
 }
@@ -36,8 +43,9 @@ class ActivityScreen extends StatefulWidget {
 
 class _ActivityScreenState extends State<ActivityScreen> {
   ActivityFilter _currentFilter = ActivityFilter.all;
+  late List<ActivityModel> _activities;
 
-  final List<ActivityModel> _activities = [
+  static final List<ActivityModel> _demoActivities = [
     ActivityModel(
       id: 'a1',
       userName: 'Junta',
@@ -47,6 +55,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
       text: 'liked your photos.',
       timeAgo: '5m ago',
       mediaThumbnailUrl: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=150&auto=format&fit=crop&q=80',
+      videoIndex: 0,
       isRead: false,
     ),
     ActivityModel(
@@ -58,6 +67,8 @@ class _ActivityScreenState extends State<ActivityScreen> {
       text: 'commented: "This aesthetic is unmatched 🔥"',
       timeAgo: '25m ago',
       mediaThumbnailUrl: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=150&auto=format&fit=crop&q=80',
+      videoIndex: 1,
+      commentContent: 'This aesthetic is unmatched 🔥',
       isRead: false,
     ),
     ActivityModel(
@@ -69,6 +80,8 @@ class _ActivityScreenState extends State<ActivityScreen> {
       text: 'mentioned you in a comment: "@you check this out!"',
       timeAgo: '2h ago',
       mediaThumbnailUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=150&auto=format&fit=crop&q=80',
+      videoIndex: 2,
+      commentContent: '@you check this out!',
       isRead: true,
     ),
     ActivityModel(
@@ -80,6 +93,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
       text: 'and 3 others liked your video.',
       timeAgo: '6h ago',
       mediaThumbnailUrl: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=150&auto=format&fit=crop&q=80',
+      videoIndex: 3,
       isRead: true,
     ),
     ActivityModel(
@@ -91,6 +105,8 @@ class _ActivityScreenState extends State<ActivityScreen> {
       text: 'commented: "Where was this taken? Incredible shot!"',
       timeAgo: '1d ago',
       mediaThumbnailUrl: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=150&auto=format&fit=crop&q=80',
+      videoIndex: 4,
+      commentContent: 'Where was this taken? Incredible shot!',
       isRead: true,
     ),
     ActivityModel(
@@ -99,12 +115,54 @@ class _ActivityScreenState extends State<ActivityScreen> {
       userHandle: 'tin_99',
       userAvatarUrl: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150&auto=format&fit=crop&q=80',
       type: 'like',
-      text: 'liked your 24h thought story.',
+      text: 'liked your video.',
       timeAgo: '1d ago',
       mediaThumbnailUrl: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=150&auto=format&fit=crop&q=80',
+      videoIndex: 5,
       isRead: true,
     ),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    final isDemo = TokenStorage.instance.isDemoUserSync;
+    _activities = isDemo ? List.from(_demoActivities) : [];
+    _loadRealActivities();
+  }
+
+  Future<void> _loadRealActivities() async {
+    try {
+      final notifications = await NotificationRemoteDataSource.instance.getNotifications();
+      final isDemo = TokenStorage.instance.isDemoUserSync;
+      if (!isDemo && mounted) {
+        setState(() {
+          _activities = notifications.map((n) {
+            final lowerTitle = n.title.toLowerCase();
+            final lowerBody = n.subtitle.toLowerCase();
+            String type = 'like';
+            if (lowerTitle.contains('comment') || lowerBody.contains('comment')) {
+              type = 'comment';
+            } else if (lowerTitle.contains('mention') || lowerBody.contains('mention')) {
+              type = 'mention';
+            }
+            return ActivityModel(
+              id: n.id,
+              userName: n.title,
+              userHandle: n.title.toLowerCase().replaceAll(' ', '_'),
+              userAvatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+              type: type,
+              text: n.subtitle,
+              timeAgo: 'Recently',
+              mediaThumbnailUrl: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=150',
+              videoIndex: 0,
+              isRead: !n.hasDot,
+            );
+          }).toList();
+        });
+      }
+    } catch (_) {}
+  }
 
   List<ActivityModel> get _filteredActivities {
     switch (_currentFilter) {
@@ -115,7 +173,6 @@ class _ActivityScreenState extends State<ActivityScreen> {
       case ActivityFilter.mentions:
         return _activities.where((a) => a.type == 'mention').toList();
       case ActivityFilter.all:
-      default:
         return _activities;
     }
   }
@@ -135,156 +192,22 @@ class _ActivityScreenState extends State<ActivityScreen> {
     );
   }
 
-  void _openQuickReply(ActivityModel activity) {
-    final replyController = TextEditingController();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-          ),
-          child: Material(
-            color: const Color(0xFF1E1E22),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF48484E),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Reply to @${activity.userHandle}',
-                    style: const TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    activity.text,
-                    style: const TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 13,
-                      color: Color(0xFF8E8E93),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2A2A30),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFF383842)),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: replyController,
-                            autofocus: true,
-                            style: const TextStyle(color: Colors.white, fontSize: 14),
-                            decoration: const InputDecoration(
-                              hintText: 'Add a reply...',
-                              hintStyle: TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
-                              border: InputBorder.none,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.send_rounded, color: Color(0xFF2F80ED)),
-                          onPressed: () {
-                            final text = replyController.text.trim();
-                            if (text.isEmpty) return;
-                            Navigator.of(ctx).pop();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Replied to @${activity.userHandle}: "$text"'),
-                                backgroundColor: const Color(0xFF2F80ED),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
+  /// Directs user straight to the video that was commented on or liked.
+  void _navigateToVideo(ActivityModel activity, {bool openComments = false}) {
+    setState(() => activity.isRead = true);
 
-  void _previewPost(ActivityModel activity) {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(20),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            color: const Color(0xFF16161A),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Stack(
-                  alignment: Alignment.topRight,
-                  children: [
-                    Image.network(
-                      activity.mediaThumbnailUrl,
-                      height: 320,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, color: Colors.white, size: 24),
-                      onPressed: () => Navigator.of(ctx).pop(),
-                    ),
-                  ],
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 18,
-                        backgroundImage: NetworkImage(activity.userAvatarUrl),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          '${activity.userName} ${activity.text}',
-                          style: const TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 13,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+    final shouldOpenComments =
+        openComments || activity.type == 'comment' || activity.type == 'mention';
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => VideoFeedPage(
+          isActive: true,
+          isStandalone: true,
+          initialPage: activity.videoIndex,
+          openCommentsOnStart: shouldOpenComments,
+          initialCommentReplyUser: activity.userName,
+          initialCommentText: activity.commentContent,
         ),
       ),
     );
@@ -347,7 +270,6 @@ class _ActivityScreenState extends State<ActivityScreen> {
               ],
             ),
           ),
-
           const SizedBox(height: 6),
 
           // Activities List
@@ -366,7 +288,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
                 : ListView.separated(
                     padding: const EdgeInsets.symmetric(vertical: 6),
                     itemCount: list.length,
-                    separatorBuilder: (_, __) => const Divider(
+                    separatorBuilder: (_, _) => const Divider(
                       color: Color(0xFF222226),
                       height: 1,
                       indent: 72,
@@ -406,17 +328,12 @@ class _ActivityScreenState extends State<ActivityScreen> {
                       }
 
                       return InkWell(
-                        onTap: () {
-                          setState(() => item.isRead = true);
-                          if (item.type == 'comment') {
-                            _openQuickReply(item);
-                          } else {
-                            _previewPost(item);
-                          }
-                        },
+                        onTap: () => _navigateToVideo(item),
                         splashColor: Colors.white.withValues(alpha: 0.05),
                         child: Container(
-                          color: item.isRead ? Colors.transparent : const Color(0xFF2F80ED).withValues(alpha: 0.04),
+                          color: item.isRead
+                              ? Colors.transparent
+                              : const Color(0xFF2F80ED).withValues(alpha: 0.04),
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
@@ -436,7 +353,8 @@ class _ActivityScreenState extends State<ActivityScreen> {
                                         fit: BoxFit.cover,
                                         errorBuilder: (context, error, stackTrace) => Container(
                                           color: const Color(0xFF2C2C32),
-                                          child: const Icon(Icons.person, color: Colors.white38, size: 22),
+                                          child: const Icon(Icons.person,
+                                              color: Colors.white38, size: 22),
                                         ),
                                       ),
                                     ),
@@ -486,18 +404,29 @@ class _ActivityScreenState extends State<ActivityScreen> {
                                             color: Color(0xFF8E8E93),
                                           ),
                                         ),
-                                        if (item.type == 'comment') ...[
+                                        if (item.type == 'comment' || item.type == 'mention') ...[
                                           const SizedBox(width: 12),
                                           GestureDetector(
-                                            onTap: () => _openQuickReply(item),
-                                            child: const Text(
-                                              'Reply',
-                                              style: TextStyle(
-                                                fontFamily: 'Inter',
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w700,
-                                                color: Color(0xFF2F80ED),
-                                              ),
+                                            onTap: () => _navigateToVideo(item, openComments: true),
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.reply_rounded,
+                                                  size: 13,
+                                                  color: Color(0xFF2F80ED),
+                                                ),
+                                                SizedBox(width: 3),
+                                                Text(
+                                                  'Reply on video',
+                                                  style: TextStyle(
+                                                    fontFamily: 'Inter',
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: Color(0xFF2F80ED),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ],
@@ -507,29 +436,52 @@ class _ActivityScreenState extends State<ActivityScreen> {
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              // Post preview thumbnail
+                              // Post preview video thumbnail - Direct to video!
                               GestureDetector(
-                                onTap: () => _previewPost(item),
-                                child: Container(
-                                  width: 44,
-                                  height: 44,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(8),
-                                    color: const Color(0xFF2A2A30),
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.network(
-                                      item.mediaThumbnailUrl,
-                                      width: 44,
-                                      height: 44,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) => Container(
+                                onTap: () => _navigateToVideo(item),
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Container(
+                                      width: 48,
+                                      height: 56,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(8),
                                         color: const Color(0xFF2A2A30),
-                                        child: const Icon(Icons.image, color: Colors.white24, size: 20),
+                                        border: Border.all(
+                                          color: Colors.white.withValues(alpha: 0.15),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(7),
+                                        child: Image.network(
+                                          item.mediaThumbnailUrl,
+                                          width: 48,
+                                          height: 56,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) => Container(
+                                            color: const Color(0xFF2A2A30),
+                                            child: const Icon(Icons.videocam_rounded,
+                                                color: Colors.white24, size: 22),
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                  ),
+                                    Container(
+                                      width: 22,
+                                      height: 22,
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withValues(alpha: 0.6),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: Colors.white,
+                                        size: 14,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],

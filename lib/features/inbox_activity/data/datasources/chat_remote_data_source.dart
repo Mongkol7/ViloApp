@@ -1,5 +1,7 @@
+import '../../../auth/data/datasources/token_storage.dart';
 import '../../../../core/network/api_client.dart';
 import '../../domain/entities/inbox_item.dart';
+import 'chat_manager.dart';
 import 'static_inbox_data.dart';
 
 class ChatRemoteDataSource {
@@ -9,32 +11,42 @@ class ChatRemoteDataSource {
   Future<List<DirectMessageThread>> getConversations() async {
     try {
       final response = await ApiClient.instance.get('/chats/conversations');
-      if (response is List && response.isNotEmpty) {
+      if (response is List) {
         return response.map<DirectMessageThread>((json) {
           final otherId = json['otherUserId']?.toString() ?? '';
+          final otherUserId = json['otherUserId'] is int ? json['otherUserId'] as int : int.tryParse(otherId);
           final otherUsername = json['otherUsername'] ?? 'User';
           final otherDisplayName = json['otherDisplayName'] ?? otherUsername;
           final avatarUrl = json['otherAvatarUrl'] ??
               'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
           final lastMsg = json['lastMessageContent'] ?? '';
           final isVerified = json['isOtherVerified'] == true;
+          final isFollowing = json['isFollowing'] == true;
+          final followsYou = json['followsYou'] == true;
 
           return DirectMessageThread(
             id: otherId,
+            userId: otherUserId,
             username: otherDisplayName,
             avatarUrl: avatarUrl,
             lastMessage: lastMsg,
             timeAgo: 'Recently',
             isVerified: isVerified,
             followersCount: '1.2M',
+            isFollowing: isFollowing,
+            followsYou: followsYou,
             messages: const [],
           );
         }).toList();
       }
     } catch (_) {
-      // Fallback to static threads if offline
+      // Fallback to static threads only if demo user
     }
-    return StaticInboxData.threads;
+    final isDemoUser = TokenStorage.instance.isDemoUserSync;
+    if (isDemoUser) {
+      return StaticInboxData.threads;
+    }
+    return const [];
   }
 
   Future<List<ChatMessage>> getMessages(int userId, {int page = 0, int size = 50}) async {
@@ -63,14 +75,25 @@ class ChatRemoteDataSource {
         return messages.reversed.toList();
       }
     } catch (_) {
-      // Fallback to static thread messages if available
+      // Fallback to local thread messages
     }
 
-    final thread = StaticInboxData.threads.firstWhere(
-      (t) => t.id == userId.toString(),
-      orElse: () => StaticInboxData.threads.first,
-    );
-    return List.from(thread.messages);
+    final localMessages = ChatManager.instance.getMessages(userId.toString());
+    if (localMessages.isNotEmpty) {
+      return localMessages;
+    }
+
+    final isDemoUser = TokenStorage.instance.currentUserIdSync == 1;
+    if (isDemoUser) {
+      final threadMatch = StaticInboxData.threads.cast<DirectMessageThread?>().firstWhere(
+        (t) => t?.id == userId.toString() || t?.userId == userId,
+        orElse: () => null,
+      );
+      if (threadMatch != null) {
+        return List.from(threadMatch.messages);
+      }
+    }
+    return const [];
   }
 
   Future<ChatMessage> sendMessage(int userId, String content, {String? mediaUrl}) async {
@@ -79,7 +102,7 @@ class ChatRemoteDataSource {
         '/chats/$userId/messages',
         body: {
           'content': content,
-          if (mediaUrl != null) 'mediaUrl': mediaUrl,
+          'mediaUrl': ?mediaUrl,
         },
       );
 
@@ -92,7 +115,9 @@ class ChatRemoteDataSource {
           status: 'Sent',
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      // Backend log
+    }
 
     return ChatMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),

@@ -25,6 +25,7 @@ class SearchAccount {
   final String followersCount;
   final String avatarUrl;
   final bool isFollowed;
+  final bool followsYou;
   final bool isVerified;
 
   const SearchAccount({
@@ -34,8 +35,11 @@ class SearchAccount {
     required this.followersCount,
     required this.avatarUrl,
     this.isFollowed = false,
+    this.followsYou = false,
     this.isVerified = false,
   });
+
+  bool get isFriend => isFollowed && followsYou;
 
   SearchAccount copyWith({
     String? id,
@@ -44,6 +48,7 @@ class SearchAccount {
     String? followersCount,
     String? avatarUrl,
     bool? isFollowed,
+    bool? followsYou,
     bool? isVerified,
   }) {
     return SearchAccount(
@@ -53,6 +58,7 @@ class SearchAccount {
       followersCount: followersCount ?? this.followersCount,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       isFollowed: isFollowed ?? this.isFollowed,
+      followsYou: followsYou ?? this.followsYou,
       isVerified: isVerified ?? this.isVerified,
     );
   }

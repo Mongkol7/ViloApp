@@ -64,8 +64,26 @@ public class SearchService {
             List<User> users = userQuery.isEmpty()
                     ? userRepository.findAll(PageRequest.of(0, 10)).getContent()
                     : userRepository.searchUsers(userQuery, PageRequest.of(0, 10));
+
+            final User currentUser = username != null ? userRepository.findByUsername(username).orElse(null) : null;
+            final Set<Long> myFollowingIds = (currentUser != null && currentUser.getFollowing() != null)
+                    ? currentUser.getFollowing().stream().map(User::getId).collect(Collectors.toSet())
+                    : Collections.emptySet();
+            final Set<Long> myFollowerIds = (currentUser != null && currentUser.getFollowers() != null)
+                    ? currentUser.getFollowers().stream().map(User::getId).collect(Collectors.toSet())
+                    : Collections.emptySet();
+
             List<UserResponse> userDtos = users.stream()
-                    .map(UserResponse::fromEntitySummary)
+                    .map(u -> {
+                        UserResponse resp = UserResponse.fromEntitySummary(u);
+                        if (currentUser != null && !currentUser.getId().equals(u.getId())) {
+                            resp.setIsFollowing(myFollowingIds.contains(u.getId()) ||
+                                    (u.getFollowers() != null && u.getFollowers().stream().anyMatch(f -> f.getId().equals(currentUser.getId()))));
+                            resp.setFollowsYou(myFollowerIds.contains(u.getId()) ||
+                                    (u.getFollowing() != null && u.getFollowing().stream().anyMatch(f -> f.getId().equals(currentUser.getId()))));
+                        }
+                        return resp;
+                    })
                     .collect(Collectors.toList());
             response.setUsers(userDtos);
         }

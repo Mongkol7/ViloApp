@@ -24,6 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class ChatService {
@@ -52,6 +54,14 @@ public class ChatService {
 
     @Transactional
     public List<ConversationResponse> getConversations(User currentUser) {
+        User me = userRepository.findById(currentUser.getId()).orElse(currentUser);
+        java.util.Set<Long> myFollowingIds = me.getFollowing() != null
+                ? me.getFollowing().stream().map(User::getId).collect(Collectors.toSet())
+                : java.util.Collections.emptySet();
+        java.util.Set<Long> myFollowerIds = me.getFollowers() != null
+                ? me.getFollowers().stream().map(User::getId).collect(Collectors.toSet())
+                : java.util.Collections.emptySet();
+
         List<Conversation> conversations = conversationRepository.findAllForUser(currentUser);
         List<ConversationResponse> result = new ArrayList<>();
 
@@ -61,6 +71,11 @@ public class ChatService {
                     : conv.getParticipant1();
 
             long unreadCount = messageRepository.countByConversationAndRecipientAndIsReadFalse(conv, currentUser);
+
+            boolean isFollowing = myFollowingIds.contains(otherUser.getId()) ||
+                    (otherUser.getFollowers() != null && otherUser.getFollowers().stream().anyMatch(f -> f.getId().equals(me.getId())));
+            boolean followsYou = myFollowerIds.contains(otherUser.getId()) ||
+                    (otherUser.getFollowing() != null && otherUser.getFollowing().stream().anyMatch(f -> f.getId().equals(me.getId())));
 
             result.add(ConversationResponse.builder()
                     .id(conv.getId())
@@ -73,6 +88,9 @@ public class ChatService {
                     .lastMessageSenderId(conv.getLastMessageSenderId())
                     .lastMessageTime(conv.getLastMessageTime())
                     .unreadCount(unreadCount)
+                    .isFollowing(isFollowing)
+                    .followsYou(followsYou)
+                    .isFriend(isFollowing && followsYou)
                     .build());
         }
 

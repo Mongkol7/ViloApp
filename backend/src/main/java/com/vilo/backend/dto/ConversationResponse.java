@@ -14,6 +14,9 @@ public class ConversationResponse {
     private Long lastMessageSenderId;
     private Instant lastMessageTime;
     private Long unreadCount;
+    private Boolean isFollowing;
+    private Boolean followsYou;
+    private Boolean isFriend;
 
     public ConversationResponse() {
     }
@@ -21,6 +24,14 @@ public class ConversationResponse {
     public ConversationResponse(Long id, Long otherUserId, String otherUsername, String otherDisplayName,
                                 String otherAvatarUrl, Boolean isOtherVerified, String lastMessageContent,
                                 Long lastMessageSenderId, Instant lastMessageTime, Long unreadCount) {
+        this(id, otherUserId, otherUsername, otherDisplayName, otherAvatarUrl, isOtherVerified,
+                lastMessageContent, lastMessageSenderId, lastMessageTime, unreadCount, false, false, false);
+    }
+
+    public ConversationResponse(Long id, Long otherUserId, String otherUsername, String otherDisplayName,
+                                String otherAvatarUrl, Boolean isOtherVerified, String lastMessageContent,
+                                Long lastMessageSenderId, Instant lastMessageTime, Long unreadCount,
+                                Boolean isFollowing, Boolean followsYou, Boolean isFriend) {
         this.id = id;
         this.otherUserId = otherUserId;
         this.otherUsername = otherUsername;
@@ -31,6 +42,9 @@ public class ConversationResponse {
         this.lastMessageSenderId = lastMessageSenderId;
         this.lastMessageTime = lastMessageTime;
         this.unreadCount = unreadCount;
+        this.isFollowing = isFollowing;
+        this.followsYou = followsYou;
+        this.isFriend = isFriend;
     }
 
     public static Builder builder() {
@@ -117,6 +131,30 @@ public class ConversationResponse {
         this.unreadCount = unreadCount;
     }
 
+    public Boolean getIsFollowing() {
+        return isFollowing;
+    }
+
+    public void setIsFollowing(Boolean isFollowing) {
+        this.isFollowing = isFollowing;
+    }
+
+    public Boolean getFollowsYou() {
+        return followsYou;
+    }
+
+    public void setFollowsYou(Boolean followsYou) {
+        this.followsYou = followsYou;
+    }
+
+    public Boolean getIsFriend() {
+        return isFriend;
+    }
+
+    public void setIsFriend(Boolean isFriend) {
+        this.isFriend = isFriend;
+    }
+
     public static class Builder {
         private Long id;
         private Long otherUserId;
@@ -128,6 +166,9 @@ public class ConversationResponse {
         private Long lastMessageSenderId;
         private Instant lastMessageTime;
         private Long unreadCount;
+        private Boolean isFollowing = false;
+        private Boolean followsYou = false;
+        private Boolean isFriend = false;
 
         public Builder id(Long id) {
             this.id = id;
@@ -179,9 +220,25 @@ public class ConversationResponse {
             return this;
         }
 
+        public Builder isFollowing(Boolean isFollowing) {
+            this.isFollowing = isFollowing;
+            return this;
+        }
+
+        public Builder followsYou(Boolean followsYou) {
+            this.followsYou = followsYou;
+            return this;
+        }
+
+        public Builder isFriend(Boolean isFriend) {
+            this.isFriend = isFriend;
+            return this;
+        }
+
         public ConversationResponse build() {
             return new ConversationResponse(id, otherUserId, otherUsername, otherDisplayName, otherAvatarUrl,
-                    isOtherVerified, lastMessageContent, lastMessageSenderId, lastMessageTime, unreadCount);
+                    isOtherVerified, lastMessageContent, lastMessageSenderId, lastMessageTime, unreadCount,
+                    isFollowing, followsYou, isFriend);
         }
     }
 }

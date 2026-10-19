@@ -190,7 +190,7 @@ class PersonCard extends StatelessWidget {
                   ),
                   child: Text(
                     person.isFollowed
-                        ? 'Following'
+                        ? (person.followsYou ? 'Friends 👥' : 'Following')
                         : (person.followsYou ? 'Follow back' : 'Follow'),
                     style: TextStyle(
                       fontFamily: 'Inter',

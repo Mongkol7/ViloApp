@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../auth/data/datasources/token_storage.dart';
+import '../../../profile/presentation/pages/people_screen.dart';
 import '../../../search_discover/presentation/pages/search_screen.dart';
 import '../../data/datasources/chat_manager.dart';
 import '../../data/datasources/static_inbox_data.dart';
@@ -27,13 +29,27 @@ class InboxScreen extends StatefulWidget {
 }
 
 class _InboxScreenState extends State<InboxScreen> {
-  List<StoryItem> _stories = List.from(StaticInboxData.stories);
-  List<NotificationItem> _notifications = List.from(StaticInboxData.notifications);
-  List<DirectMessageThread> _threads = List.from(StaticInboxData.threads);
+  late List<StoryItem> _stories;
+  late List<NotificationItem> _notifications;
+  late List<DirectMessageThread> _threads;
+  String _messageFilter = 'all'; // 'all' or 'friends'
 
   @override
   void initState() {
     super.initState();
+    final isDemo = TokenStorage.instance.isDemoUserSync;
+    _stories = isDemo
+        ? List.from(StaticInboxData.stories)
+        : const [
+            StoryItem(
+              id: 'create_story',
+              title: 'Share a thought...',
+              imageUrl: '',
+              isCreate: true,
+            ),
+          ];
+    _notifications = isDemo ? List.from(StaticInboxData.notifications) : const [];
+    _threads = isDemo ? List.from(StaticInboxData.threads) : List.from(ChatManager.instance.threads);
     _loadAllData();
     ChatStompService.instance.connect();
   }
@@ -196,7 +212,11 @@ class _InboxScreenState extends State<InboxScreen> {
             color: Colors.white,
             size: 24,
           ),
-          onPressed: () {},
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PeopleScreen()),
+            );
+          },
         ),
         centerTitle: true,
         title: const Text(
@@ -261,18 +281,78 @@ class _InboxScreenState extends State<InboxScreen> {
 
             const SizedBox(height: 20),
 
-            // 3. "MESSAGES" Section Header
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(
-                'MESSAGES',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF8E8E93),
-                  letterSpacing: 1.2,
-                ),
+            // 3. "MESSAGES" Section Header & Quick Filter
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  const Text(
+                    'MESSAGES',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF8E8E93),
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const Spacer(),
+                  // Filter Chips: All vs Friends
+                  InkWell(
+                    key: const Key('inbox_filter_all'),
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => setState(() => _messageFilter = 'all'),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _messageFilter == 'all'
+                            ? const Color(0xFF2F80ED)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'All',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 11,
+                          fontWeight: _messageFilter == 'all' ? FontWeight.w700 : FontWeight.w500,
+                          color: _messageFilter == 'all' ? Colors.white : const Color(0xFF8E8E93),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  InkWell(
+                    key: const Key('inbox_filter_friends'),
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => setState(() => _messageFilter = 'friends'),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _messageFilter == 'friends'
+                            ? const Color(0xFF2F80ED)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.people_alt_rounded, size: 12, color: Colors.white),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Friends',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 11,
+                              fontWeight: _messageFilter == 'friends' ? FontWeight.w700 : FontWeight.w500,
+                              color: _messageFilter == 'friends' ? Colors.white : const Color(0xFF8E8E93),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
 
@@ -280,7 +360,61 @@ class _InboxScreenState extends State<InboxScreen> {
             ValueListenableBuilder<List<DirectMessageThread>>(
               valueListenable: ChatManager.instance.threadsNotifier,
               builder: (context, activeThreads, _) {
-                final displayThreads = activeThreads.isNotEmpty ? activeThreads : _threads;
+                final isDemo = TokenStorage.instance.isDemoUserSync;
+                final sourceThreads = activeThreads.isNotEmpty
+                    ? activeThreads
+                    : (_threads.isNotEmpty ? _threads : (isDemo ? StaticInboxData.threads : const <DirectMessageThread>[]));
+                final displayThreads = _messageFilter == 'friends'
+                    ? sourceThreads.where((t) => t.isFriend).toList()
+                    : sourceThreads;
+
+                if (displayThreads.isEmpty) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+                    alignment: Alignment.center,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            color: Color(0xFF8E8E93),
+                            size: 28,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _messageFilter == 'friends'
+                              ? 'No mutual friends with messages yet'
+                              : 'No direct messages yet',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _messageFilter == 'friends'
+                              ? 'Follow back accounts that follow you to chat with friends.'
+                              : 'Search and follow users to start chatting.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Color(0xFF8E8E93),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
                 return Column(
                   children: List.generate(displayThreads.length, (index) {
                     final thread = displayThreads[index];
@@ -676,13 +810,16 @@ class _InboxScreenState extends State<InboxScreen> {
                   children: [
                     Row(
                       children: [
-                        Text(
-                          thread.username,
-                          style: const TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                        Flexible(
+                          child: Text(
+                            thread.username,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                         if (thread.isVerified) ...[
@@ -691,6 +828,69 @@ class _InboxScreenState extends State<InboxScreen> {
                             Icons.check_circle_rounded,
                             color: Color(0xFF2F80ED),
                             size: 15,
+                          ),
+                        ],
+                        if (thread.isFriend) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0x262F80ED),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0x4D2F80ED)),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.people_alt_rounded, size: 10, color: Color(0xFF38BDF8)),
+                                SizedBox(width: 3),
+                                Text(
+                                  'Friends',
+                                  style: TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF38BDF8),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else if (thread.isFollowing) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0x1AFFFFFF),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'Following',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFFA1A1AA),
+                              ),
+                            ),
+                          ),
+                        ] else if (thread.followsYou) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0x263B82F6),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'Follows you',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF60A5FA),
+                              ),
+                            ),
                           ),
                         ],
                       ],

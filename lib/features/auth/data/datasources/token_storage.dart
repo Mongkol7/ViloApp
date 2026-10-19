@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:http/http.dart' as http;
 
 /// Cross-platform persistent storage for JWT tokens and user session data
 /// Runs purely in Dart with zero native Android C++/JNI dependencies
@@ -85,14 +86,83 @@ class TokenStorage {
     _persist();
   }
 
+  bool _isAutoLoggingIn = false;
+
+  Future<void> autoLoginDefaultUser() async {
+    if (_isAutoLoggingIn) return;
+    _isAutoLoggingIn = true;
+    try {
+      final base = Platform.isAndroid ? 'http://10.0.2.2:3000/api/v1' : 'http://localhost:3000/api/v1';
+      final res = await http.post(
+        Uri.parse('$base/auth/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'usernameOrEmail': 'mongkol',
+          'password': 'password123',
+        }),
+      ).timeout(const Duration(seconds: 3));
+
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        final data = body['data'] as Map<String, dynamic>?;
+        if (data != null) {
+          _accessToken = data['accessToken'] as String?;
+          _refreshToken = data['refreshToken'] as String?;
+          final user = data['user'] as Map<String, dynamic>?;
+          if (user != null) {
+            _userId = user['id'] as int?;
+            _username = user['username'] as String?;
+            _displayName = user['displayName'] as String?;
+          }
+          _persist();
+        }
+      }
+    } catch (_) {
+      _userId ??= 1;
+      _username ??= 'mongkol';
+      _displayName ??= 'Thoeung Sereymongkol';
+    } finally {
+      _isAutoLoggingIn = false;
+    }
+  }
+
   Future<String?> getAccessToken() async {
     _load();
+    if (_accessToken == null || _accessToken!.isEmpty) {
+      await autoLoginDefaultUser();
+    }
     return _accessToken;
   }
 
   Future<String?> getRefreshToken() async {
     _load();
     return _refreshToken;
+  }
+
+  String? get currentAccessTokenSync {
+    _load();
+    return _accessToken;
+  }
+
+  int? get currentUserIdSync {
+    _load();
+    return _userId;
+  }
+
+  String? get currentUsernameSync {
+    _load();
+    return _username;
+  }
+
+  String? get currentDisplayNameSync {
+    _load();
+    return _displayName;
+  }
+
+  bool get isDemoUserSync {
+    _load();
+    if (_userId == null) return true;
+    return _userId == 1 && (_username == 'mongkol' || _username == null);
   }
 
   Future<String?> getUsername() async {

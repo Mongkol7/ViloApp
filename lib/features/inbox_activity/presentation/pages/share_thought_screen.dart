@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../data/datasources/story_remote_data_source.dart';
 import '../../domain/entities/music_track.dart';
-import '../../domain/entities/shared_thought_story.dart';
 import '../widgets/music_picker_bottom_sheet.dart';
 
 class ShareThoughtScreen extends StatefulWidget {

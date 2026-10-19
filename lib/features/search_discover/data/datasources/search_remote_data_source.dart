@@ -121,9 +121,8 @@ class SearchRemoteDataSource {
         final rawUsername = u['username']?.toString() ?? '';
         final username = rawUsername.startsWith('@') ? rawUsername : '@$rawUsername';
         final displayName = u['displayName']?.toString() ?? rawUsername;
-        final followers = u['followersCount'] != null && u['followersCount'] != 0
-            ? '${u['followersCount']} followers'
-            : (u['followerCountFormatted']?.toString() ?? '12.4K followers');
+        final count = u['followersCount'] is int ? u['followersCount'] as int : int.tryParse(u['followersCount']?.toString() ?? '0') ?? 0;
+        final followers = '$count followers';
 
         final isMe = ProfileSyncService.instance.isCurrentUser(
           username: username,
@@ -138,13 +137,17 @@ class SearchRemoteDataSource {
             ? ProfileSyncService.instance.currentUserDisplayName
             : displayName;
 
+        final isFollowing = isMe ? false : (u['isFollowing'] == true);
+        final followsYou = isMe ? false : (u['followsYou'] == true);
+
         accounts.add(SearchAccount(
           id: u['id']?.toString() ?? '',
           username: username,
           displayName: effectiveDisplayName,
           followersCount: followers,
           avatarUrl: effectiveAvatar,
-          isFollowed: isMe ? false : (u['isFollowing'] == true),
+          isFollowed: isFollowing,
+          followsYou: followsYou,
           isVerified: u['isVerified'] == true,
         ));
       }

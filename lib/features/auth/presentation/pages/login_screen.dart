@@ -8,6 +8,8 @@ import '../widgets/vilo_primary_button.dart';
 import '../widgets/vilo_social_login_section.dart';
 import '../../../bottom_nav/presentation/pages/main_navigation_shell.dart';
 import '../../data/datasources/auth_remote_data_source.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
+import '../../../inbox_activity/data/datasources/chat_manager.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 
@@ -88,10 +90,13 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() => _isLoading = true);
     try {
       final authSource = AuthRemoteDataSource();
-      await authSource.login(
+      final user = await authSource.login(
         usernameOrEmail: _emailCtrl.text.trim(),
         password: _passwordCtrl.text,
       );
+
+      ProfileSyncService.instance.setCurrentUser(user);
+      ChatManager.instance.switchUser(user.id);
 
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(

@@ -170,6 +170,10 @@ public class UserResponse {
         this.followsYou = followsYou;
     }
 
+    public Boolean getIsFriend() {
+        return Boolean.TRUE.equals(isFollowing) && Boolean.TRUE.equals(followsYou);
+    }
+
     public Set<Role> getRoles() {
         return roles;
     }

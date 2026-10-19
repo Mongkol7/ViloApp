@@ -1,3 +1,4 @@
+import '../../../auth/data/datasources/token_storage.dart';
 import '../../../../core/network/api_client.dart';
 import '../../domain/entities/inbox_item.dart';
 import 'static_inbox_data.dart';
@@ -9,7 +10,7 @@ class NotificationRemoteDataSource {
   Future<List<NotificationItem>> getNotifications() async {
     try {
       final response = await ApiClient.instance.get('/notifications');
-      if (response is List && response.isNotEmpty) {
+      if (response is List) {
         return response.map<NotificationItem>((item) {
           final id = item['id']?.toString() ?? '';
           final title = item['title'] ?? 'Notification';
@@ -20,6 +21,8 @@ class NotificationRemoteDataSource {
           String iconType = 'activity';
           if (type == 'FOLLOW') {
             iconType = 'followers';
+          } else if (type == 'MESSAGE') {
+            iconType = 'activity';
           } else if (type == 'SYSTEM') {
             iconType = 'system';
           }
@@ -34,7 +37,12 @@ class NotificationRemoteDataSource {
         }).toList();
       }
     } catch (_) {}
-    return StaticInboxData.notifications;
+
+    final isDemoUser = TokenStorage.instance.isDemoUserSync;
+    if (isDemoUser) {
+      return StaticInboxData.notifications;
+    }
+    return const [];
   }
 
   Future<void> markAsRead(String notificationId) async {

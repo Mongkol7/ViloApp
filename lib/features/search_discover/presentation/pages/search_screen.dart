@@ -2,8 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../feed/presentation/pages/sound_detail_page.dart';
+import '../../../profile/data/datasources/profile_remote_data_source.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../../profile/presentation/screens/public_profile_screen.dart';
+import '../../../inbox_activity/data/datasources/chat_manager.dart';
+import '../../../inbox_activity/presentation/pages/chat_detail_screen.dart';
 import '../../data/datasources/search_remote_data_source.dart';
 import '../../data/datasources/static_search_data.dart';
 import '../../domain/entities/search_results.dart';
@@ -101,16 +104,30 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  void _toggleFollow(int index) {
+  Future<void> _toggleFollow(int index) async {
+    final account = _accounts[index];
+    final targetUid = int.tryParse(account.id);
+    final newFollowState = !account.isFollowed;
+
     setState(() {
-      final account = _accounts[index];
-      final newFollowState = !account.isFollowed;
       _accounts[index] = account.copyWith(isFollowed: newFollowState);
-      ProfileSyncService.instance.notifyFollowChanged(
-        targetUserId: int.tryParse(account.id) ?? 0,
-        isFollowing: newFollowState,
-      );
     });
+    ProfileSyncService.instance.notifyFollowChanged(
+      targetUserId: targetUid ?? 0,
+      isFollowing: newFollowState,
+    );
+
+    if (targetUid != null && targetUid > 0) {
+      try {
+        if (newFollowState) {
+          await ProfileRemoteDataSource.instance.toggleFollow(targetUid);
+        } else {
+          await ProfileRemoteDataSource.instance.unfollow(targetUid);
+        }
+      } catch (e) {
+        debugPrint('[SearchScreen] Note: backend sync error: $e');
+      }
+    }
   }
 
   void _toggleBookmark(int index) {
@@ -614,6 +631,8 @@ class _SearchScreenState extends State<SearchScreen> {
                     username: cleanUsername,
                     displayName: effectiveDisplayName,
                     avatarUrl: effectiveAvatarUrl,
+                    isFollowing: account.isFollowed,
+                    followsYou: account.followsYou,
                   ),
                 ),
               );
@@ -655,6 +674,8 @@ class _SearchScreenState extends State<SearchScreen> {
                       username: cleanUsername,
                       displayName: effectiveDisplayName,
                       avatarUrl: effectiveAvatarUrl,
+                      isFollowing: account.isFollowed,
+                      followsYou: account.followsYou,
                     ),
                   ),
                 );
@@ -729,38 +750,110 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
               ),
             )
-          else
+          else ...[
+            // Quick Chat Button
             GestureDetector(
-              onTap: () => _toggleFollow(index),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
-                decoration: BoxDecoration(
-                  color: account.isFollowed ? AppColors.surface : Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  border: account.isFollowed
-                      ? Border.all(color: AppColors.surfaceStroke, width: 1.0)
-                      : null,
-                  boxShadow: account.isFollowed
-                      ? null
-                      : [
-                          BoxShadow(
-                            color: Colors.white.withValues(alpha: 0.25),
-                            blurRadius: 12,
-                            spreadRadius: 0.5,
-                          ),
-                        ],
-                ),
-                child: Text(
-                  account.isFollowed ? 'Following' : 'Follow',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: account.isFollowed ? Colors.white : Colors.black,
+              onTap: () {
+                final targetUid = int.tryParse(account.id);
+                final thread = ChatManager.instance.getOrCreateThread(
+                  userId: targetUid ?? 0,
+                  username: effectiveDisplayName,
+                  avatarUrl: effectiveAvatarUrl,
+                  isVerified: account.isVerified,
+                  isFollowing: account.isFollowed,
+                  followsYou: account.followsYou,
+                  followersCount: account.followersCount,
+                );
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ChatDetailScreen(thread: thread),
                   ),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: AppColors.surfaceStroke, width: 1.0),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.chat_bubble_outline_rounded, color: Colors.white70, size: 14),
+                    SizedBox(width: 4),
+                    Text(
+                      'Chat',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
+            const SizedBox(width: 6),
+
+            // Follow / Follow Back / Friends Button
+            Builder(
+              builder: (context) {
+                final bool isFriend = account.isFriend;
+                String label = 'Follow';
+                Color btnColor = Colors.white;
+                Color textColor = Colors.black;
+                Border? border;
+
+                if (isFriend) {
+                  label = 'Friends 👥';
+                  btnColor = AppColors.surface;
+                  textColor = Colors.white;
+                  border = Border.all(color: AppColors.surfaceStroke, width: 1.0);
+                } else if (account.isFollowed) {
+                  label = 'Following';
+                  btnColor = AppColors.surface;
+                  textColor = Colors.white;
+                  border = Border.all(color: AppColors.surfaceStroke, width: 1.0);
+                } else if (account.followsYou) {
+                  label = 'Follow back';
+                  btnColor = AppColors.primary;
+                  textColor = Colors.white;
+                }
+
+                return GestureDetector(
+                  onTap: () => _toggleFollow(index),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: btnColor,
+                      borderRadius: BorderRadius.circular(18),
+                      border: border,
+                      boxShadow: (!account.isFollowed && !isFriend)
+                          ? [
+                              BoxShadow(
+                                color: (account.followsYou ? AppColors.primary : Colors.white).withValues(alpha: 0.25),
+                                blurRadius: 10,
+                                spreadRadius: 0.5,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: textColor,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
         ],
       ),
     );

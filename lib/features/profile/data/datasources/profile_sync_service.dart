@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../../auth/data/datasources/token_storage.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../presentation/mock/profile_mock_data.dart';
 
@@ -33,6 +34,22 @@ class ProfileSyncService {
   int mockFollowersCount = 4;
   int mockFollowingCount = 3;
 
+  void setCurrentUser(UserModel user) {
+    cachedMyProfile = user;
+    mockFollowingCount = user.followingCount;
+    mockFollowersCount = user.followersCount;
+    cachedFollowers = null;
+    cachedFollowing = null;
+  }
+
+  void clearSession() {
+    cachedMyProfile = null;
+    cachedFollowers = null;
+    cachedFollowing = null;
+    mockFollowingCount = 0;
+    mockFollowersCount = 0;
+  }
+
   /// Returns the current active user's avatar URL
   String get currentUserAvatar {
     final cached = cachedMyProfile?.avatarUrl;
@@ -48,6 +65,10 @@ class ProfileSyncService {
     if (cached != null && cached.trim().isNotEmpty) {
       return cached.trim();
     }
+    final stored = TokenStorage.instance.currentDisplayNameSync;
+    if (stored != null && stored.trim().isNotEmpty) {
+      return stored.trim();
+    }
     return ProfileMockData.name;
   }
 
@@ -55,7 +76,7 @@ class ProfileSyncService {
   String get currentUsername {
     final raw = (cachedMyProfile?.username != null && cachedMyProfile!.username.trim().isNotEmpty)
         ? cachedMyProfile!.username
-        : ProfileMockData.username;
+        : (TokenStorage.instance.currentUsernameSync ?? ProfileMockData.username);
     return raw.trim().toLowerCase().replaceAll('@', '');
   }
 
@@ -63,14 +84,14 @@ class ProfileSyncService {
   bool isCurrentUser({String? username, String? id}) {
     if (id != null && id.isNotEmpty) {
       if (cachedMyProfile != null && cachedMyProfile!.id.toString() == id) return true;
-      if (id == '1') return true;
+      final storedId = TokenStorage.instance.currentUserIdSync;
+      if (storedId != null && storedId.toString() == id) return true;
     }
 
     if (username != null && username.isNotEmpty) {
       final clean = username.trim().toLowerCase().replaceAll('@', '');
       final myUser = currentUsername;
       if (clean == myUser) return true;
-      if (clean == 'mongkol') return true;
     }
 
     return false;

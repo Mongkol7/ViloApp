@@ -9,6 +9,8 @@ import '../pages/edit_profile_screen.dart';
 import '../pages/followers_following_screen.dart';
 import '../style/pulse_tokens.dart';
 import '../widgets/profile_tab_content.dart';
+import '../../../inbox_activity/data/datasources/chat_manager.dart';
+import '../../../inbox_activity/presentation/pages/chat_detail_screen.dart';
 
 class PublicProfileScreen extends StatefulWidget {
   final int? userId;
@@ -17,6 +19,7 @@ class PublicProfileScreen extends StatefulWidget {
   final String? avatarUrl;
   final String? bio;
   final bool isFollowing;
+  final bool followsYou;
 
   const PublicProfileScreen({
     super.key,
@@ -26,6 +29,7 @@ class PublicProfileScreen extends StatefulWidget {
     this.avatarUrl,
     this.bio,
     this.isFollowing = false,
+    this.followsYou = false,
   });
 
   @override
@@ -35,7 +39,7 @@ class PublicProfileScreen extends StatefulWidget {
 class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   late bool _isFollowing;
-  int _followersCount = ProfileSyncService.instance.mockFollowersCount;
+  int _followersCount = 0;
   UserModel? _loadedUser;
   bool _isLoading = false;
 
@@ -44,6 +48,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
     super.initState();
     _tabController = TabController(length: 5, vsync: this, initialIndex: 1);
     _isFollowing = widget.isFollowing;
+    _followersCount = (widget.userId == 1) ? ProfileSyncService.instance.mockFollowersCount : 0;
     if (widget.userId != null) {
       _fetchPublicProfile();
     }
@@ -226,7 +231,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
                     children: [
                       _buildStatItem(
                         'Following',
-                        '${_loadedUser?.followingCount ?? ProfileSyncService.instance.mockFollowingCount}',
+                        '${_loadedUser?.followingCount ?? (widget.userId == 1 ? ProfileSyncService.instance.mockFollowingCount : 0)}',
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
@@ -260,7 +265,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
                         },
                       ),
                       _buildDivider(),
-                      _buildStatItem('Likes', '154K'),
+                      _buildStatItem('Likes', (widget.userId == 1 || _loadedUser?.id == 1) ? '154K' : '0'),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -325,11 +330,22 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
                         );
                       }
 
+                      final bool effectiveFollowsYou = _loadedUser?.followsYou ?? widget.followsYou;
+                      final bool isFriend = _isFollowing && effectiveFollowsYou;
+                      String followLabel = 'Follow';
+                      if (isFriend) {
+                        followLabel = 'Friends 👥';
+                      } else if (_isFollowing) {
+                        followLabel = 'Following';
+                      } else if (effectiveFollowsYou) {
+                        followLabel = 'Follow Back';
+                      }
+
                       return Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           _buildPillButton(
-                            _isFollowing ? 'Following' : 'Follow',
+                            followLabel,
                             isPrimary: !_isFollowing,
                             onTap: _handleToggleFollow,
                           ),
@@ -338,13 +354,30 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
                             'Message',
                             isPrimary: false,
                             onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Direct message with @$username coming soon!'),
-                                  backgroundColor: const Color(0xFF2A2A30),
-                                  duration: const Duration(seconds: 2),
-                                ),
+                              final targetUid = _loadedUser?.id ?? widget.userId ?? 4;
+                              final thread = ChatManager.instance.getOrCreateThread(
+                                userId: targetUid,
+                                username: displayName.isNotEmpty ? displayName : username,
+                                avatarUrl: avatarUrl,
+                                isVerified: isVerified,
+                                isFollowing: _isFollowing,
+                                followsYou: effectiveFollowsYou,
+                                followersCount: _formatCount(_followersCount),
                               );
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ChatDetailScreen(thread: thread),
+                                ),
+                              ).then((_) {
+                                if (mounted) {
+                                  final currentThread = ChatManager.instance.getThread(thread.id);
+                                  if (currentThread.isFollowing != _isFollowing) {
+                                    setState(() {
+                                      _isFollowing = currentThread.isFollowing;
+                                    });
+                                  }
+                                }
+                              });
                             },
                           ),
                         ],
@@ -388,11 +421,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
         body: TabBarView(
           controller: _tabController,
           children: [
-            CustomScrollView(slivers: buildProfileTabSlivers(0)), // Music
-            CustomScrollView(slivers: buildProfileTabSlivers(1)), // Grid
-            CustomScrollView(slivers: buildProfileTabSlivers(2)), // Shop
-            CustomScrollView(slivers: buildProfileTabSlivers(3)), // Saved
-            CustomScrollView(slivers: buildProfileTabSlivers(4)), // Liked
+            CustomScrollView(slivers: buildProfileTabSlivers(0, isCleanSlate: (_loadedUser?.id ?? widget.userId) != 1)), // Music
+            CustomScrollView(slivers: buildProfileTabSlivers(1, isCleanSlate: (_loadedUser?.id ?? widget.userId) != 1)), // Grid
+            CustomScrollView(slivers: buildProfileTabSlivers(2, isCleanSlate: (_loadedUser?.id ?? widget.userId) != 1)), // Shop
+            CustomScrollView(slivers: buildProfileTabSlivers(3, isCleanSlate: (_loadedUser?.id ?? widget.userId) != 1)), // Saved
+            CustomScrollView(slivers: buildProfileTabSlivers(4, isCleanSlate: (_loadedUser?.id ?? widget.userId) != 1)), // Liked
           ],
         ),
       ),

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../profile/data/datasources/profile_remote_data_source.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
+import '../../../profile/presentation/screens/public_profile_screen.dart';
 import '../../data/datasources/chat_manager.dart';
 import '../../data/datasources/chat_remote_data_source.dart';
 import '../../data/datasources/chat_stomp_service.dart';
@@ -22,10 +26,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   late List<ChatMessage> _messages;
   final ScrollController _scrollController = ScrollController();
   bool _canSend = false;
+  late bool _isFollowing;
+  late bool _followsYou;
+
+  bool get _isFriend => _isFollowing && _followsYou;
 
   @override
   void initState() {
     super.initState();
+    _isFollowing = widget.thread.isFollowing;
+    _followsYou = widget.thread.followsYou;
     final savedMessages = ChatManager.instance.getMessages(widget.thread.id);
     _messages = savedMessages.isNotEmpty
         ? savedMessages
@@ -49,12 +59,25 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   Future<void> _loadMessages() async {
-    final userId = int.tryParse(widget.thread.id);
+    final userId = _resolvedUserId;
     if (userId != null) {
+      try {
+        final profile = await ProfileRemoteDataSource.instance.getUserById(userId);
+        if (mounted) {
+          setState(() {
+            _isFollowing = profile.isFollowing;
+            _followsYou = profile.followsYou;
+          });
+          ChatManager.instance.updateFollowState(userId, profile.isFollowing);
+        }
+      } catch (_) {}
+
       final remoteMessages = await ChatRemoteDataSource.instance.getMessages(userId);
       if (mounted && remoteMessages.isNotEmpty) {
+        final existingTexts = remoteMessages.map((m) => m.text).toSet();
+        final unsynced = _messages.where((m) => m.isMe && !existingTexts.contains(m.text)).toList();
         setState(() {
-          _messages = remoteMessages;
+          _messages = [...remoteMessages, ...unsynced];
         });
         _scrollToBottom();
       }
@@ -100,22 +123,82 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     });
     _scrollToBottom();
 
-    // Persist and handle live simulation + backend dispatch
+    // Persist to database via ChatManager without auto-reply
     ChatManager.instance.sendMessage(
       threadId: widget.thread.id,
       text: text,
-      onAutoReply: (replyMsg) {
-        if (!mounted) return;
-        setState(() {
-          _messages.add(replyMsg);
-        });
-        _scrollToBottom();
-      },
     );
+  }
+
+  int? get _resolvedUserId => widget.thread.userId ?? int.tryParse(widget.thread.id);
+
+  void _openProfile() {
+    final uid = _resolvedUserId;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PublicProfileScreen(
+          userId: uid,
+          username: widget.thread.username.toLowerCase().replaceAll(' ', '_'),
+          displayName: widget.thread.username,
+          avatarUrl: widget.thread.avatarUrl,
+          isFollowing: _isFollowing,
+          followsYou: _followsYou,
+        ),
+      ),
+    ).then((_) {
+      // Re-sync follow state if changed in profile
+      if (uid != null && mounted) {
+        final currentThread = ChatManager.instance.getThread(widget.thread.id);
+        if (currentThread.isFollowing != _isFollowing) {
+          setState(() {
+            _isFollowing = currentThread.isFollowing;
+          });
+        }
+      }
+    });
+  }
+
+  void _toggleFollow() async {
+    HapticFeedback.lightImpact();
+    final newStatus = !_isFollowing;
+    setState(() {
+      _isFollowing = newStatus;
+    });
+
+    final uid = _resolvedUserId;
+    if (uid != null) {
+      ChatManager.instance.updateFollowState(uid, newStatus);
+      ProfileSyncService.instance.notifyFollowChanged(
+        targetUserId: uid,
+        isFollowing: newStatus,
+      );
+      try {
+        if (newStatus) {
+          await ProfileRemoteDataSource.instance.toggleFollow(uid);
+        } else {
+          await ProfileRemoteDataSource.instance.unfollow(uid);
+        }
+      } catch (_) {}
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    String relationLabel = widget.thread.followersCount;
+    if (_isFriend) {
+      relationLabel = widget.thread.followersCount.isNotEmpty
+          ? 'Friends 👥 • ${widget.thread.followersCount}'
+          : 'Friends 👥';
+    } else if (_isFollowing) {
+      relationLabel = widget.thread.followersCount.isNotEmpty
+          ? 'Following • ${widget.thread.followersCount}'
+          : 'Following';
+    } else if (_followsYou) {
+      relationLabel = widget.thread.followersCount.isNotEmpty
+          ? 'Follows you • ${widget.thread.followersCount}'
+          : 'Follows you';
+    }
+
     return Scaffold(
       backgroundColor: AppColors.voidBackground,
       appBar: AppBar(
@@ -130,85 +213,141 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         titleSpacing: 0,
-        title: Row(
-          children: [
-            // Avatar
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  width: 1.0,
+        title: GestureDetector(
+          onTap: _openProfile,
+          behavior: HitTestBehavior.opaque,
+          child: Row(
+            children: [
+              // Avatar
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: _isFriend
+                        ? const Color(0xFF2F80ED)
+                        : Colors.white.withValues(alpha: 0.2),
+                    width: _isFriend ? 1.5 : 1.0,
+                  ),
                 ),
-              ),
-              child: ClipOval(
-                child: Image.network(
-                  widget.thread.avatarUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => const Icon(
-                    Icons.storefront_rounded,
-                    color: Colors.white,
-                    size: 20,
+                child: ClipOval(
+                  child: Image.network(
+                    widget.thread.avatarUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => const Icon(
+                      Icons.storefront_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 10),
+              const SizedBox(width: 10),
 
-            // Title & Followers
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        widget.thread.username,
-                        style: const TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
+              // Title & Followers / Relation
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            widget.thread.username,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
                         ),
-                      ),
-                      if (widget.thread.isVerified) ...[
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.check_circle_rounded,
-                          color: Color(0xFF2F80ED),
-                          size: 16,
-                        ),
+                        if (widget.thread.isVerified) ...[
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.check_circle_rounded,
+                            color: Color(0xFF2F80ED),
+                            size: 16,
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
-                  if (widget.thread.followersCount.isNotEmpty)
+                    ),
                     Text(
-                      widget.thread.followersCount,
-                      style: const TextStyle(
+                      relationLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
                         fontFamily: 'Inter',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.outline,
+                        fontSize: 11,
+                        fontWeight: _isFriend ? FontWeight.w600 : FontWeight.w400,
+                        color: _isFriend ? const Color(0xFF2F80ED) : AppColors.outline,
                       ),
                     ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
+          // Follow / Friends Action Pill Button
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: _toggleFollow,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _isFriend
+                      ? const Color(0xFF1E293B)
+                      : (_isFollowing
+                          ? const Color(0xFF27272A)
+                          : const Color(0xFF2F80ED)),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: _isFriend
+                        ? const Color(0xFF2F80ED)
+                        : (_isFollowing
+                            ? const Color(0xFF3F3F46)
+                            : Colors.transparent),
+                    width: 1,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    _isFriend
+                        ? 'Friends 👥'
+                        : (_isFollowing
+                            ? 'Following'
+                            : (_followsYou ? '+ Follow back' : '+ Follow')),
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _isFriend
+                          ? const Color(0xFF38BDF8)
+                          : Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(
               Icons.more_vert_rounded,
               color: Colors.white,
-              size: 24,
+              size: 22,
             ),
-            onPressed: () {},
+            onPressed: _openProfile,
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Column(
@@ -220,6 +359,174 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               physics: const BouncingScrollPhysics(),
               children: [
+                // Account Profile Introduction Card
+                Center(
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 24, top: 8),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF16161A),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        width: 1,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: _openProfile,
+                          child: Container(
+                            width: 72,
+                            height: 72,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: _isFriend
+                                    ? const Color(0xFF2F80ED)
+                                    : Colors.white.withValues(alpha: 0.2),
+                                width: 2,
+                              ),
+                            ),
+                            child: ClipOval(
+                              child: Image.network(
+                                widget.thread.avatarUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) => const Icon(
+                                  Icons.person_rounded,
+                                  color: Colors.white70,
+                                  size: 36,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.thread.username,
+                              style: const TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                            if (widget.thread.isVerified) ...[
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.check_circle_rounded,
+                                color: Color(0xFF2F80ED),
+                                size: 16,
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '@${widget.thread.username.toLowerCase().replaceAll(' ', '_')} • ${widget.thread.followersCount}',
+                          style: const TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 13,
+                            color: Color(0xFF8E8E93),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: _isFriend
+                                ? const Color(0x262F80ED)
+                                : const Color(0xFF242428),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            _isFriend
+                                ? '👥 You and ${widget.thread.username} are friends on Vilo'
+                                : (_isFollowing
+                                    ? '✓ You follow ${widget.thread.username}'
+                                    : (_followsYou
+                                        ? '${widget.thread.username} follows you'
+                                        : 'Connect with ${widget.thread.username}')),
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: _isFriend
+                                  ? const Color(0xFF38BDF8)
+                                  : Colors.white70,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ElevatedButton(
+                              onPressed: _toggleFollow,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _isFriend
+                                    ? const Color(0xFF27272A)
+                                    : (_isFollowing
+                                        ? const Color(0xFF27272A)
+                                        : const Color(0xFF2F80ED)),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  side: BorderSide(
+                                    color: _isFriend
+                                        ? const Color(0xFF2F80ED)
+                                        : Colors.transparent,
+                                  ),
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                              ),
+                              child: Text(
+                                _isFriend
+                                    ? 'Friends 👥'
+                                    : (_isFollowing
+                                        ? 'Following'
+                                        : (_followsYou ? 'Follow Back' : 'Follow')),
+                                style: const TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            OutlinedButton(
+                              onPressed: _openProfile,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: BorderSide(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                              ),
+                              child: const Text(
+                                'View Profile',
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
                 // Date Header
                 Center(
                   child: Container(

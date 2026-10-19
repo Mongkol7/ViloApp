@@ -61,6 +61,7 @@ public class DataInitializer implements CommandLineRunner {
         User mono = null;
         User sophia = null;
         User davi = null;
+        User admin = null;
 
         if (userRepository.count() < 20) {
             log.info("Database has fewer than 20 users. Seeding 20 real platform users...");
@@ -90,7 +91,7 @@ public class DataInitializer implements CommandLineRunner {
                     "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop&q=80",
                     true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
 
-            getOrCreateUser("admin", "admin@vilo.app", "admin123",
+            admin = getOrCreateUser("admin", "admin@vilo.app", "admin123",
                     "Vilo System Admin", "System Administrator",
                     "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80",
                     true, Set.of(Role.ROLE_USER, Role.ROLE_ADMIN));
@@ -178,12 +179,50 @@ public class DataInitializer implements CommandLineRunner {
             ensureFollow(kimliza, mongkol);
             ensureFollow(kimliza, bunheng);
             ensureFollow(mongkol, kimliza);
+            if (admin != null) {
+                ensureFollow(admin, kimliza);
+                ensureFollow(kimliza, admin);
+                ensureFollow(admin, bunheng);
+                ensureFollow(bunheng, admin);
+                ensureFollow(admin, sophia);
+                ensureFollow(sophia, admin);
+                ensureFollow(rithysak, admin);
+            }
 
             log.info("20 Platform users seeded successfully with verified initial follow graphs!");
         } else {
             mongkol = userRepository.findByUsername("mongkol").orElse(null);
             bunheng = userRepository.findByUsername("bunheng").orElse(null);
             kimliza = userRepository.findByUsername("kimliza").orElse(null);
+            sophia = userRepository.findByUsername("sophia_vance").orElse(null);
+            rithysak = userRepository.findByUsername("rithysak").orElse(null);
+
+            if (mongkol != null) {
+                ensureFollow(bunheng, mongkol);
+                ensureFollow(mongkol, bunheng);
+
+                ensureFollow(kimliza, mongkol);
+                ensureFollow(mongkol, kimliza);
+
+                ensureFollow(sophia, mongkol);
+                ensureFollow(mongkol, sophia);
+
+                ensureFollow(rithysak, mongkol);
+            }
+
+            User adminUser = userRepository.findByUsername("admin").orElse(null);
+            if (adminUser != null) {
+                ensureFollow(adminUser, kimliza);
+                ensureFollow(kimliza, adminUser);
+
+                ensureFollow(adminUser, bunheng);
+                ensureFollow(bunheng, adminUser);
+
+                ensureFollow(adminUser, sophia);
+                ensureFollow(sophia, adminUser);
+
+                ensureFollow(rithysak, adminUser);
+            }
         }
 
         if (soundRepository.count() == 0) {

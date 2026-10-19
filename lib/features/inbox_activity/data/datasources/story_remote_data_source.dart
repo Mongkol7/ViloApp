@@ -1,4 +1,5 @@
 import 'dart:ui';
+import '../../../auth/data/datasources/token_storage.dart';
 import '../../../../core/network/api_client.dart';
 import '../../domain/entities/inbox_item.dart';
 import '../../domain/entities/music_track.dart';
@@ -13,16 +14,15 @@ class StoryRemoteDataSource {
   Future<List<StoryItem>> getActiveStories() async {
     try {
       final response = await ApiClient.instance.get('/stories/active');
-      if (response is List && response.isNotEmpty) {
-        final List<StoryItem> items = [];
-
-        // Always put create bubble first
-        items.add(const StoryItem(
-          id: 'create_story',
-          title: 'Share a thought...',
-          imageUrl: '',
-          isCreate: true,
-        ));
+      if (response is List) {
+        final List<StoryItem> items = [
+          const StoryItem(
+            id: 'create_story',
+            title: 'Share a thought...',
+            imageUrl: '',
+            isCreate: true,
+          ),
+        ];
 
         for (final item in response) {
           if (item is Map) {
@@ -42,7 +42,19 @@ class StoryRemoteDataSource {
         return items;
       }
     } catch (_) {}
-    return StaticInboxData.stories;
+
+    final isDemoUser = TokenStorage.instance.isDemoUserSync;
+    if (isDemoUser) {
+      return StaticInboxData.stories;
+    }
+    return const [
+      StoryItem(
+        id: 'create_story',
+        title: 'Share a thought...',
+        imageUrl: '',
+        isCreate: true,
+      ),
+    ];
   }
 
   Future<SharedThoughtStory?> createStory({

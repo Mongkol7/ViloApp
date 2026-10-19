@@ -450,6 +450,12 @@ void main() {
       isTrue,
     );
 
+    // Verify NO auto-reply was generated
+    expect(
+      ChatManager.instance.getMessages('t0').any((m) => m.text.contains('Thanks for reaching out')),
+      isFalse,
+    );
+
     // Pop back to Inbox
     await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
     await tester.pumpAndSettle();
@@ -580,8 +586,9 @@ void main() {
     await tester.tap(find.text('Comments 💬'));
     await tester.pump();
 
-    // Verify comment activity item is shown
+    // Verify comment activity item is shown with direct reply on video
     expect(find.textContaining('Sarah Jenkins'), findsOneWidget);
+    expect(find.text('Reply on video'), findsAtLeastNWidgets(1));
 
     // Pop back to Inbox
     await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
@@ -615,5 +622,129 @@ void main() {
     // Verify back on Inbox
     expect(find.text('Inbox'), findsOneWidget);
   });
+
+  testWidgets('Account-Based Chat & Friends: Mutual friends filter, profile header card, in-chat follow/friend actions', (WidgetTester tester) async {
+    await tester.pumpWidget(_buildTestApp(child: const InboxScreen()));
+
+    // Verify filter chips exist
+    final allFilterFinder = find.byKey(const Key('inbox_filter_all'));
+    final friendsFilterFinder = find.byKey(const Key('inbox_filter_friends'));
+    expect(allFilterFinder, findsOneWidget);
+    expect(friendsFilterFinder, findsOneWidget);
+
+    // Initial state: All chats visible including non-mutual friend (Chhuon Rithysak) and friends (Set Kimliza)
+    expect(find.text('Set Kimliza'), findsOneWidget);
+    expect(find.text('Chhuon Rithysak'), findsOneWidget);
+
+    // Filter by Friends
+    await tester.tap(friendsFilterFinder);
+    await tester.pumpAndSettle();
+
+    // Mutual friends should remain visible
+    expect(find.text('Set Kimliza'), findsOneWidget);
+    expect(find.text('Lim Bunheng'), findsOneWidget);
+    // Non-mutual friend should be filtered out
+    expect(find.text('Chhuon Rithysak'), findsNothing);
+
+    // Switch back to All
+    await tester.tap(allFilterFinder);
+    await tester.pumpAndSettle();
+    expect(find.text('Chhuon Rithysak'), findsOneWidget);
+
+    // Tap into Set Kimliza's chat
+    await tester.tap(find.text('Set Kimliza'));
+    await tester.pumpAndSettle();
+
+    // Verify ChatDetailScreen has Friend indicators
+    expect(find.text('Friends 👥'), findsAtLeastNWidgets(1));
+    expect(find.textContaining('You and Set Kimliza are friends on Vilo'), findsOneWidget);
+    expect(find.text('View Profile'), findsOneWidget);
+
+    // Send a message specifically to Set Kimliza (account userId = 4)
+    final inputFinder = find.byType(TextField);
+    await tester.enterText(inputFinder, 'Hey Kimliza, lets catch up!');
+    await tester.pump();
+
+    final sendButtonFinder = find.byTooltip('Send');
+    await tester.tap(sendButtonFinder);
+    await tester.pumpAndSettle();
+
+    // Verify message appears in UI
+    expect(find.text('Hey Kimliza, lets catch up!'), findsOneWidget);
+
+    // Verify message is saved specifically under Set Kimliza's account thread '4'
+    expect(
+      ChatManager.instance.getMessages('4').any((m) => m.text == 'Hey Kimliza, lets catch up!'),
+      isTrue,
+    );
+
+    // Tap "View Profile" button in the chat header card
+    await tester.tap(find.text('View Profile'));
+    await tester.pumpAndSettle();
+
+    // Verify PublicProfileScreen opened for Set Kimliza
+    expect(find.text('Set Kimliza'), findsAtLeastNWidgets(1));
+    expect(find.text('Friends 👥'), findsAtLeastNWidgets(1));
+    expect(find.text('Message'), findsOneWidget);
+
+    // Tap "Message" button from PublicProfileScreen to return to ChatDetailScreen
+    await tester.tap(find.text('Message'));
+    await tester.pumpAndSettle();
+
+    // Verify back in chat with Kimliza
+    expect(find.text('Hey Kimliza, lets catch up!'), findsOneWidget);
+  });
+
+  testWidgets('Search Discovery, Dynamic Follow/Friend & Direct Messaging: Search registered user, toggle follow/friend, tap Chat, verify thread isolation and persistence', (WidgetTester tester) async {
+    await tester.pumpWidget(_buildTestApp(child: const SearchScreen()));
+    await tester.pumpAndSettle();
+
+    // 1. Enter search keyword for registered user
+    final searchInputFinder = find.byType(TextField);
+    await tester.enterText(searchInputFinder, 'bunheng');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    // Switch to Users tab
+    final usersChipFinder = find.text('Users');
+    expect(usersChipFinder, findsOneWidget);
+    await tester.tap(usersChipFinder);
+    await tester.pumpAndSettle();
+
+    // Verify user card appeared with display name, @username, and Chat button
+    expect(find.text('Lim Bunheng'), findsAtLeastNWidgets(1));
+    expect(find.text('Chat'), findsAtLeastNWidgets(1));
+
+    // 2. Tap Follow / Following button on the search card
+    final followBtnFinder = find.widgetWithText(GestureDetector, 'Follow');
+    if (followBtnFinder.evaluate().isNotEmpty) {
+      await tester.tap(followBtnFinder.first);
+      await tester.pumpAndSettle();
+      expect(find.text('Following'), findsAtLeastNWidgets(1));
+    }
+
+    // 3. Tap the "Chat" button directly from search results
+    final chatBtnFinder = find.text('Chat').first;
+    await tester.tap(chatBtnFinder);
+    await tester.pumpAndSettle();
+
+    // 4. Verify ChatDetailScreen opened for Lim Bunheng
+    expect(find.text('Lim Bunheng'), findsAtLeastNWidgets(1));
+    expect(find.byType(TextField), findsOneWidget);
+
+    // 5. Send a peer-to-peer message without auto-reply
+    await tester.enterText(find.byType(TextField), 'Hey Bunheng, check this out!');
+    await tester.pump();
+    await tester.tap(find.byTooltip('Send'));
+    await tester.pumpAndSettle();
+
+    // Verify message sent
+    expect(find.text('Hey Bunheng, check this out!'), findsOneWidget);
+
+    // Verify persisted in ChatManager
+    final messages = ChatManager.instance.getMessages('2');
+    expect(messages.any((m) => m.text == 'Hey Bunheng, check this out!'), isTrue);
+  });
 }
+
 

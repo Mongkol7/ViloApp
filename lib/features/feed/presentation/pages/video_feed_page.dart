@@ -9,15 +9,57 @@ import '../../../profile/presentation/screens/public_profile_screen.dart';
 
 class VideoFeedPage extends StatefulWidget {
   final bool isActive;
+  final int initialPage;
+  final bool openCommentsOnStart;
+  final String? initialCommentReplyUser;
+  final String? initialCommentText;
+  final bool isStandalone;
 
-  const VideoFeedPage({super.key, this.isActive = true});
+  const VideoFeedPage({
+    super.key,
+    this.isActive = true,
+    this.initialPage = 0,
+    this.openCommentsOnStart = false,
+    this.initialCommentReplyUser,
+    this.initialCommentText,
+    this.isStandalone = false,
+  });
 
   @override
   State<VideoFeedPage> createState() => _VideoFeedPageState();
 }
 
 class _VideoFeedPageState extends State<VideoFeedPage> {
-  int _currentPage = 0;
+  late int _currentPage;
+  late final PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentPage = widget.initialPage;
+    _pageController = PageController(initialPage: widget.initialPage);
+
+    if (widget.openCommentsOnStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (context) => CommentBottomSheet(
+            initialReplyTo: widget.initialCommentReplyUser,
+            highlightCommentText: widget.initialCommentText,
+          ),
+        );
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -87,30 +129,58 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: ScrollConfiguration(
-        behavior: ScrollConfiguration.of(context).copyWith(
-          dragDevices: {
-            PointerDeviceKind.touch,
-            PointerDeviceKind.mouse,
-            PointerDeviceKind.trackpad,
-          },
-        ),
-        child: PageView.builder(
-          scrollDirection: Axis.vertical,
-          itemCount: mockVideos.length,
-          onPageChanged: (index) {
-            setState(() {
-              _currentPage = index;
-            });
-          },
-          itemBuilder: (context, index) {
-            return _VideoPostWidget(
-              data: mockVideos[index],
-              isCurrentPage: _currentPage == index,
-              isActive: widget.isActive,
-            );
-          },
-        ),
+      body: Stack(
+        children: [
+          ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              dragDevices: {
+                PointerDeviceKind.touch,
+                PointerDeviceKind.mouse,
+                PointerDeviceKind.trackpad,
+              },
+            ),
+            child: PageView.builder(
+              controller: _pageController,
+              scrollDirection: Axis.vertical,
+              itemCount: mockVideos.length,
+              onPageChanged: (index) {
+                setState(() {
+                  _currentPage = index;
+                });
+              },
+              itemBuilder: (context, index) {
+                return _VideoPostWidget(
+                  data: mockVideos[index],
+                  isCurrentPage: _currentPage == index,
+                  isActive: widget.isActive,
+                );
+              },
+            ),
+          ),
+          if (widget.isStandalone || Navigator.canPop(context))
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 10,
+              left: 16,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                ),
+                child: IconButton(
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

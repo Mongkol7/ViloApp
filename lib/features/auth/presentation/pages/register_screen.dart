@@ -9,6 +9,8 @@ import '../widgets/vilo_primary_button.dart';
 import '../widgets/vilo_social_login_section.dart';
 import '../../../bottom_nav/presentation/pages/main_navigation_shell.dart';
 import '../../data/datasources/auth_remote_data_source.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
+import '../../../inbox_activity/data/datasources/chat_manager.dart';
 import 'login_screen.dart';
 
 /// Screen 3 — Register / Join Vilo
@@ -126,12 +128,15 @@ class _RegisterScreenState extends State<RegisterScreen>
         username = username.substring(0, 50);
       }
 
-      await authSource.register(
+      final user = await authSource.register(
         username: username,
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text,
         displayName: fullName,
       );
+
+      ProfileSyncService.instance.setCurrentUser(user);
+      ChatManager.instance.switchUser(user.id);
 
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(

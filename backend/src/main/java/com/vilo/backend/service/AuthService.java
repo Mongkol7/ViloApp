@@ -52,6 +52,7 @@ public class AuthService {
             throw new BadRequestException("Email '" + request.getEmail() + "' is already registered");
         }
 
+        String defaultAvatar = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500";
         User user = User.builder()
                 .username(request.getUsername().trim().toLowerCase())
                 .email(request.getEmail().trim().toLowerCase())
@@ -59,6 +60,7 @@ public class AuthService {
                 .displayName(request.getDisplayName() != null && !request.getDisplayName().isBlank() 
                         ? request.getDisplayName().trim() 
                         : request.getUsername().trim())
+                .avatarUrl(defaultAvatar)
                 .roles(Set.of(Role.ROLE_USER))
                 .isVerified(false)
                 .build();

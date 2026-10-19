@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../auth/data/datasources/token_storage.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../../inbox_activity/data/datasources/thought_story_manager.dart';
 import '../../../inbox_activity/domain/entities/shared_thought_story.dart';
@@ -33,18 +34,34 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     super.initState();
     _tabController = TabController(length: 5, vsync: this, initialIndex: 1);
     // Initialize with local default for immediate render / testing
-    _user = ProfileSyncService.instance.cachedMyProfile ??
-        UserModel(
-          id: 1,
-          username: ProfileMockData.username,
-          email: 'mongkol@vilo.app',
-          displayName: ProfileMockData.name,
-          bio: ProfileMockData.bio,
-          avatarUrl: ProfileMockData.avatarUrl,
-          isVerified: true,
-          followersCount: ProfileSyncService.instance.mockFollowersCount,
-          followingCount: ProfileSyncService.instance.mockFollowingCount,
-        );
+    final cached = ProfileSyncService.instance.cachedMyProfile;
+    final currentUid = TokenStorage.instance.currentUserIdSync;
+    final isDemo = TokenStorage.instance.isDemoUserSync;
+
+    _user = cached ??
+        (isDemo
+            ? UserModel(
+                id: 1,
+                username: ProfileMockData.username,
+                email: 'mongkol@vilo.app',
+                displayName: ProfileMockData.name,
+                bio: ProfileMockData.bio,
+                avatarUrl: ProfileMockData.avatarUrl,
+                isVerified: true,
+                followersCount: ProfileSyncService.instance.mockFollowersCount,
+                followingCount: ProfileSyncService.instance.mockFollowingCount,
+              )
+            : UserModel(
+                id: currentUid ?? 0,
+                username: TokenStorage.instance.currentUsernameSync ?? 'user',
+                email: '',
+                displayName: TokenStorage.instance.currentDisplayNameSync ?? TokenStorage.instance.currentUsernameSync ?? 'User',
+                bio: '',
+                avatarUrl: '',
+                isVerified: false,
+                followersCount: 0,
+                followingCount: 0,
+              ));
     ProfileSyncService.instance.followEvents.addListener(_onFollowEvent);
     _loadProfile();
   }
@@ -387,7 +404,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       _buildDivider(),
                       _buildStatItem('Followers', followersDisplay, onTap: () => _openFollowersFollowing(0)),
                       _buildDivider(),
-                      _buildStatItem('Likes', '154K'),
+                      _buildStatItem('Likes', TokenStorage.instance.isDemoUserSync ? '154K' : '0'),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -437,11 +454,36 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         body: TabBarView(
           controller: _tabController,
           children: [
-            CustomScrollView(slivers: buildProfileTabSlivers(0)), // Music
-            CustomScrollView(slivers: buildProfileTabSlivers(1)), // Grid
-            CustomScrollView(slivers: buildProfileTabSlivers(2)), // Shop
-            CustomScrollView(slivers: buildProfileTabSlivers(3)), // Saved
-            CustomScrollView(slivers: buildProfileTabSlivers(4)), // Liked
+            Builder(
+              builder: (context) {
+                final isClean = !TokenStorage.instance.isDemoUserSync;
+                return CustomScrollView(slivers: buildProfileTabSlivers(0, isCleanSlate: isClean));
+              },
+            ),
+            Builder(
+              builder: (context) {
+                final isClean = !TokenStorage.instance.isDemoUserSync;
+                return CustomScrollView(slivers: buildProfileTabSlivers(1, isCleanSlate: isClean));
+              },
+            ),
+            Builder(
+              builder: (context) {
+                final isClean = !TokenStorage.instance.isDemoUserSync;
+                return CustomScrollView(slivers: buildProfileTabSlivers(2, isCleanSlate: isClean));
+              },
+            ),
+            Builder(
+              builder: (context) {
+                final isClean = !TokenStorage.instance.isDemoUserSync;
+                return CustomScrollView(slivers: buildProfileTabSlivers(3, isCleanSlate: isClean));
+              },
+            ),
+            Builder(
+              builder: (context) {
+                final isClean = !TokenStorage.instance.isDemoUserSync;
+                return CustomScrollView(slivers: buildProfileTabSlivers(4, isCleanSlate: isClean));
+              },
+            ),
           ],
         ),
       ),

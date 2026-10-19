@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../auth/data/datasources/token_storage.dart';
+import '../../../profile/data/datasources/profile_remote_data_source.dart';
 import '../../domain/entities/inbox_item.dart';
 import 'chat_detail_screen.dart';
 
@@ -33,7 +35,9 @@ class NewFollowersScreen extends StatefulWidget {
 }
 
 class _NewFollowersScreenState extends State<NewFollowersScreen> {
-  final List<FollowerUserItem> _followers = [
+  late List<FollowerUserItem> _followers;
+
+  static final List<FollowerUserItem> _demoFollowers = [
     FollowerUserItem(
       id: 'f1',
       name: 'R.DRR',
@@ -96,6 +100,38 @@ class _NewFollowersScreenState extends State<NewFollowersScreen> {
       isFollowing: false,
     ),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    final isDemo = TokenStorage.instance.isDemoUserSync;
+    _followers = isDemo ? List.from(_demoFollowers) : [];
+    _loadFollowers();
+  }
+
+  Future<void> _loadFollowers() async {
+    final uid = TokenStorage.instance.currentUserIdSync;
+    if (uid == null) return;
+    try {
+      final list = await ProfileRemoteDataSource.instance.getFollowers(uid);
+      final isDemo = TokenStorage.instance.isDemoUserSync;
+      if (!isDemo && mounted) {
+        setState(() {
+          _followers = list.map((u) => FollowerUserItem(
+            id: u.id.toString(),
+            name: u.displayName,
+            username: u.username,
+            avatarUrl: (u.avatarUrl != null && u.avatarUrl!.isNotEmpty)
+                ? u.avatarUrl!
+                : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+            timeAgo: 'Recently',
+            isVerified: u.isVerified,
+            isFollowing: u.isFollowing,
+          )).toList();
+        });
+      }
+    } catch (_) {}
+  }
 
   String _searchQuery = '';
 

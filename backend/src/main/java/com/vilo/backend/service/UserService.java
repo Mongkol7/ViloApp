@@ -2,6 +2,7 @@ package com.vilo.backend.service;
 
 import com.vilo.backend.dto.UpdateProfileRequest;
 import com.vilo.backend.dto.UserResponse;
+import com.vilo.backend.entity.NotificationType;
 import com.vilo.backend.entity.User;
 import com.vilo.backend.exception.BadRequestException;
 import com.vilo.backend.exception.ResourceNotFoundException;
@@ -16,9 +17,11 @@ import java.util.stream.Collectors;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, NotificationService notificationService) {
         this.userRepository = userRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional(readOnly = true)
@@ -93,6 +96,20 @@ public class UserService {
             user.getFollowing().add(targetUser);
             userRepository.save(targetUser);
             userRepository.save(user);
+
+            // Send real-time follow notification
+            try {
+                notificationService.sendNotification(
+                        targetUser,
+                        user,
+                        NotificationType.FOLLOW,
+                        "New Follower",
+                        user.getDisplayName() + " started following you",
+                        String.valueOf(user.getId()),
+                        "USER"
+                );
+            } catch (Exception ignored) {}
+
             return true; // followed
         }
     }
