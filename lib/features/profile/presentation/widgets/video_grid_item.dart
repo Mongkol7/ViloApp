@@ -11,11 +11,13 @@ class VideoGridItem extends StatelessWidget {
     required this.thumbnailUrl,
     this.viewsLabel,
     this.onTap,
+    this.onLongPress,
   });
 
   final String thumbnailUrl;
   final String? viewsLabel;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -52,6 +54,7 @@ class VideoGridItem extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       behavior: HitTestBehavior.opaque,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(PulseRadius.sm),

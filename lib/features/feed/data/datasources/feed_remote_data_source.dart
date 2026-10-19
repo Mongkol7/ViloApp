@@ -62,6 +62,36 @@ class FeedRemoteDataSource {
     _userVideosCache.remove(clean);
   }
 
+  void clearCache() {
+    _feedCache.clear();
+    _userVideosCache.clear();
+  }
+
+  /// Remove a video from all in-memory feed and user video caches
+  void removeCachedVideo(int videoId) {
+    for (final key in _feedCache.keys) {
+      _feedCache[key]?.removeWhere((v) => v.id == videoId);
+    }
+    for (final key in _userVideosCache.keys) {
+      _userVideosCache[key]?.removeWhere((v) => v.id == videoId);
+    }
+  }
+
+  /// Delete video permanently from backend and purge from local caches
+  Future<bool> deleteVideo(int videoId) async {
+    try {
+      await _client.delete(
+        '/videos/$videoId',
+        requireAuth: true,
+      );
+      removeCachedVideo(videoId);
+      return true;
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Delete video error: $e');
+      return false;
+    }
+  }
+
   /// Synchronize like, save, or comment changes across all in-memory caches instantly
   void updateCachedVideo({
     required int videoId,
@@ -752,9 +782,9 @@ class FeedRemoteDataSource {
       ),
       const VideoModel(
         id: 7,
-        creatorId: 1,
-        username: '@mongkol',
-        displayName: 'Thoeung Sereymongkol',
+        creatorId: 99,
+        username: '@demo_vilo',
+        displayName: 'Demo Creator',
         avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500',
         isVerified: true,
         videoUrl: 'assets/videos/vid1.mp4',
@@ -764,7 +794,7 @@ class FeedRemoteDataSource {
         commentCount: 45200,
         saveCount: 120000,
         isFollowing: false,
-        isMe: true,
+        isMe: false,
       ),
     ];
 

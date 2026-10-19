@@ -19,12 +19,17 @@ class VideoFeedPage extends StatefulWidget {
   final List<VideoModel>? initialVideos;
   final int initialIndex;
 
+  final bool canDelete;
+  final bool? hasBottomNav;
+
   const VideoFeedPage({
     super.key,
     this.isActive = true,
     this.feedType = 'FOR_YOU',
     this.initialVideos,
     this.initialIndex = 0,
+    this.canDelete = false,
+    this.hasBottomNav,
   });
 
   @override
@@ -71,6 +76,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
     }
     ProfileSyncService.instance.followEvents.addListener(_onGlobalFollowChanged);
     ProfileSyncService.instance.videoInteractionEvents.addListener(_onGlobalVideoInteraction);
+    ProfileSyncService.instance.videoDeletedEvents.addListener(_onGlobalVideoDeleted);
     VideoFeedManager.instance.latestUploadedVideoNotifier.addListener(_onNewVideoUploaded);
   }
 
@@ -88,10 +94,23 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
   @override
   void dispose() {
     VideoFeedManager.instance.latestUploadedVideoNotifier.removeListener(_onNewVideoUploaded);
+    ProfileSyncService.instance.videoDeletedEvents.removeListener(_onGlobalVideoDeleted);
     ProfileSyncService.instance.videoInteractionEvents.removeListener(_onGlobalVideoInteraction);
     ProfileSyncService.instance.followEvents.removeListener(_onGlobalFollowChanged);
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _onGlobalVideoDeleted() {
+    if (!mounted) return;
+    final deletedId = ProfileSyncService.instance.videoDeletedEvents.value;
+    if (deletedId == null) return;
+    setState(() {
+      _videos.removeWhere((v) => v.id == deletedId);
+      if (_currentPage >= _videos.length && _videos.isNotEmpty) {
+        _currentPage = _videos.length - 1;
+      }
+    });
   }
 
   void _onGlobalVideoInteraction() {
@@ -323,6 +342,62 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
     } catch (_) {}
   }
 
+  Future<void> _deleteVideoAt(int index) async {
+    if (index < 0 || index >= _videos.length) return;
+    final videoToDelete = _videos[index];
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+            ),
+            SizedBox(width: 12),
+            Text('Deleting video...', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        duration: Duration(milliseconds: 1500),
+        backgroundColor: Color(0xFF1E1E24),
+      ),
+    );
+
+    final success = await _dataSource.deleteVideo(videoToDelete.id);
+    if (!mounted) return;
+
+    if (success) {
+      ProfileSyncService.instance.notifyVideoDeleted(videoToDelete.id);
+      setState(() {
+        _videos.removeAt(index);
+        if (_currentPage >= _videos.length && _videos.isNotEmpty) {
+          _currentPage = _videos.length - 1;
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Video deleted successfully'),
+          backgroundColor: Color(0xFF1E1E24),
+        ),
+      );
+
+      if (_videos.isEmpty && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to delete video. Please check your connection.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
+  bool get _isStandalone => widget.hasBottomNav == false || widget.initialVideos != null;
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -394,8 +469,11 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
                   video: _videos[index],
                   isCurrentPage: _currentPage == index,
                   isActive: widget.isActive,
+                  canDelete: widget.canDelete,
+                  isStandalone: _isStandalone,
                   onLikeTap: () => _onLikeToggled(index),
                   onSaveTap: () => _onSaveToggled(index),
+                  onDeleteVideo: () => _deleteVideoAt(index),
                   onCommentCountChanged: (newCount) {
                     final updated = _videos[index].copyWith(commentCount: newCount);
                     setState(() {
@@ -422,7 +500,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
+                    color: Colors.black.withValues(alpha: 0.5),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
@@ -439,8 +517,11 @@ class _VideoPostWidget extends StatefulWidget {
   final VideoModel video;
   final bool isCurrentPage;
   final bool isActive;
+  final bool canDelete;
+  final bool isStandalone;
   final VoidCallback onLikeTap;
   final VoidCallback onSaveTap;
+  final VoidCallback? onDeleteVideo;
   final ValueChanged<int> onCommentCountChanged;
 
   const _VideoPostWidget({
@@ -448,8 +529,11 @@ class _VideoPostWidget extends StatefulWidget {
     required this.video,
     required this.isCurrentPage,
     required this.isActive,
+    this.canDelete = false,
+    this.isStandalone = false,
     required this.onLikeTap,
     required this.onSaveTap,
+    this.onDeleteVideo,
     required this.onCommentCountChanged,
   });
 
@@ -465,6 +549,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   bool _manuallyPaused = false;
   bool _hasControllerError = false;
   bool _showHeartAnimation = false;
+  bool _isMuted = false;
   late bool _isFollowing;
 
   @override
@@ -494,6 +579,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
     _controller!.initialize().then((_) {
       if (!mounted) return;
       _controller!.setLooping(true);
+      _controller!.setVolume(_isMuted ? 0.0 : 1.0);
       setState(() {});
       if (widget.isActive && widget.isCurrentPage && !_manuallyPaused) {
         _controller!.play();
@@ -539,7 +625,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
       return Image.asset(
         url,
         fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => _buildMediaError(),
+        errorBuilder: (_, _, _) => _buildMediaError(),
       );
     }
     return Image.network(
@@ -555,7 +641,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
           ),
         );
       },
-      errorBuilder: (_, __, ___) => _buildMediaError(),
+      errorBuilder: (_, _, _) => _buildMediaError(),
     );
   }
 
@@ -678,9 +764,118 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
         _controller!.pause();
       } else {
         _manuallyPaused = false;
+        _controller!.setVolume(_isMuted ? 0.0 : 1.0);
         _controller!.play();
       }
     });
+  }
+
+  void _toggleMute() {
+    setState(() {
+      _isMuted = !_isMuted;
+      _controller?.setVolume(_isMuted ? 0.0 : 1.0);
+    });
+  }
+
+  void _confirmDeleteVideo() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Video', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text(
+          'Are you sure you want to delete this video? This action cannot be undone.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFE2C55),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      widget.onDeleteVideo?.call();
+    }
+  }
+
+  Widget _buildCaptionWithHashtags(VideoModel video) {
+    String text = video.caption.trim();
+
+    // If tags exist and aren't already part of caption, append them so they display on posted video
+    if (video.tags.isNotEmpty) {
+      final missingTags = video.tags.where((t) {
+        final clean = t.replaceAll('#', '').trim().toLowerCase();
+        return clean.isNotEmpty && !text.toLowerCase().contains('#$clean');
+      }).toList();
+      if (missingTags.isNotEmpty) {
+        final appendedTags = missingTags.map((t) {
+          final clean = t.replaceAll('#', '').trim();
+          return '#$clean';
+        }).join(' ');
+        text = text.isEmpty ? appendedTags : '$text $appendedTags';
+      }
+    }
+
+    if (text.isEmpty) return const SizedBox.shrink();
+
+    // Parse text into spans (words starting with # are cyan, @ are light blue)
+    final words = text.split(RegExp(r'(\s+)'));
+    final spans = <TextSpan>[];
+
+    for (final word in words) {
+      if (word.startsWith('#')) {
+        spans.add(
+          TextSpan(
+            text: '$word ',
+            style: const TextStyle(
+              color: Color(0xFF20D5EC), // Vibrant cyan for hashtags
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+        );
+      } else if (word.startsWith('@')) {
+        spans.add(
+          TextSpan(
+            text: '$word ',
+            style: const TextStyle(
+              color: Color(0xFF60A5FA), // Light blue for user mentions
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+        );
+      } else if (word.trim().isNotEmpty) {
+        spans.add(
+          TextSpan(
+            text: '$word ',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              height: 1.3,
+            ),
+          ),
+        );
+      }
+    }
+
+    return RichText(
+      text: TextSpan(children: spans),
+      maxLines: 4,
+      overflow: TextOverflow.ellipsis,
+    );
   }
 
   void _goToProfile() {
@@ -733,6 +928,18 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
         ? video.avatarUrl!
         : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
 
+    final mediaPadding = MediaQuery.of(context).padding;
+    final double infoBottom = widget.isStandalone
+        ? (mediaPadding.bottom + 20.0)
+        : (mediaPadding.bottom + 80.0);
+    final double actionButtonsBottom = widget.isStandalone
+        ? (mediaPadding.bottom + 24.0)
+        : (mediaPadding.bottom + 84.0);
+    final double dotsBottom = widget.isStandalone
+        ? (mediaPadding.bottom + 175.0)
+        : (mediaPadding.bottom + 235.0);
+    final double gradientHeight = widget.isStandalone ? 280.0 : 340.0;
+
     return Stack(
       children: [
         // Background Video or Photo
@@ -764,7 +971,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                               ),
                               // Round dots pagination indicator
                               Positioned(
-                                bottom: 125,
+                                bottom: dotsBottom,
                                 left: 0,
                                 right: 0,
                                 child: Center(
@@ -897,19 +1104,47 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
             ),
           ),
 
+        // Volume / Mute toggle button (Top Right)
+        if (!widget.video.isImagePost)
+          Positioned(
+            top: widget.isStandalone
+                ? (MediaQuery.of(context).padding.top + 16)
+                : (MediaQuery.of(context).padding.top + 64),
+            right: 8,
+            child: GestureDetector(
+              onTap: _toggleMute,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(
+                  _isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+            ),
+          ),
+
         // Dark gradient overlay at the bottom for text readability
         Positioned(
           bottom: 0,
           left: 0,
           right: 0,
-          height: 250,
+          height: gradientHeight,
           child: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.bottomCenter,
                 end: Alignment.topCenter,
                 colors: [
-                  Colors.black.withValues(alpha: 0.8),
+                  Colors.black.withValues(alpha: 0.85),
                   Colors.transparent,
                 ],
               ),
@@ -919,8 +1154,8 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
 
         // Right side interaction buttons
         Positioned(
-          right: 16,
-          bottom: 140,
+          right: 8,
+          bottom: actionButtonsBottom,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -942,7 +1177,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                         child: CircleAvatar(
                           radius: 22,
                           backgroundImage: NetworkImage(avatar),
-                          onBackgroundImageError: (_, __) {},
+                          onBackgroundImageError: (_, _) {},
                           backgroundColor: Colors.grey[900],
                         ),
                       ),
@@ -951,20 +1186,8 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                     if (!_isFollowing && !widget.video.isMe)
                       Positioned(
                         bottom: 0,
-                        child: GestureDetector(
-                          onTap: _toggleFollow,
-                          child: Container(
-                            padding: const EdgeInsets.all(2.5),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFFE2C55), // Red follow badge
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.add,
-                              color: Colors.white,
-                              size: 13,
-                            ),
-                          ),
+                        child: _AnimatedFollowButton(
+                          onFollow: _toggleFollow,
                         ),
                       ),
                   ],
@@ -1038,9 +1261,20 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                   radius: 18,
                   backgroundColor: Colors.grey[800],
                   backgroundImage: const NetworkImage('https://images.unsplash.com/photo-1518770660439-4636190af475?w=100'),
-                  onBackgroundImageError: (_, __) {},
+                  onBackgroundImageError: (_, _) {},
                 ),
               ),
+
+              // Delete button (visible ONLY when viewing posted videos from profile and owned by current user)
+              if (widget.canDelete && widget.video.isOwner) ...[
+                const SizedBox(height: 16),
+                _InteractionButton(
+                  icon: Icons.delete_outline_rounded,
+                  label: 'Delete',
+                  activeColor: const Color(0xFFFE2C55),
+                  onTap: _confirmDeleteVideo,
+                ),
+              ],
             ],
           ),
         ),
@@ -1048,8 +1282,8 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
         // Bottom left user info and caption
         Positioned(
           left: 16,
-          bottom: 140,
-          right: 80,
+          bottom: infoBottom,
+          right: 70,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -1074,13 +1308,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                 ],
               ),
               const SizedBox(height: 8),
-              Text(
-                video.caption,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                ),
-              ),
+              _buildCaptionWithHashtags(video),
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -1167,6 +1395,202 @@ class _InteractionButton extends StatelessWidget {
             ]
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Dynamic Animated Follow Button with pop bounce, rotation, checkmark morph,
+/// glowing ripple shockwave ring, and smooth exit fade
+class _AnimatedFollowButton extends StatefulWidget {
+  final VoidCallback onFollow;
+
+  const _AnimatedFollowButton({required this.onFollow});
+
+  @override
+  State<_AnimatedFollowButton> createState() => _AnimatedFollowButtonState();
+}
+
+class _AnimatedFollowButtonState extends State<_AnimatedFollowButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _rotationAnimation;
+  late Animation<double> _checkMorphAnimation;
+  late Animation<double> _rippleScaleAnimation;
+  late Animation<double> _rippleOpacityAnimation;
+  late Animation<double> _exitScaleAnimation;
+  late Animation<double> _exitOpacityAnimation;
+  late Animation<Color?> _colorAnimation;
+  bool _isAnimating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+
+    // Initial pop bounce (0.0 to 0.45)
+    _scaleAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 1.42).chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 45,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.42, end: 1.15).chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 35,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.15, end: 1.15),
+        weight: 20,
+      ),
+    ]).animate(CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.0, 0.65),
+    ));
+
+    // Rotation (0.0 to 0.40)
+    _rotationAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 0.40, curve: Curves.easeOutBack),
+      ),
+    );
+
+    // Morph to checkmark (0.15 to 0.45)
+    _checkMorphAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.18, 0.45, curve: Curves.easeInOut),
+    );
+
+    // Color transition from TikTok red to emerald green (0.10 to 0.40)
+    _colorAnimation = ColorTween(
+      begin: const Color(0xFFFE2C55),
+      end: const Color(0xFF10B981),
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.10, 0.40, curve: Curves.easeInOut),
+    ));
+
+    // Ripple shockwave ring
+    _rippleScaleAnimation = Tween<double>(begin: 0.9, end: 2.6).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.05, 0.50, curve: Curves.easeOutCubic),
+      ),
+    );
+    _rippleOpacityAnimation = Tween<double>(begin: 0.9, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.10, 0.50, curve: Curves.easeOut),
+      ),
+    );
+
+    // Final shrink & exit (0.68 to 1.0)
+    _exitScaleAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.68, 1.0, curve: Curves.easeInBack),
+      ),
+    );
+    _exitOpacityAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.72, 1.0, curve: Curves.easeIn),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _triggerFollow() {
+    if (_isAnimating) return;
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _isAnimating = true;
+    });
+
+    _controller.forward().then((_) {
+      if (mounted) {
+        widget.onFollow();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _triggerFollow,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final scale = _scaleAnimation.value * _exitScaleAnimation.value;
+          final opacity = _exitOpacityAnimation.value.clamp(0.0, 1.0);
+          final showCheck = _checkMorphAnimation.value >= 0.5;
+
+          return Opacity(
+            opacity: opacity,
+            child: Stack(
+              alignment: Alignment.center,
+              clipBehavior: Clip.none,
+              children: [
+                // Glowing expanding ripple ring
+                if (_isAnimating && _rippleOpacityAnimation.value > 0.01)
+                  Transform.scale(
+                    scale: _rippleScaleAnimation.value,
+                    child: Opacity(
+                      opacity: _rippleOpacityAnimation.value,
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xFFFE2C55),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // Button pill
+                Transform.scale(
+                  scale: scale,
+                  child: Container(
+                    padding: const EdgeInsets.all(3.0),
+                    decoration: BoxDecoration(
+                      color: _colorAnimation.value ?? const Color(0xFFFE2C55),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: (_colorAnimation.value ?? const Color(0xFFFE2C55)).withValues(alpha: 0.55),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: Transform.rotate(
+                      angle: _rotationAnimation.value * 3.14159,
+                      child: Icon(
+                        showCheck ? Icons.check_rounded : Icons.add,
+                        color: Colors.white,
+                        size: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

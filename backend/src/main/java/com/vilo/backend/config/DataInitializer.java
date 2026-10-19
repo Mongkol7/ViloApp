@@ -231,10 +231,6 @@ public class DataInitializer implements CommandLineRunner {
         }
 
         log.info("Checking and seeding creator videos for all real platform accounts...");
-        seedVideoIfMissing("mongkol", "assets/videos/vid1.mp4", "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600",
-                "Building modern reactive Flutter UI with Spring Boot #coding #flutterdev", "Seven7 Team Anthem - Seven7 Beats", 1250000L, 45200L, 120000L);
-        seedVideoIfMissing("mongkol", "assets/videos/vid2.mp4", "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=600",
-                "Late night debug session with neon synthwave 🌃 #vilo #developer", "Neon Midnight Beats", 420000L, 15300L, 34000L);
 
         seedVideoIfMissing("bunheng", "assets/videos/vid2.mp4", "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600",
                 "Night walk through the neon streets #citylife #neon #cyberpunk", "Cyberpunk Beats - Synthwave", 890000L, 12100L, 85000L);

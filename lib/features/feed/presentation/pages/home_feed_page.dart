@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../../../search_discover/presentation/pages/search_screen.dart';
 import '../../../shop/presentation/pages/shop_page.dart';
@@ -67,7 +68,7 @@ class _HomeFeedPageState extends State<HomeFeedPage>
             ],
           ),
 
-          // Custom Top App Bar overlay
+          // Custom Top App Bar overlay with horizontal scrolling and edge fade
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
             left: 0,
@@ -75,39 +76,68 @@ class _HomeFeedPageState extends State<HomeFeedPage>
             child: Row(
               children: [
                 Expanded(
-                  child: Theme(
-                    data: Theme.of(context).copyWith(
-                      splashColor: Colors.transparent,
-                      highlightColor: Colors.transparent,
-                    ),
-                    child: TabBar(
-                      controller: _tabController,
-                      isScrollable: true,
-                      indicatorColor: Colors.white,
-                      indicatorSize: TabBarIndicatorSize.label,
-                      indicatorWeight: 3,
-                      labelColor: Colors.white,
-                      unselectedLabelColor: Colors.grey,
-                      labelStyle: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                  child: ShaderMask(
+                    shaderCallback: (Rect bounds) {
+                      return const LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [
+                          Colors.transparent,
+                          Colors.white,
+                          Colors.white,
+                          Colors.transparent,
+                        ],
+                        stops: [0.0, 0.08, 0.92, 1.0],
+                      ).createShader(bounds);
+                    },
+                    blendMode: BlendMode.dstIn,
+                    child: Theme(
+                      data: Theme.of(context).copyWith(
+                        splashColor: Colors.transparent,
+                        highlightColor: Colors.transparent,
                       ),
-                      unselectedLabelStyle: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.normal,
+                      child: ScrollConfiguration(
+                        behavior: ScrollConfiguration.of(context).copyWith(
+                          dragDevices: {
+                            PointerDeviceKind.touch,
+                            PointerDeviceKind.mouse,
+                            PointerDeviceKind.trackpad,
+                          },
+                        ),
+                        child: TabBar(
+                          controller: _tabController,
+                          isScrollable: true,
+                          tabAlignment: TabAlignment.center,
+                          physics: const BouncingScrollPhysics(),
+                          padding: EdgeInsets.zero,
+                          labelPadding: const EdgeInsets.symmetric(horizontal: 20.0),
+                          indicatorColor: Colors.white,
+                          indicatorSize: TabBarIndicatorSize.label,
+                          indicatorWeight: 3,
+                          labelColor: Colors.white,
+                          unselectedLabelColor: Colors.white.withValues(alpha: 0.50),
+                          labelStyle: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          unselectedLabelStyle: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.normal,
+                          ),
+                          dividerColor: Colors.transparent, // Remove default divider
+                          tabs: const [
+                            Tab(text: 'Community'),
+                            Tab(text: 'Following'),
+                            Tab(text: 'For You'),
+                            Tab(text: 'Shop'),
+                          ],
+                        ),
                       ),
-                      dividerColor: Colors.transparent, // Remove default divider
-                      tabs: const [
-                        Tab(text: 'Community'),
-                        Tab(text: 'Following'),
-                        Tab(text: 'For You'),
-                        Tab(text: 'Shop'),
-                      ],
                     ),
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(right: 16.0),
+                  padding: const EdgeInsets.only(right: 8.0),
                   child: IconButton(
                     icon: const Icon(Icons.search, color: Colors.white),
                     onPressed: () {

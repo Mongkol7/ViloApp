@@ -1,5 +1,6 @@
 import '../../../../core/network/api_client.dart';
 import '../../../auth/data/models/user_model.dart';
+import 'profile_sync_service.dart';
 
 class ProfileRemoteDataSource {
   final ApiClient _client;
@@ -9,6 +10,10 @@ class ProfileRemoteDataSource {
   static final ProfileRemoteDataSource instance = ProfileRemoteDataSource();
 
   final Map<String, UserModel> _userCache = {};
+
+  void clearCache() {
+    _userCache.clear();
+  }
 
   UserModel? getCachedUser(dynamic idOrUsername) {
     if (idOrUsername == null) return null;
@@ -29,6 +34,7 @@ class ProfileRemoteDataSource {
     final response = await _client.get('/users/me', requireAuth: true);
     final user = UserModel.fromJson(response as Map<String, dynamic>);
     cacheUser(user);
+    ProfileSyncService.instance.cachedMyProfile = user;
     return user;
   }
 

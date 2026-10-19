@@ -436,7 +436,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
       return;
     }
 
-    // Parse tags
+    // Parse tags and append them into finalCaption so hashtags show on the posted content
     final tagsText = _tagsController.text.trim();
     final List<String> tags = tagsText.isNotEmpty
         ? tagsText
@@ -445,6 +445,18 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
             .where((t) => t.isNotEmpty)
             .toList()
         : [];
+
+    String finalCaption = caption;
+    if (tags.isNotEmpty) {
+      final missingTags = tags.where((t) {
+        final tLower = t.toLowerCase();
+        return !finalCaption.toLowerCase().contains('#$tLower');
+      }).toList();
+      if (missingTags.isNotEmpty) {
+        final hashtagsStr = missingTags.map((t) => '#$t').join(' ');
+        finalCaption = finalCaption.isEmpty ? hashtagsStr : '$finalCaption $hashtagsStr';
+      }
+    }
 
     setState(() {
       _isUploading = true;
@@ -482,7 +494,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
         }
 
         final newVideo = await _feedDataSource.uploadVideo(
-          caption: caption,
+          caption: finalCaption,
           imagePaths: paths.isNotEmpty ? paths : null,
           imageBytesList: bytesList.isNotEmpty ? bytesList : null,
           imageFilenames: filenames,
@@ -536,7 +548,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
       }
 
       final newVideo = await _feedDataSource.uploadVideo(
-        caption: caption,
+        caption: finalCaption,
         videoPath: currentFile.path,
         videoBytes: videoBytes,
         videoFilename: currentFile.name,

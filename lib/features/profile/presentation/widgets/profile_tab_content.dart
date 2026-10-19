@@ -20,12 +20,14 @@ List<Widget> buildProfileTabSlivers(
   List<VideoFeedModel>? savedVideos,
   List<VideoFeedModel>? likedVideos,
   bool isLoading = false,
+  bool isCurrentUser = true,
   void Function(VideoFeedModel video, int index)? onVideoTap,
+  void Function(VideoFeedModel video, int index)? onVideoLongPress,
   void Function(VideoFeedModel video, int index)? onSavedVideoTap,
   void Function(VideoFeedModel video, int index)? onLikedVideoTap,
 }) {
   switch (selectedIndex) {
-    case 0: // Sounds
+    case 0: // Sounds (Music on Left)
       return [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(
@@ -59,7 +61,7 @@ List<Widget> buildProfileTabSlivers(
         ),
       ];
 
-    case 1: // Grid / Postings
+    case 1: // Grid / Postings (Posted Videos on Right of Music)
       if (userVideos != null && userVideos.isNotEmpty) {
         return [
           SliverPadding(
@@ -93,6 +95,7 @@ List<Widget> buildProfileTabSlivers(
                     thumbnailUrl: thumb,
                     viewsLabel: video.likes,
                     onTap: onVideoTap != null ? () => onVideoTap(video, i) : null,
+                    onLongPress: onVideoLongPress != null ? () => onVideoLongPress(video, i) : null,
                   );
                 },
                 childCount: userVideos.length,
@@ -221,6 +224,35 @@ List<Widget> buildProfileTabSlivers(
                   ),
                 ),
                 childCount: 6,
+              ),
+            ),
+          ),
+        ];
+      }
+
+      if (!isCurrentUser) {
+        return [
+          const SliverPadding(
+            padding: EdgeInsets.symmetric(vertical: 48),
+            sliver: SliverToBoxAdapter(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.lock_outline_rounded, color: Colors.white24, size: 48),
+                    SizedBox(height: 12),
+                    Text(
+                      "This user's saved videos are private",
+                      style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'Saved videos and collections are only visible to their creator',
+                      style: TextStyle(color: Colors.white60, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

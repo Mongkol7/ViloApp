@@ -1,4 +1,6 @@
+// ignore_for_file: prefer_initializing_formals
 import '../../../../core/network/api_client.dart';
+import '../../../auth/data/datasources/token_storage.dart';
 
 class VideoModel {
   final int id;
@@ -89,6 +91,19 @@ class VideoModel {
       return [resolveMediaUrl(videoUrl)];
     }
     return const [];
+  }
+
+  /// Returns true if this video/post was created by the currently authenticated user.
+  bool get isOwner {
+    if (isMe) return true;
+    final currentUser = TokenStorage.instance.getUserModel();
+    if (currentUser != null) {
+      if (currentUser.id > 0 && creatorId > 0 && currentUser.id == creatorId) return true;
+      final myName = currentUser.username.replaceAll('@', '').trim().toLowerCase();
+      final postName = username.replaceAll('@', '').trim().toLowerCase();
+      if (myName.isNotEmpty && myName == postName) return true;
+    }
+    return false;
   }
 
   /// Returns true if this post contains 2 or more carousel photos.
@@ -279,9 +294,9 @@ class VideoModel {
   String get comments => formattedComments;
   String get saves => formattedSaves;
 
-  String get formattedLikes => (likeCount > 0 || _formattedLikes == null) ? _formatCount(likeCount) : _formattedLikes!;
-  String get formattedComments => (commentCount > 0 || _formattedComments == null) ? _formatCount(commentCount) : _formattedComments!;
-  String get formattedSaves => (saveCount > 0 || _formattedSaves == null) ? _formatCount(saveCount) : _formattedSaves!;
+  String get formattedLikes => (likeCount > 0 || _formattedLikes == null) ? _formatCount(likeCount) : _formattedLikes;
+  String get formattedComments => (commentCount > 0 || _formattedComments == null) ? _formatCount(commentCount) : _formattedComments;
+  String get formattedSaves => (saveCount > 0 || _formattedSaves == null) ? _formatCount(saveCount) : _formattedSaves;
   String get formattedViews => _formatCount(viewCount);
 
   static String _formatCount(int count) {

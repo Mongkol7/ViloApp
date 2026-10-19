@@ -7,6 +7,7 @@ import com.vilo.backend.entity.VideoLike;
 import com.vilo.backend.entity.VideoSave;
 import com.vilo.backend.entity.VideoTag;
 import com.vilo.backend.exception.ResourceNotFoundException;
+import com.vilo.backend.repository.CommentRepository;
 import com.vilo.backend.repository.UserRepository;
 import com.vilo.backend.repository.VideoLikeRepository;
 import com.vilo.backend.repository.VideoRepository;
@@ -28,17 +29,20 @@ public class VideoService {
     private final UserRepository userRepository;
     private final VideoLikeRepository videoLikeRepository;
     private final VideoSaveRepository videoSaveRepository;
+    private final CommentRepository commentRepository;
     private final FileStorageService fileStorageService;
 
     public VideoService(VideoRepository videoRepository,
                         UserRepository userRepository,
                         VideoLikeRepository videoLikeRepository,
                         VideoSaveRepository videoSaveRepository,
+                        CommentRepository commentRepository,
                         FileStorageService fileStorageService) {
         this.videoRepository = videoRepository;
         this.userRepository = userRepository;
         this.videoLikeRepository = videoLikeRepository;
         this.videoSaveRepository = videoSaveRepository;
+        this.commentRepository = commentRepository;
         this.fileStorageService = fileStorageService;
     }
 
@@ -373,6 +377,10 @@ public class VideoService {
         if (video.getCreatorId() == null || !video.getCreatorId().equals(requesterId)) {
             throw new SecurityException("Unauthorized: You can only delete your own videos.");
         }
+
+        videoLikeRepository.deleteByVideoId(videoId);
+        videoSaveRepository.deleteByVideoId(videoId);
+        commentRepository.deleteByVideoId(videoId);
 
         fileStorageService.deleteFile(video.getVideoUrl());
         if (video.getThumbnailUrl() != null) {

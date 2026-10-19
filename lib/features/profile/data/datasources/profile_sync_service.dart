@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
+import '../../../auth/data/datasources/token_storage.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../../feed/data/models/video_model.dart';
-import '../../presentation/mock/profile_mock_data.dart';
 
 class FollowChangeEvent {
   final int targetUserId;
@@ -51,8 +51,16 @@ class ProfileSyncService {
   /// Emits whenever like, save, or comment count changes on any video in the app
   final ValueNotifier<VideoInteractionEvent?> videoInteractionEvents = ValueNotifier<VideoInteractionEvent?>(null);
 
+  /// Emits whenever a video is deleted
+  final ValueNotifier<int?> videoDeletedEvents = ValueNotifier<int?>(null);
+
   void notifyVideoUploaded(VideoModel video) {
     videoUploadedEvents.value = video;
+  }
+
+  void notifyVideoDeleted(int videoId) {
+    FeedRemoteDataSource.instance.removeCachedVideo(videoId);
+    videoDeletedEvents.value = videoId;
   }
 
   void notifyVideoInteraction(VideoInteractionEvent event) {
@@ -68,7 +76,32 @@ class ProfileSyncService {
   }
 
   /// Cached user profile for immediate optimistic updates across screens
-  UserModel? cachedMyProfile;
+  UserModel? _cachedMyProfile;
+  UserModel? get cachedMyProfile {
+    if (_cachedMyProfile != null) return _cachedMyProfile;
+    final stored = TokenStorage.instance.getUserModel();
+    if (stored != null) {
+      _cachedMyProfile = stored;
+      return _cachedMyProfile;
+    }
+    return null;
+  }
+
+  set cachedMyProfile(UserModel? user) {
+    _cachedMyProfile = user;
+  }
+
+  void clear() {
+    _cachedMyProfile = null;
+    cachedFollowers = null;
+    cachedFollowing = null;
+    mockFollowersCount = 0;
+    mockFollowingCount = 0;
+    followEvents.value = null;
+    videoUploadedEvents.value = null;
+    videoInteractionEvents.value = null;
+    videoDeletedEvents.value = null;
+  }
 
   /// In-memory cache of followers and following for instant zero-latency listing
   List<UserModel>? cachedFollowers;
@@ -83,7 +116,7 @@ class ProfileSyncService {
     if (cached != null && cached.trim().isNotEmpty) {
       return cached.trim();
     }
-    return ProfileMockData.avatarUrl;
+    return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150';
   }
 
   /// Returns the current active user's display name
@@ -92,29 +125,36 @@ class ProfileSyncService {
     if (cached != null && cached.trim().isNotEmpty) {
       return cached.trim();
     }
-    return ProfileMockData.name;
+    final username = cachedMyProfile?.username;
+    if (username != null && username.trim().isNotEmpty) {
+      return username.trim();
+    }
+    return 'User';
   }
 
   /// Returns the current active user's clean username (without @)
   String get currentUsername {
-    final raw = (cachedMyProfile?.username != null && cachedMyProfile!.username.trim().isNotEmpty)
-        ? cachedMyProfile!.username
-        : ProfileMockData.username;
-    return raw.trim().toLowerCase().replaceAll('@', '');
+    final raw = cachedMyProfile?.username;
+    if (raw != null && raw.trim().isNotEmpty) {
+      return raw.trim().toLowerCase().replaceAll('@', '');
+    }
+    return '';
   }
 
-  /// Returns true if the given username or ID belongs to the current user
+  /// Returns true if the given username or ID belongs to the current user.
+  /// Matches ONLY the active authenticated session — no hardcoded fallbacks.
   bool isCurrentUser({String? username, String? id}) {
-    if (id != null && id.isNotEmpty) {
-      if (cachedMyProfile != null && cachedMyProfile!.id.toString() == id) return true;
-      if (id == '1') return true;
+    final profile = cachedMyProfile;
+    if (profile == null) return false;
+
+    if (id != null && id.isNotEmpty && id != '0') {
+      if (profile.id.toString() == id) return true;
     }
 
     if (username != null && username.isNotEmpty) {
       final clean = username.trim().toLowerCase().replaceAll('@', '');
       final myUser = currentUsername;
-      if (clean == myUser) return true;
-      if (clean == 'mongkol') return true;
+      if (myUser.isNotEmpty && clean == myUser) return true;
     }
 
     return false;

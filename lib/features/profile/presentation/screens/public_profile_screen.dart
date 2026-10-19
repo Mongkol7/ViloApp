@@ -12,6 +12,7 @@ import '../pages/edit_profile_screen.dart';
 import '../pages/followers_following_screen.dart';
 import '../style/pulse_tokens.dart';
 import '../widgets/profile_tab_content.dart';
+import '../widgets/vilo_tab_bar_view.dart';
 
 class PublicProfileScreen extends StatefulWidget {
   final int? userId;
@@ -53,11 +54,12 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
     _tabController = TabController(length: 5, vsync: this, initialIndex: 1);
     _isFollowing = widget.isFollowing;
     ProfileSyncService.instance.videoInteractionEvents.addListener(_onVideoInteractionEvent);
+    ProfileSyncService.instance.videoDeletedEvents.addListener(_onVideoDeleted);
 
     // Zero-latency instant load: Check initialVideos or in-memory cache
     final identifier = (widget.username != null && widget.username!.isNotEmpty)
         ? widget.username!
-        : (widget.userId != null ? widget.userId.toString() : null);
+        : widget.userId?.toString();
 
     final cachedUser = identifier != null
         ? ProfileRemoteDataSource.instance.getCachedUser(identifier)
@@ -88,7 +90,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
   Future<void> _fetchPublicProfile() async {
     final identifier = (widget.username != null && widget.username!.isNotEmpty)
         ? widget.username!
-        : (widget.userId != null ? widget.userId.toString() : null);
+        : widget.userId?.toString();
     if (identifier == null) return;
 
     if (_userVideos.isEmpty) {
@@ -140,8 +142,20 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
   @override
   void dispose() {
     ProfileSyncService.instance.videoInteractionEvents.removeListener(_onVideoInteractionEvent);
+    ProfileSyncService.instance.videoDeletedEvents.removeListener(_onVideoDeleted);
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _onVideoDeleted() {
+    final deletedId = ProfileSyncService.instance.videoDeletedEvents.value;
+    if (deletedId != null && mounted) {
+      setState(() {
+        _userVideos.removeWhere((v) => v.id == deletedId);
+        _likedVideos.removeWhere((v) => v.id == deletedId);
+        _savedVideos.removeWhere((v) => v.id == deletedId);
+      });
+    }
   }
 
   void _onVideoInteractionEvent() {
@@ -397,9 +411,9 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
                               onTap: () {
                                 final userModel = _loadedUser ??
                                     UserModel(
-                                      id: widget.userId ?? 1,
+                                      id: widget.userId ?? ProfileSyncService.instance.cachedMyProfile?.id ?? 0,
                                       username: username,
-                                      email: 'mongkol@vilo.app',
+                                  email: _loadedUser?.email ?? ProfileSyncService.instance.cachedMyProfile?.email ?? '$username@vilo.app',
                                       displayName: displayName,
                                       bio: bio,
                                       avatarUrl: avatarUrl,
@@ -489,8 +503,8 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.grey,
                   tabs: const [
-                    Tab(icon: Icon(Icons.music_note_rounded)), // Music
-                    Tab(icon: Icon(Icons.grid_view_rounded)),  // Grid
+                    Tab(icon: Icon(Icons.music_note_rounded)), // Music (Index 0)
+                    Tab(icon: Icon(Icons.grid_view_rounded)),  // Grid (Index 1)
                     Tab(icon: Icon(Icons.shopping_bag_outlined)), // Shop
                     Tab(icon: Icon(Icons.bookmark_border_rounded)), // Saved
                     Tab(icon: Icon(Icons.favorite_border_rounded)), // Liked
@@ -500,13 +514,13 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
             ),
           ];
         },
-        body: TabBarView(
+        body: ViloTabBarView(
           controller: _tabController,
           children: [
             CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: buildProfileTabSlivers(0),
-            ), // Music
+            ), // Music (Index 0)
             CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: buildProfileTabSlivers(
@@ -520,12 +534,13 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
                         isActive: true,
                         initialVideos: _userVideos,
                         initialIndex: index,
+                        canDelete: false,
                       ),
                     ),
                   );
                 },
               ),
-            ), // Grid
+            ), // Grid (Index 1)
             CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: buildProfileTabSlivers(2),
@@ -536,6 +551,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
                 3,
                 savedVideos: _savedVideos,
                 isLoading: _isLoading,
+                isCurrentUser: ProfileSyncService.instance.isCurrentUser(
+                  username: username,
+                  id: _loadedUser?.id.toString() ?? widget.userId?.toString(),
+                ),
                 onSavedVideoTap: (video, index) {
                   Navigator.of(context).push(
                     MaterialPageRoute(

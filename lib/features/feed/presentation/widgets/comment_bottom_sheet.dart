@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../profile/data/datasources/profile_remote_data_source.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../../profile/presentation/screens/public_profile_screen.dart';
 import '../../data/datasources/feed_remote_data_source.dart';
@@ -38,6 +39,19 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
     super.initState();
     _commentCount = widget.initialCommentCount;
     _loadComments();
+    _ensureUserProfile();
+  }
+
+  Future<void> _ensureUserProfile() async {
+    if (ProfileSyncService.instance.cachedMyProfile == null) {
+      try {
+        final profile = await ProfileRemoteDataSource.instance.getMyProfile();
+        ProfileSyncService.instance.cachedMyProfile = profile;
+        if (mounted) {
+          setState(() {});
+        }
+      } catch (_) {}
+    }
   }
 
   @override
@@ -97,7 +111,7 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
     final optimisticComment = CommentModel(
       id: tempId,
       videoId: targetVideoId,
-      userId: myUser?.id ?? 1,
+      userId: myUser?.id ?? 0,
       username: myUsername,
       displayName: myDisplayName,
       avatarUrl: myAvatar,
@@ -303,15 +317,39 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
             ),
             child: Row(
               children: [
-                // User Avatar
-                CircleAvatar(
-                  radius: 18,
-                  backgroundImage: const NetworkImage('https://i.pravatar.cc/150?img=50'),
-                  backgroundColor: Colors.blueAccent,
+                // Active Account Profile Avatar
+                GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => PublicProfileScreen(
+                          displayName: ProfileSyncService.instance.currentUserDisplayName,
+                          username: ProfileSyncService.instance.currentUsername,
+                          avatarUrl: ProfileSyncService.instance.currentUserAvatar,
+                        ),
+                      ),
+                    );
+                  },
                   child: Container(
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.blueAccent, width: 2),
+                      border: Border.all(color: Colors.white24, width: 1.2),
+                    ),
+                    child: ClipOval(
+                      child: Image.network(
+                        ProfileSyncService.instance.currentUserAvatar,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: const Color(0xFF2C2C2C),
+                          child: const Icon(
+                            Icons.person_rounded,
+                            color: Colors.white70,
+                            size: 20,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -404,14 +442,24 @@ class _CommentCardState extends State<_CommentCard> {
 
   void _navigateToProfile(BuildContext context) {
     final comment = widget.comment;
+    final isMe = ProfileSyncService.instance.isCurrentUser(
+      username: comment.username,
+      id: comment.userId.toString(),
+    );
     final rawName = comment.displayName.isNotEmpty ? comment.displayName : comment.username;
     final cleanUsername = comment.username.replaceAll('@', '').trim();
+    final avatar = (comment.avatarUrl != null && comment.avatarUrl!.isNotEmpty)
+        ? comment.avatarUrl!
+        : (isMe
+            ? ProfileSyncService.instance.currentUserAvatar
+            : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150');
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PublicProfileScreen(
           displayName: rawName,
           username: cleanUsername,
-          avatarUrl: comment.avatarUrl,
+          avatarUrl: avatar,
         ),
       ),
     );
@@ -420,7 +468,15 @@ class _CommentCardState extends State<_CommentCard> {
   @override
   Widget build(BuildContext context) {
     final comment = widget.comment;
-    final avatar = comment.avatarUrl ?? 'https://i.pravatar.cc/150?img=12';
+    final isMe = ProfileSyncService.instance.isCurrentUser(
+      username: comment.username,
+      id: comment.userId.toString(),
+    );
+    final avatar = (comment.avatarUrl != null && comment.avatarUrl!.isNotEmpty)
+        ? comment.avatarUrl!
+        : (isMe
+            ? ProfileSyncService.instance.currentUserAvatar
+            : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150');
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
@@ -433,10 +489,27 @@ class _CommentCardState extends State<_CommentCard> {
               // Avatar
               GestureDetector(
                 onTap: () => _navigateToProfile(context),
-                child: CircleAvatar(
-                  radius: 18,
-                  backgroundImage: NetworkImage(avatar),
-                  backgroundColor: Colors.grey[800],
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white12, width: 1),
+                  ),
+                  child: ClipOval(
+                    child: Image.network(
+                      avatar,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: Colors.grey[850],
+                        child: const Icon(
+                          Icons.person_rounded,
+                          color: Colors.white60,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -557,15 +630,41 @@ class _CommentCardState extends State<_CommentCard> {
                 padding: const EdgeInsets.only(left: 48.0, top: 8.0),
                 child: Column(
                   children: comment.replies.map((reply) {
+                    final isReplyMe = ProfileSyncService.instance.isCurrentUser(
+                      username: reply.username,
+                      id: reply.userId.toString(),
+                    );
+                    final replyAvatar = (reply.avatarUrl != null && reply.avatarUrl!.isNotEmpty)
+                        ? reply.avatarUrl!
+                        : (isReplyMe
+                            ? ProfileSyncService.instance.currentUserAvatar
+                            : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150');
+
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 6.0),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          CircleAvatar(
-                            radius: 14,
-                            backgroundImage: NetworkImage(
-                              reply.avatarUrl ?? 'https://i.pravatar.cc/150?img=20',
+                          Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white10, width: 1),
+                            ),
+                            child: ClipOval(
+                              child: Image.network(
+                                replyAvatar,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  color: Colors.grey[850],
+                                  child: const Icon(
+                                    Icons.person_rounded,
+                                    color: Colors.white60,
+                                    size: 16,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 10),
