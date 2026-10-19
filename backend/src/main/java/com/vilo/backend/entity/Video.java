@@ -37,16 +37,16 @@ public class Video {
     @Column(name = "music_title")
     private String musicTitle;
 
-    @Column(name = "view_count", nullable = false)
+    @Column(name = "views_count")
     private Long viewCount = 0L;
 
-    @Column(name = "like_count", nullable = false)
+    @Column(name = "likes_count")
     private Long likeCount = 0L;
 
-    @Column(name = "comment_count", nullable = false)
+    @Column(name = "comments_count")
     private Long commentCount = 0L;
 
-    @Column(name = "save_count", nullable = false)
+    @Column(name = "saves_count")
     private Long saveCount = 0L;
 
     @Column(name = "created_at", nullable = false, updatable = false)
