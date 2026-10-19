@@ -6,6 +6,7 @@ import '../widgets/share_bottom_sheet.dart';
 import '../widgets/comment_bottom_sheet.dart';
 import 'sound_detail_page.dart';
 import '../../../profile/presentation/screens/public_profile_screen.dart';
+import '../../../shop/presentation/pages/product_detail_page.dart';
 
 class VideoFeedPage extends StatefulWidget {
   final bool isActive;
@@ -18,15 +19,6 @@ class VideoFeedPage extends StatefulWidget {
 
 class _VideoFeedPageState extends State<VideoFeedPage> {
   int _currentPage = 0;
-
-  void _goToProfile() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const PublicProfileScreen(),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +33,11 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
         'comments': '45.2K',
         'saves': '120K',
         'avatar': 'https://i.pravatar.cc/150?img=11',
+        'product': {
+          'title': "Nike Air Force 1 '07 Pro",
+          'price': '\$129.99',
+          'imageUrl': 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=800',
+        },
       },
       {
         'videoUrl': 'assets/videos/vid2.mp4',
@@ -51,6 +48,11 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
         'comments': '12.1K',
         'saves': '85K',
         'avatar': 'https://i.pravatar.cc/150?img=12',
+        'product': {
+          'title': 'Cyberpunk RGB Keyboard',
+          'price': '\$149.50',
+          'imageUrl': 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=800',
+        },
       },
       {
         'videoUrl': 'assets/videos/vid3.mp4',
@@ -61,6 +63,11 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
         'comments': '3.2K',
         'saves': '20K',
         'avatar': 'https://i.pravatar.cc/150?img=13',
+        'product': {
+          'title': 'AirPods Max Space Gray',
+          'price': '\$549.00',
+          'imageUrl': 'https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=800',
+        },
       },
       {
         'videoUrl': 'assets/videos/vid4.mp4',
@@ -71,6 +78,11 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
         'comments': '8.4K',
         'saves': '15K',
         'avatar': 'https://i.pravatar.cc/150?img=14',
+        'product': {
+          'title': 'Streetwear Heavyweight Hoodie',
+          'price': '\$78.00',
+          'imageUrl': 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=800',
+        },
       },
       {
         'videoUrl': 'assets/videos/vid1.mp4',
@@ -469,6 +481,71 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Floating Video-Shop Featured Product Tag
+              if (widget.data['product'] != null) ...[
+                GestureDetector(
+                  onTap: () {
+                    final productMap = widget.data['product'] as Map<String, dynamic>;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProductDetailPage(
+                          title: productMap['title'] as String?,
+                          price: productMap['price'] as String?,
+                          imageUrl: productMap['imageUrl'] as String?,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.6), width: 1),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: const BoxDecoration(
+                            color: Colors.amberAccent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.shopping_bag, color: Colors.black, size: 11),
+                        ),
+                        const SizedBox(width: 6),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 150),
+                          child: Text(
+                            widget.data['product']['title'] as String,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          widget.data['product']['price'] as String,
+                          style: const TextStyle(
+                            color: Colors.amberAccent,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white60, size: 10),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               GestureDetector(
                 onTap: _goToProfile,
                 child: Text(
@@ -543,15 +620,6 @@ class _InteractionButtonState extends State<_InteractionButton> {
     if (widget.onTap != null) {
       widget.onTap!();
     }
-  }
-
-  void _goToProfile() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const PublicProfileScreen(),
-      ),
-    );
   }
 
   @override

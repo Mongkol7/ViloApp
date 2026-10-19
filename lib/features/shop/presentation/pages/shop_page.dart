@@ -1,155 +1,298 @@
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
-import 'product_detail_page.dart';
+import '../../data/datasources/shop_remote_data_source.dart';
+import '../../data/models/category_model.dart';
+import '../../data/models/product_model.dart';
+import '../controllers/cart_controller.dart';
 import 'cart_page.dart';
+import 'product_detail_page.dart';
 
-class ShopPage extends StatelessWidget {
+class ShopPage extends StatefulWidget {
   const ShopPage({super.key});
 
   @override
+  State<ShopPage> createState() => _ShopPageState();
+}
+
+class _ShopPageState extends State<ShopPage> {
+  final TextEditingController _searchController = TextEditingController();
+
+  List<CategoryModel> _categories = [];
+  List<ProductModel> _products = [];
+  bool _isLoading = true;
+  int? _selectedCategoryId; // null = 'All'
+  String _currentQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialData();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadInitialData() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final categoriesFuture = ShopRemoteDataSource.instance.getCategories();
+      final productsFuture = ShopRemoteDataSource.instance.getProducts();
+
+      final results = await Future.wait([categoriesFuture, productsFuture]);
+      if (!mounted) return;
+
+      setState(() {
+        _categories = results[0] as List<CategoryModel>;
+        _products = results[1] as List<ProductModel>;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _filterProducts({int? categoryId, String? query}) async {
+    setState(() {
+      _isLoading = true;
+      _selectedCategoryId = categoryId;
+      if (query != null) _currentQuery = query;
+    });
+
+    try {
+      final products = await ShopRemoteDataSource.instance.getProducts(
+        categoryId: _selectedCategoryId,
+        query: _currentQuery.isNotEmpty ? _currentQuery : null,
+      );
+      if (!mounted) return;
+      setState(() {
+        _products = products;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final topPadding = MediaQuery.of(context).padding.top + 60; // Space for the top nav bar
+    final topPadding = MediaQuery.of(context).padding.top + 60; // Space for top nav bar
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          // ── Top Spacing for Nav Bar ───────────────────────────
-          SliverToBoxAdapter(child: SizedBox(height: topPadding)),
+      body: RefreshIndicator(
+        color: Colors.white,
+        backgroundColor: const Color(0xFF1C1C1E),
+        onRefresh: _loadInitialData,
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+          slivers: [
+            // ── Top Spacing for Nav Bar ───────────────────────────
+            SliverToBoxAdapter(child: SizedBox(height: topPadding)),
 
-          // ── Search & Cart Header ────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C1C1E),
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(color: Colors.white12),
+            // ── Search & Cart Header ────────────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1C1C1E),
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(color: Colors.white12),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.search, color: Colors.white60, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                onSubmitted: (value) => _filterProducts(query: value),
+                                decoration: const InputDecoration(
+                                  hintText: 'Search products, sneakers, audio...',
+                                  hintStyle: TextStyle(color: Colors.white38, fontSize: 13),
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                ),
+                                style: const TextStyle(color: Colors.white, fontSize: 13),
+                              ),
+                            ),
+                            if (_searchController.text.isNotEmpty)
+                              GestureDetector(
+                                onTap: () {
+                                  _searchController.clear();
+                                  _filterProducts(query: '');
+                                },
+                                child: const Icon(Icons.close, color: Colors.white38, size: 18),
+                              ),
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () => _filterProducts(query: _searchController.text),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: const Text(
+                                  'Search',
+                                  style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                    ),
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const CartPage()),
+                        );
+                      },
+                      child: AnimatedBuilder(
+                        animation: CartController.instance,
+                        builder: (context, _) {
+                          final count = CartController.instance.itemCount;
+                          return Stack(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white24),
+                                ),
+                                child: const Icon(Icons.shopping_bag_outlined, color: Colors.white, size: 22),
+                              ),
+                              if (count > 0)
+                                Positioned(
+                                  right: 0,
+                                  top: 0,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                    child: Text(
+                                      '$count',
+                                      style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Mega Sale Banner ──────────────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Container(
+                  height: 175,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF1C1C1E), Color(0xFF2C2C2E)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: Opacity(
+                            opacity: 0.55,
+                            child: Image.network(
+                              'https://images.unsplash.com/photo-1546435770-a3e426bf472b?q=80&w=2065&auto=format&fit=crop',
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(color: Colors.white12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(color: Colors.blueAccent, borderRadius: BorderRadius.circular(6)),
+                              child: const Text('VILO EXCLUSIVE', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                            ),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Mega Flash Deals\nUp To 60% Off',
+                              style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold, height: 1.15),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text('Free shipping on all items | Limited stock', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                            const SizedBox(height: 14),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: const Text('Explore Now', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // ── Coupons & Claim Section ───────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: _buildCouponCard('Free shipping', 'All products')),
+                        const SizedBox(width: 8),
+                        Expanded(child: _buildCouponCard('\$15 Off', 'Min. \$50 purchase')),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
                       child: Row(
                         children: [
-                          const Icon(Icons.search, color: Colors.white60, size: 20),
-                          const SizedBox(width: 10),
                           const Expanded(
-                            child: TextField(
-                              decoration: InputDecoration(
-                                hintText: 'iPhone 17 promax',
-                                hintStyle: TextStyle(color: Colors.white38, fontSize: 14),
-                                border: InputBorder.none,
-                                isDense: true,
-                              ),
-                              style: TextStyle(color: Colors.white, fontSize: 14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('New Customer Voucher', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13)),
+                                Text('Claim \$10 welcome gift voucher', style: TextStyle(color: Colors.black54, fontSize: 11)),
+                              ],
                             ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: const Text(
-                              'Search',
-                              style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const CartPage()),
-                      );
-                    },
-                    child: Stack(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white24),
-                          ),
-                          child: const Icon(Icons.shopping_bag_outlined, color: Colors.white, size: 24),
-                        ),
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                            child: const Text('4', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // ── Mega Sale Banner ──────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Container(
-                height: 180,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF1C1C1E), Color(0xFF2C2C2E)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: Opacity(
-                          opacity: 0.6,
-                          child: Image.network(
-                            'https://images.unsplash.com/photo-1546435770-a3e426bf472b?q=80&w=2065&auto=format&fit=crop',
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => Container(color: Colors.white12),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.blueAccent, borderRadius: BorderRadius.circular(4)),
-                            child: const Text('VILO', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'VILO Shop | Mega\nSale',
-                            style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, height: 1.1),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text('Get A Free Gift | \$25 Min Spend', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                          const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.white24)),
-                            child: const Text('Shop now', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(16)),
+                            child: const Text('Claimed', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
                           ),
                         ],
                       ),
@@ -158,124 +301,137 @@ class ShopPage extends StatelessWidget {
                 ),
               ),
             ),
-          ),
 
-          // ── Coupons & Claim Section ───────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
+            // ── Top Sellers ─────────────────────────────────────
+            SliverToBoxAdapter(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(child: _buildCouponCard('Free shipping', 'No min. spend')),
-                      const SizedBox(width: 8),
-                      Expanded(child: _buildCouponCard('\$15 off', 'No min. speed')),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(
                       children: [
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('New customer', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
-                              Text('Claim all gifts', style: TextStyle(color: Colors.black54, fontSize: 12)),
-                            ],
-                          ),
-                        ),
+                        const Text('Trending Deals', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(18)),
-                          child: const Text('Claim', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(4)),
+                          child: const Text('HOT', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 145,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _products.isNotEmpty ? _products.take(5).length : 4,
+                      separatorBuilder: (_, __) => const SizedBox(width: 12),
+                      itemBuilder: (context, index) {
+                        if (_products.isNotEmpty) {
+                          final p = _products[index];
+                          return _buildTopSellerProductItem(p);
+                        }
+                        return _buildTopSellerPlaceholder();
+                      },
                     ),
                   ),
                 ],
               ),
             ),
-          ),
 
-          // ── Top Sellers ─────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
+            // ── Dynamic Categories Horizontal Bar ──────────────────────────
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _SliverAppBarDelegate(
+                Container(
+                  color: Colors.black,
+                  height: 48,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     children: [
-                      const Text('Top Sellers', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
-                        child: const Text('HOT', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      _buildCategoryTab(
+                        title: 'All',
+                        isSelected: _selectedCategoryId == null,
+                        onTap: () => _filterProducts(categoryId: null),
+                      ),
+                      ..._categories.map((cat) => _buildCategoryTab(
+                            title: cat.name,
+                            isSelected: _selectedCategoryId == cat.id,
+                            onTap: () => _filterProducts(categoryId: cat.id),
+                          )),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // ── Products Grid ────────────────────────────────────
+            if (_isLoading)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                ),
+              )
+            else if (_products.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.inventory_2_outlined, color: Colors.white24, size: 48),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'No products found',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Try choosing another category or clearing filters',
+                        style: TextStyle(color: Colors.white38, fontSize: 12),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () {
+                          _searchController.clear();
+                          _filterProducts(categoryId: null, query: '');
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                        child: const Text('Reset Filters', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 150,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    scrollDirection: Axis.horizontal,
-                    itemCount: 5,
-                    separatorBuilder: (_, __) => const SizedBox(width: 12),
-                    itemBuilder: (context, index) => _buildTopSellerItem(),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 16,
+                    crossAxisSpacing: 16,
+                    childAspectRatio: 0.72,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _buildProductCard(context, _products[index]),
+                    childCount: _products.length,
                   ),
                 ),
-              ],
-            ),
-          ),
-
-          // ── Tabs ──────────────────────────────────────────
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: _SliverAppBarDelegate(
-              Container(
-                color: Colors.black,
-                height: 50,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  children: [
-                    _buildTab('All', active: true),
-                    _buildTab('Crazy Prices'),
-                    _buildTab('Beauty'),
-                    _buildTab('Mall'),
-                    _buildTab('Toys'),
-                  ],
-                ),
               ),
-            ),
-          ),
 
-          // ── Product Grid ────────────────────────────────────
-          SliverPadding(
-            padding: const EdgeInsets.all(16),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
-                childAspectRatio: 0.75,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => _buildProductCard(context, index),
-                childCount: 10,
-              ),
-            ),
-          ),
-
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
-        ],
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          ],
+        ),
       ),
     );
   }
@@ -283,11 +439,15 @@ class ShopPage extends StatelessWidget {
   Widget _buildCouponCard(String title, String subtitle) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white12),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+          Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
           const SizedBox(height: 2),
           Text(subtitle, style: const TextStyle(color: Colors.blueAccent, fontSize: 10)),
         ],
@@ -295,135 +455,171 @@ class ShopPage extends StatelessWidget {
     );
   }
 
-  Widget _buildTopSellerItem() {
-    // Top Seller images matching the design items (Crockpot, Powerbank, Keyboard, iPhone)
-    final List<String> topSellerImages = [
-      'https://images.unsplash.com/photo-1574316071802-0d684efa7bf5?q=80&w=400', // Kitchen/Crockpot
-      'https://images.unsplash.com/photo-1625842268584-8f3bf9ff16a0?q=80&w=400', // Powerbank
-      'https://images.unsplash.com/photo-1587829741301-dc798b83bac1?q=80&w=400', // Keyboard
-      'https://images.unsplash.com/photo-1616348436168-de43ad0db179?q=80&w=400', // iPhone
-      'https://images.unsplash.com/photo-1546435770-a3e426bf472b?q=80&w=400', // Generic tech
-    ];
-    
-    // We'll use the index if we had it, but for a simple mock we'll randomize or pick one
-    final imageUrl = topSellerImages[math.Random().nextInt(topSellerImages.length)];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Stack(
-          children: [
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1C1C1E), 
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => const Center(
-                    child: Icon(Icons.inventory_2_outlined, color: Colors.white24, size: 40),
+  Widget _buildTopSellerProductItem(ProductModel product) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => ProductDetailPage(product: product)),
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            children: [
+              Container(
+                width: 95,
+                height: 95,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1C1C1E),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: Image.network(
+                    product.primaryImage,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Center(
+                      child: Icon(Icons.inventory_2_outlined, color: Colors.white24, size: 32),
+                    ),
                   ),
                 ),
               ),
-            ),
-            Positioned(
-              left: 4,
-              bottom: 4,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
-                child: const Text('-99%', style: TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        const Text('\$0.01', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-        const Text('@vilo.deals', style: TextStyle(color: Colors.white38, fontSize: 10)),
-      ],
+              if (product.discountPercentage != null && product.discountPercentage! > 0)
+                Positioned(
+                  left: 4,
+                  bottom: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
+                    child: Text(
+                      '-${product.discountPercentage}%',
+                      style: const TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(product.formattedPrice, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(product.sellerName ?? '@vilo.store', style: const TextStyle(color: Colors.white38, fontSize: 10)),
+        ],
+      ),
     );
   }
 
-  Widget _buildTab(String label, {bool active = false}) {
+  Widget _buildTopSellerPlaceholder() {
+    return Container(
+      width: 95,
+      height: 95,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(14),
+      ),
+    );
+  }
+
+  Widget _buildCategoryTab({required String title, required bool isSelected, required VoidCallback onTap}) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.only(right: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label, style: TextStyle(color: active ? Colors.white : Colors.white38, fontWeight: active ? FontWeight.bold : FontWeight.normal, fontSize: 14)),
-            if (active) ...[
-              const SizedBox(height: 4),
-              Container(width: 4, height: 4, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
+        padding: const EdgeInsets.only(right: 20),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.white38,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  fontSize: 13,
+                ),
+              ),
+              if (isSelected) ...[
+                const SizedBox(height: 4),
+                Container(
+                  width: 5,
+                  height: 5,
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildProductCard(BuildContext context, int index) {
-    final List<String> productImages = [
-      'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?q=80&w=500', // Mobile
-      'https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=500', // Watch
-      'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=500', // Headphones
-      'https://images.unsplash.com/photo-1526170315870-ef68ea653258?q=80&w=500', // Camera
-      'https://images.unsplash.com/photo-1572635196237-14b3f281503f?q=80&w=500', // Glasses
-    ];
-    final imageUrl = productImages[index % productImages.length];
-    const productTitle = 'Premium Gadget Product Title...';
-    const productPrice = '\$124.50';
-
+  Widget _buildProductCard(BuildContext context, ProductModel product) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => ProductDetailPage(
-              imageUrl: imageUrl,
-              title: productTitle,
-              price: productPrice,
-            ),
+            builder: (context) => ProductDetailPage(product: product),
           ),
         );
       },
       child: Container(
-        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        ),
         clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Image
             Expanded(
               child: Stack(
                 children: [
                   Container(
-                    color: const Color(0xFF2C2C2E), 
-                    width: double.infinity, 
+                    color: const Color(0xFF2C2C2E),
+                    width: double.infinity,
                     height: double.infinity,
                     child: Image.network(
-                      imageUrl, 
+                      product.primaryImage,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => const Center(
+                      errorBuilder: (_, __, ___) => const Center(
                         child: Icon(Icons.image_outlined, color: Colors.white12, size: 40),
                       ),
                     ),
                   ),
+                  if (product.discountPercentage != null && product.discountPercentage! > 0)
+                    Positioned(
+                      left: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '-${product.discountPercentage}%',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
                   Positioned(
-                    left: 8,
+                    right: 8,
                     top: 8,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.5), borderRadius: BorderRadius.circular(4)),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
                       child: Row(
-                        children: const [
-                          Icon(Icons.thumb_up, color: Colors.orange, size: 10),
-                          SizedBox(width: 4),
-                          Text('1.2K', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.star, color: Colors.orange, size: 10),
+                          const SizedBox(width: 3),
+                          Text('${product.rating}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -431,27 +627,39 @@ class ShopPage extends StatelessWidget {
                 ],
               ),
             ),
+
+            // Content
             Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(productTitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 8),
+                  Text(
+                    product.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, height: 1.2),
+                  ),
+                  const SizedBox(height: 6),
                   Row(
-                    children: const [
-                      Text(productPrice, style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 16)),
-                      SizedBox(width: 4),
-                      Text('\$299.00', style: TextStyle(color: Colors.white24, fontSize: 10, decoration: TextDecoration.lineThrough)),
+                    children: [
+                      Text(
+                        product.formattedPrice,
+                        style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      if (product.formattedOriginalPrice != null) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          product.formattedOriginalPrice!,
+                          style: const TextStyle(color: Colors.white24, fontSize: 10, decoration: TextDecoration.lineThrough),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Row(
-                    children: const [
-                      Icon(Icons.star, color: Colors.orange, size: 10),
-                      SizedBox(width: 2),
-                      Text('4.8 | 1.5K sold', style: TextStyle(color: Colors.white38, fontSize: 10)),
-                    ],
+                  Text(
+                    '${product.salesCount} sold',
+                    style: const TextStyle(color: Colors.white38, fontSize: 10),
                   ),
                 ],
               ),
@@ -468,9 +676,9 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   final Widget _child;
 
   @override
-  double get minExtent => 50;
+  double get minExtent => 48;
   @override
-  double get maxExtent => 50;
+  double get maxExtent => 48;
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {

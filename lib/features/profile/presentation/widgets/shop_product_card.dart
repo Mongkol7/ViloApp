@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../mock/profile_mock_data.dart';
 import '../style/pulse_tokens.dart';
+import '../../../shop/presentation/pages/product_detail_page.dart';
 
 /// A single product row in the Shop tab. Pure display widget — placed
 /// directly inside a SliverList by the parent, no scroll of its own.
@@ -12,14 +13,28 @@ class ShopProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: PulseSpacing.stackGap),
-      padding: const EdgeInsets.all(PulseSpacing.containerPadding),
-      decoration: BoxDecoration(
-        color: PulseColors.surface,
-        borderRadius: BorderRadius.circular(PulseRadius.cardRadius),
-        border: Border.all(color: PulseColors.surfaceStroke),
-      ),
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ProductDetailPage(
+              title: product.name,
+              price: product.price,
+              imageUrl: product.imageUrl,
+            ),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(PulseRadius.cardRadius),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: PulseSpacing.stackGap),
+        padding: const EdgeInsets.all(PulseSpacing.containerPadding),
+        decoration: BoxDecoration(
+          color: PulseColors.surface,
+          borderRadius: BorderRadius.circular(PulseRadius.cardRadius),
+          border: Border.all(color: PulseColors.surfaceStroke),
+        ),
       child: Row(
         children: [
           ClipRRect(
@@ -66,6 +81,7 @@ class ShopProductCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }
