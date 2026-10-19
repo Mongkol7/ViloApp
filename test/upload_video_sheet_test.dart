@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viloapp/core/theme/app_theme.dart';
 import 'package:viloapp/features/bottom_nav/presentation/pages/main_navigation_shell.dart';
+import 'package:viloapp/features/feed/data/models/video_model.dart';
 import 'package:viloapp/features/feed/presentation/widgets/upload_video_sheet.dart';
 
 class _MockHttpOverrides extends HttpOverrides {
@@ -116,13 +118,14 @@ void main() {
     expect(titleRenderBox.size.width, greaterThan(0));
     expect(titleRenderBox.size.height, greaterThan(0));
 
-    // 3. Verify Native Video Picker Button renders visibly with non-zero size
+    // 3. Verify Native Media Picker Button renders visibly with non-zero size
     final pickButtonFinder = find.byKey(const Key('upload_pick_video_button'));
     expect(pickButtonFinder, findsOneWidget);
     final pickButtonRenderBox = tester.renderObject<RenderBox>(pickButtonFinder);
     expect(pickButtonRenderBox.size.width, greaterThan(0));
     expect(pickButtonRenderBox.size.height, greaterThan(0));
-    expect(find.text('Choose Video from Files / Downloads'), findsOneWidget);
+    expect(find.text('Choose Video or Photo'), findsOneWidget);
+    expect(find.text('Pick an .mp4, .mov, .jpg, or .png from your device'), findsOneWidget);
 
     // 4. Verify Thumbnail Picker Button renders visibly with non-zero size
     final thumbButtonFinder = find.byKey(const Key('upload_pick_thumbnail_button'));
@@ -182,10 +185,10 @@ void main() {
     final postBtn = find.byKey(const Key('upload_post_video_button'));
     expect(postBtn, findsOneWidget);
 
-    // Tap "Post Video" without video -> verify video selection validation error
+    // Tap "Post Video" without file -> verify selection validation error
     await tester.tap(postBtn);
     await tester.pump();
-    expect(find.text('Please select a video file.'), findsOneWidget);
+    expect(find.text('Please select a video or photo file.'), findsOneWidget);
 
     // Case B: Selected video & thumbnail state with preview tiles
     final fakeVideo = PlatformFile(
@@ -254,5 +257,70 @@ void main() {
 
     expect(find.byKey(const Key('upload_selected_video_tile')), findsNothing);
     expect(find.byKey(const Key('upload_pick_video_button')), findsOneWidget);
+  });
+
+  testWidgets('UploadVideoSheet hides thumbnail section when photo is selected as main post', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final fakePhoto = PlatformFile(
+      name: 'scenery.jpg',
+      size: 1024 * 400,
+      path: 'scenery.jpg',
+      bytes: Uint8List.fromList(_transparentImage),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: Scaffold(
+          body: UploadVideoSheet(
+            key: const ValueKey('sheet_with_photo'),
+            initialFile: fakePhoto,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Verify main tile displays photo name
+    expect(find.byKey(const Key('upload_selected_video_tile')), findsOneWidget);
+    expect(find.text('scenery.jpg'), findsOneWidget);
+
+    // Verify thumbnail picker section is completely hidden
+    expect(find.byKey(const Key('upload_pick_thumbnail_button')), findsNothing);
+    expect(find.byKey(const Key('upload_selected_thumbnail_tile')), findsNothing);
+    expect(find.text('THUMBNAIL (OPTIONAL)'), findsNothing);
+
+    // Verify button indicates posting photo
+    expect(find.text('Post Photo'), findsOneWidget);
+  });
+
+  test('VideoModel isImagePost returns true for photo paths and auto-assigns thumbnailUrl', () {
+    final photoModel = VideoModel.fromJson({
+      'id': 10,
+      'creatorId': 1,
+      'caption': 'Sunset photo',
+      'videoUrl': '/uploads/photos/sunset.jpg',
+    });
+
+    expect(photoModel.isImagePost, isTrue);
+    expect(photoModel.thumbnailUrl, contains('/uploads/photos/sunset.jpg'));
+
+    final videoModel = VideoModel.fromJson({
+      'id': 11,
+      'creatorId': 1,
+      'caption': 'Sunset video',
+      'videoUrl': '/uploads/videos/sunset.mp4',
+    });
+
+    expect(videoModel.isImagePost, isFalse);
+    expect(videoModel.thumbnailUrl, isNull);
   });
 }

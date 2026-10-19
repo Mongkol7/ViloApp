@@ -123,7 +123,7 @@ public class VideoController {
                 : (videoUrl != null && !videoUrl.isBlank() ? videoUrl.trim() : null);
 
         if ((effectiveVideoFile == null || effectiveVideoFile.isEmpty()) && (directPath == null || directPath.isBlank())) {
-            throw new IllegalArgumentException("Either video/videoFile or videoPath must be provided");
+            throw new IllegalArgumentException("Either video/photo file or video/photo path must be provided");
         }
 
         String effectiveCaption = (caption != null && !caption.isBlank())

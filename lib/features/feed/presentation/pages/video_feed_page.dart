@@ -309,15 +309,18 @@ class _VideoPostWidget extends StatefulWidget {
 
 class _VideoPostWidgetState extends State<_VideoPostWidget>
     with RouteAware, WidgetsBindingObserver {
-  late VideoPlayerController _controller;
+  VideoPlayerController? _controller;
   bool _manuallyPaused = false;
   bool _hasControllerError = false;
+  bool _showHeartAnimation = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initController();
+    if (!widget.video.isImagePost) {
+      _initController();
+    }
   }
 
   void _initController() {
@@ -328,13 +331,13 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
       _controller = VideoPlayerController.networkUrl(Uri.parse(url));
     }
 
-    _controller.addListener(_videoListener);
-    _controller.initialize().then((_) {
+    _controller!.addListener(_videoListener);
+    _controller!.initialize().then((_) {
       if (!mounted) return;
-      _controller.setLooping(true);
+      _controller!.setLooping(true);
       setState(() {});
       if (widget.isActive && widget.isCurrentPage && !_manuallyPaused) {
-        _controller.play();
+        _controller!.play();
       }
     }).catchError((error) {
       if (mounted) {
@@ -346,14 +349,69 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   }
 
   void _videoListener() {
-    if (!mounted || !_controller.value.isInitialized) return;
-    final value = _controller.value;
+    if (!mounted || _controller == null || !_controller!.value.isInitialized) return;
+    final value = _controller!.value;
     if (value.duration > Duration.zero && value.position >= value.duration) {
-      _controller.seekTo(Duration.zero);
+      _controller!.seekTo(Duration.zero);
       if (widget.isActive && widget.isCurrentPage && !_manuallyPaused) {
-        _controller.play();
+        _controller!.play();
       }
     }
+  }
+
+  void _handleDoubleTap() {
+    setState(() {
+      _showHeartAnimation = true;
+    });
+    if (!widget.video.isLiked) {
+      widget.onLikeTap();
+    }
+    Future.delayed(const Duration(milliseconds: 650), () {
+      if (mounted) {
+        setState(() {
+          _showHeartAnimation = false;
+        });
+      }
+    });
+  }
+
+  Widget _buildImagePost(String url) {
+    if (url.startsWith('assets/')) {
+      return Image.asset(
+        url,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => _buildMediaError(),
+      );
+    }
+    return Image.network(
+      url,
+      fit: BoxFit.contain,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return const Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
+          ),
+        );
+      },
+      errorBuilder: (_, __, ___) => _buildMediaError(),
+    );
+  }
+
+  Widget _buildMediaError() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.broken_image_rounded, color: Colors.white24, size: 54),
+        const SizedBox(height: 10),
+        Text(
+          'Photo unavailable',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.38), fontSize: 13),
+        ),
+      ],
+    );
   }
 
   @override
@@ -370,42 +428,56 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   @override
   void didUpdateWidget(covariant _VideoPostWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.video.isImagePost) {
+      if (_controller != null) {
+        _controller!.pause();
+        _controller!.removeListener(_videoListener);
+        _controller!.dispose();
+        _controller = null;
+      }
+      return;
+    }
+    if (_controller == null) {
+      _initController();
+      return;
+    }
     final shouldPlay = widget.isActive && widget.isCurrentPage && !_manuallyPaused;
-    if (_controller.value.isInitialized) {
-      if (shouldPlay && !_controller.value.isPlaying) {
-        _controller.play();
-      } else if (!shouldPlay && _controller.value.isPlaying) {
-        _controller.pause();
+    if (_controller!.value.isInitialized) {
+      if (shouldPlay && !_controller!.value.isPlaying) {
+        _controller!.play();
+      } else if (!shouldPlay && _controller!.value.isPlaying) {
+        _controller!.pause();
       }
     }
   }
 
   @override
   void didPushNext() {
-    if (_controller.value.isInitialized && _controller.value.isPlaying) {
-      _controller.pause();
+    if (_controller != null && _controller!.value.isInitialized && _controller!.value.isPlaying) {
+      _controller!.pause();
       if (mounted) setState(() {});
     }
   }
 
   @override
   void didPopNext() {
-    if (widget.isActive && widget.isCurrentPage && !_manuallyPaused && _controller.value.isInitialized) {
-      _controller.play();
+    if (widget.isActive && widget.isCurrentPage && !_manuallyPaused && _controller != null && _controller!.value.isInitialized) {
+      _controller!.play();
       if (mounted) setState(() {});
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_controller == null) return;
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      if (_controller.value.isInitialized && _controller.value.isPlaying) {
-        _controller.pause();
+      if (_controller!.value.isInitialized && _controller!.value.isPlaying) {
+        _controller!.pause();
         if (mounted) setState(() {});
       }
     } else if (state == AppLifecycleState.resumed) {
-      if (widget.isActive && widget.isCurrentPage && !_manuallyPaused && _controller.value.isInitialized) {
-        _controller.play();
+      if (widget.isActive && widget.isCurrentPage && !_manuallyPaused && _controller!.value.isInitialized) {
+        _controller!.play();
         if (mounted) setState(() {});
       }
     }
@@ -415,19 +487,22 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   void dispose() {
     routeObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
-    _controller.removeListener(_videoListener);
-    _controller.dispose();
+    if (_controller != null) {
+      _controller!.removeListener(_videoListener);
+      _controller!.dispose();
+    }
     super.dispose();
   }
 
   void _togglePlayPause() {
+    if (_controller == null) return;
     setState(() {
-      if (_controller.value.isPlaying) {
+      if (_controller!.value.isPlaying) {
         _manuallyPaused = true;
-        _controller.pause();
+        _controller!.pause();
       } else {
         _manuallyPaused = false;
-        _controller.play();
+        _controller!.play();
       }
     });
   }
@@ -448,71 +523,106 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
 
     return Stack(
       children: [
-        // Background Video / Cover
+        // Background Video or Photo
         Positioned.fill(
-          child: _controller.value.isInitialized &&
-                  _controller.value.size.width > 0 &&
-                  _controller.value.size.height > 0
-              ? GestureDetector(
-                  onTap: _togglePlayPause,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox.expand(
-                        child: FittedBox(
-                          fit: BoxFit.cover,
-                          child: SizedBox(
-                            width: _controller.value.size.width,
-                            height: _controller.value.size.height,
-                            child: VideoPlayer(_controller),
-                          ),
-                        ),
-                      ),
-                      // Center Pause / Play indicator icon when paused
-                      if (!_controller.value.isPlaying)
-                        Container(
-                          width: 68,
-                          height: 68,
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.5),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: const Icon(
-                            Icons.play_arrow_rounded,
-                            color: Colors.white,
-                            size: 44,
-                          ),
-                        ),
-                    ],
-                  ),
-                )
-              : Container(
-                  color: const Color(0xFF121216),
-                  child: Center(
-                    child: (_controller.value.hasError || _hasControllerError)
-                        ? Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.play_circle_outline_rounded, color: Colors.white24, size: 54),
-                              const SizedBox(height: 10),
-                              Text(
-                                'Video playback paused',
-                                style: TextStyle(color: Colors.white.withValues(alpha: 0.38), fontSize: 13),
+          child: Container(
+            color: const Color(0xFF121216),
+            child: widget.video.isImagePost
+                ? GestureDetector(
+                    onDoubleTap: _handleDoubleTap,
+                    behavior: HitTestBehavior.opaque,
+                    child: Center(
+                      child: _buildImagePost(video.videoUrl),
+                    ),
+                  )
+                : (_controller != null &&
+                        _controller!.value.isInitialized &&
+                        _controller!.value.size.width > 0 &&
+                        _controller!.value.size.height > 0)
+                    ? GestureDetector(
+                        onTap: _togglePlayPause,
+                        onDoubleTap: _handleDoubleTap,
+                        behavior: HitTestBehavior.opaque,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            SizedBox.expand(
+                              child: FittedBox(
+                                fit: BoxFit.cover,
+                                child: SizedBox(
+                                  width: _controller!.value.size.width,
+                                  height: _controller!.value.size.height,
+                                  child: VideoPlayer(_controller!),
+                                ),
                               ),
-                            ],
-                          )
-                        : const SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
-                          ),
-                  ),
-                ),
+                            ),
+                            // Center Pause / Play indicator icon when paused
+                            if (!_controller!.value.isPlaying)
+                              Container(
+                                width: 68,
+                                height: 68,
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.5),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.2),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.play_arrow_rounded,
+                                  color: Colors.white,
+                                  size: 44,
+                                ),
+                              ),
+                          ],
+                        ),
+                      )
+                    : Center(
+                        child: (_controller != null && (_controller!.value.hasError || _hasControllerError))
+                            ? Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.play_circle_outline_rounded, color: Colors.white24, size: 54),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    'Video playback paused',
+                                    style: TextStyle(color: Colors.white.withValues(alpha: 0.38), fontSize: 13),
+                                  ),
+                                ],
+                              )
+                            : const SizedBox(
+                                width: 28,
+                                height: 28,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
+                              ),
+                      ),
+          ),
         ),
+
+        // Animated Double-Tap Heart pop
+        if (_showHeartAnimation)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Center(
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.4, end: 1.2),
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.elasticOut,
+                  builder: (context, scale, child) {
+                    return Transform.scale(
+                      scale: scale,
+                      child: const Icon(
+                        Icons.favorite,
+                        color: Colors.redAccent,
+                        size: 96,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
 
         // Dark gradient overlay at the bottom for text readability
         Positioned(

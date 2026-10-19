@@ -8,7 +8,7 @@ class VideoModel {
   final String? avatarUrl;
   final String caption;
   final String videoUrl;
-  final String? thumbnailUrl;
+  final String? _thumbnailUrl;
   final int viewCount;
   final int likeCount;
   final int commentCount;
@@ -26,7 +26,7 @@ class VideoModel {
     this.avatarUrl,
     required this.caption,
     required this.videoUrl,
-    this.thumbnailUrl,
+    String? thumbnailUrl,
     this.viewCount = 0,
     this.likeCount = 0,
     this.commentCount = 0,
@@ -35,7 +35,22 @@ class VideoModel {
     this.isSaved = false,
     this.tags = const [],
     this.createdAt,
-  });
+  }) : _thumbnailUrl = thumbnailUrl;
+
+  /// Returns true if the media represents an image post rather than a video.
+  bool get isImagePost {
+    final lower = videoUrl.toLowerCase();
+    return lower.contains('/uploads/photos/') ||
+        RegExp(r'\.(jpg|jpeg|png|webp|gif)($|\?)', caseSensitive: false).hasMatch(lower);
+  }
+
+  /// Returns the thumbnail URL, defaulting to [videoUrl] if this is an image post.
+  String? get thumbnailUrl {
+    if (_thumbnailUrl != null && _thumbnailUrl!.trim().isNotEmpty) {
+      return _thumbnailUrl;
+    }
+    return isImagePost ? videoUrl : null;
+  }
 
   /// Resolves relative URLs (e.g., /uploads/videos/abc.mp4) to full HTTP URLs using ApiClient
   static String resolveMediaUrl(String? url) {
@@ -60,6 +75,17 @@ class VideoModel {
         ? (json['tags'] as List).map((t) => t.toString()).toList()
         : <String>[];
 
+    final resolvedVideoUrl = resolveMediaUrl(rawVideoUrl);
+    String? resolvedThumbUrl = (rawThumbUrl != null && rawThumbUrl.trim().isNotEmpty)
+        ? resolveMediaUrl(rawThumbUrl)
+        : null;
+
+    final isImg = resolvedVideoUrl.toLowerCase().contains('/uploads/photos/') ||
+        RegExp(r'\.(jpg|jpeg|png|webp|gif)($|\?)', caseSensitive: false).hasMatch(resolvedVideoUrl);
+    if (isImg && (resolvedThumbUrl == null || resolvedThumbUrl.isEmpty)) {
+      resolvedThumbUrl = resolvedVideoUrl;
+    }
+
     return VideoModel(
       id: (json['id'] as num?)?.toInt() ?? 0,
       creatorId: (json['creatorId'] as num?)?.toInt() ?? 0,
@@ -67,8 +93,8 @@ class VideoModel {
       displayName: json['displayName']?.toString() ?? 'User',
       avatarUrl: json['avatarUrl']?.toString(),
       caption: json['caption']?.toString() ?? '',
-      videoUrl: resolveMediaUrl(rawVideoUrl),
-      thumbnailUrl: rawThumbUrl != null ? resolveMediaUrl(rawThumbUrl) : null,
+      videoUrl: resolvedVideoUrl,
+      thumbnailUrl: resolvedThumbUrl,
       viewCount: (json['viewCount'] as num?)?.toInt() ?? 0,
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
       commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
@@ -129,7 +155,7 @@ class VideoModel {
       avatarUrl: avatarUrl ?? this.avatarUrl,
       caption: caption ?? this.caption,
       videoUrl: videoUrl ?? this.videoUrl,
-      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
+      thumbnailUrl: thumbnailUrl ?? _thumbnailUrl,
       viewCount: viewCount ?? this.viewCount,
       likeCount: likeCount ?? this.likeCount,
       commentCount: commentCount ?? this.commentCount,

@@ -32,6 +32,7 @@ public class LocalFileStorageService implements FileStorageService {
             this.rootStoragePath = Paths.get(uploadDir).toAbsolutePath().normalize();
             Files.createDirectories(this.rootStoragePath);
             Files.createDirectories(this.rootStoragePath.resolve("videos"));
+            Files.createDirectories(this.rootStoragePath.resolve("photos"));
             Files.createDirectories(this.rootStoragePath.resolve("thumbnails"));
             log.info("Local storage directories initialized at: {}", this.rootStoragePath);
         } catch (IOException e) {

@@ -128,10 +128,15 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
     }
   }
 
+  bool get _isSelectedFileImage =>
+      _selectedFile != null &&
+      RegExp(r'\.(jpg|jpeg|png|webp|gif)$', caseSensitive: false).hasMatch(_selectedFile!.name);
+
   Future<void> _pickVideo() async {
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.video,
+        type: FileType.custom,
+        allowedExtensions: ['mp4', 'mov', 'mkv', 'webm', 'jpg', 'jpeg', 'png', 'webp', 'gif'],
         allowMultiple: false,
         withData: true,
       );
@@ -145,7 +150,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Could not select video: $e';
+          _errorMessage = 'Could not select file: $e';
         });
       }
     }
@@ -182,7 +187,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   Future<void> _handleUpload() async {
     if (_selectedFile == null) {
       setState(() {
-        _errorMessage = 'Please select a video file.';
+        _errorMessage = 'Please select a video or photo file.';
       });
       return;
     }
@@ -216,6 +221,8 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
         await _quickLogin();
       }
 
+      final isImage = _isSelectedFileImage;
+
       List<int>? videoBytes = _selectedFile!.bytes;
       if ((videoBytes == null || videoBytes.isEmpty) && _selectedFile!.path != null) {
         final localFile = File(_selectedFile!.path!);
@@ -224,8 +231,8 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
         }
       }
 
-      List<int>? thumbnailBytes = _selectedThumbnail?.bytes;
-      if ((thumbnailBytes == null || thumbnailBytes.isEmpty) && _selectedThumbnail?.path != null) {
+      List<int>? thumbnailBytes = isImage ? null : _selectedThumbnail?.bytes;
+      if (!isImage && (thumbnailBytes == null || thumbnailBytes.isEmpty) && _selectedThumbnail?.path != null) {
         final localThumb = File(_selectedThumbnail!.path!);
         if (localThumb.existsSync()) {
           thumbnailBytes = await localThumb.readAsBytes();
@@ -237,9 +244,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
         videoPath: _selectedFile!.path,
         videoBytes: videoBytes,
         videoFilename: _selectedFile!.name,
-        thumbnailPath: _selectedThumbnail?.path,
+        thumbnailPath: isImage ? null : _selectedThumbnail?.path,
         thumbnailBytes: thumbnailBytes,
-        thumbnailFilename: _selectedThumbnail?.name ?? 'thumbnail.jpg',
+        thumbnailFilename: isImage ? 'thumbnail.jpg' : (_selectedThumbnail?.name ?? 'thumbnail.jpg'),
         tags: tags,
       );
 
@@ -254,13 +261,13 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             content: Row(
-              children: const [
-                Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 20),
-                SizedBox(width: 10),
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 20),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Video posted! Now playing at top of feed.',
-                    style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                    isImage ? 'Photo posted! Now appearing in feed.' : 'Video posted! Now playing at top of feed.',
+                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -426,9 +433,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
                 const SizedBox(height: 18),
 
-                // System Video Picker Section
+                // System Video / Photo Picker Section
                 const Text(
-                  'VIDEO FILE',
+                  'VIDEO OR PHOTO',
                   style: TextStyle(
                     color: Color(0xFF8E8E93),
                     fontSize: 11,
@@ -471,7 +478,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                           ),
                           const SizedBox(height: 12),
                           const Text(
-                            'Choose Video from Files / Downloads',
+                            'Choose Video or Photo',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 15,
@@ -480,7 +487,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                           ),
                           const SizedBox(height: 4),
                           const Text(
-                            'Tap to pick directly from Downloads (.mp4, .mov)',
+                            'Pick an .mp4, .mov, .jpg, or .png from your device',
                             style: TextStyle(
                               color: Color(0xFF8E8E93),
                               fontSize: 12,
@@ -505,19 +512,55 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                     ),
                     child: Row(
                       children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.1),
+                        if (_isSelectedFileImage)
+                          ClipRRect(
                             borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              color: const Color(0xFF2B2B36),
+                              child: _selectedFile!.bytes != null
+                                  ? Image.memory(
+                                      _selectedFile!.bytes!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(
+                                        Icons.image_outlined,
+                                        color: Colors.white70,
+                                        size: 24,
+                                      ),
+                                    )
+                                  : (_selectedFile!.path != null &&
+                                          File(_selectedFile!.path!).existsSync())
+                                      ? Image.file(
+                                          File(_selectedFile!.path!),
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) => const Icon(
+                                            Icons.image_outlined,
+                                            color: Colors.white70,
+                                            size: 24,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.image_rounded,
+                                          color: Colors.white70,
+                                          size: 24,
+                                        ),
+                            ),
+                          )
+                        else
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.movie_creation_rounded,
+                              color: Colors.white,
+                              size: 24,
+                            ),
                           ),
-                          child: const Icon(
-                            Icons.movie_creation_rounded,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -548,7 +591,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                         IconButton(
                           key: const Key('upload_change_video_button'),
                           icon: const Icon(Icons.sync_rounded, color: Colors.white70, size: 20),
-                          tooltip: 'Change video',
+                          tooltip: _isSelectedFileImage ? 'Change photo' : 'Change video',
                           onPressed: _isUploading ? null : _pickVideo,
                         ),
                         IconButton(
@@ -568,180 +611,182 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                   ),
                 ],
 
-                const SizedBox(height: 18),
+                if (!_isSelectedFileImage) ...[
+                  const SizedBox(height: 18),
 
-                // Thumbnail Image Picker Section (Optional)
-                const Text(
-                  'THUMBNAIL (OPTIONAL)',
-                  style: TextStyle(
-                    color: Color(0xFF8E8E93),
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.8,
+                  // Thumbnail Image Picker Section (Optional)
+                  const Text(
+                    'THUMBNAIL (OPTIONAL)',
+                    style: TextStyle(
+                      color: Color(0xFF8E8E93),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
+                  const SizedBox(height: 8),
 
-                if (_selectedThumbnail == null) ...[
-                  // Unselected Thumbnail Card
-                  InkWell(
-                    key: const Key('upload_pick_thumbnail_button'),
-                    onTap: _isUploading ? null : _pickThumbnail,
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  if (_selectedThumbnail == null) ...[
+                    // Unselected Thumbnail Card
+                    InkWell(
+                      key: const Key('upload_pick_thumbnail_button'),
+                      onTap: _isUploading ? null : _pickThumbnail,
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1E24),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: const Color(0xFF323238),
+                            width: 1.0,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.08),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.add_photo_alternate_rounded,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Choose Thumbnail Image',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Pick a .jpg, .png, or .webp cover image',
+                                    style: TextStyle(
+                                      color: Color(0xFF8E8E93),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              color: Color(0xFF8E8E93),
+                              size: 20,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    // Selected Thumbnail Preview Tile
+                    Container(
+                      key: const Key('upload_selected_thumbnail_tile'),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: const Color(0xFF1E1E24),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: const Color(0xFF323238),
+                          color: Colors.white.withValues(alpha: 0.2),
                           width: 1.0,
                         ),
                       ),
                       child: Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.08),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.add_photo_alternate_rounded,
-                              color: Colors.white,
-                              size: 20,
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              color: const Color(0xFF2B2B36),
+                              child: _selectedThumbnail!.bytes != null
+                                  ? Image.memory(
+                                      _selectedThumbnail!.bytes!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(
+                                        Icons.image_outlined,
+                                        color: Colors.white70,
+                                        size: 22,
+                                      ),
+                                    )
+                                  : (_selectedThumbnail!.path != null &&
+                                          File(_selectedThumbnail!.path!).existsSync())
+                                      ? Image.file(
+                                          File(_selectedThumbnail!.path!),
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) => const Icon(
+                                            Icons.image_outlined,
+                                            color: Colors.white70,
+                                            size: 22,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.image_rounded,
+                                          color: Colors.white70,
+                                          size: 22,
+                                        ),
                             ),
                           ),
-                          const SizedBox(width: 14),
-                          const Expanded(
+                          const SizedBox(width: 12),
+                          Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Choose Thumbnail Image',
-                                  style: TextStyle(
+                                  _selectedThumbnail!.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
                                     color: Colors.white,
-                                    fontSize: 14,
+                                    fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                                SizedBox(height: 2),
+                                const SizedBox(height: 2),
                                 Text(
-                                  'Pick a .jpg, .png, or .webp cover image',
-                                  style: TextStyle(
+                                  _formatFileSize(_selectedThumbnail!.size),
+                                  style: const TextStyle(
                                     color: Color(0xFF8E8E93),
-                                    fontSize: 12,
+                                    fontSize: 11,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          const Icon(
-                            Icons.chevron_right_rounded,
-                            color: Color(0xFF8E8E93),
-                            size: 20,
+                          const SizedBox(width: 8),
+                          IconButton(
+                            key: const Key('upload_change_thumbnail_button'),
+                            icon: const Icon(Icons.sync_rounded, color: Colors.white70, size: 20),
+                            tooltip: 'Change thumbnail',
+                            onPressed: _isUploading ? null : _pickThumbnail,
+                          ),
+                          IconButton(
+                            key: const Key('upload_remove_thumbnail_button'),
+                            icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 20),
+                            tooltip: 'Remove thumbnail',
+                            onPressed: _isUploading
+                                ? null
+                                : () {
+                                    setState(() {
+                                      _selectedThumbnail = null;
+                                    });
+                                  },
                           ),
                         ],
                       ),
                     ),
-                  ),
-                ] else ...[
-                  // Selected Thumbnail Preview Tile
-                  Container(
-                    key: const Key('upload_selected_thumbnail_tile'),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E1E24),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        width: 1.0,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: Container(
-                            width: 48,
-                            height: 48,
-                            color: const Color(0xFF2B2B36),
-                            child: _selectedThumbnail!.bytes != null
-                                ? Image.memory(
-                                    _selectedThumbnail!.bytes!,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => const Icon(
-                                      Icons.image_outlined,
-                                      color: Colors.white70,
-                                      size: 22,
-                                    ),
-                                  )
-                                : (_selectedThumbnail!.path != null &&
-                                        File(_selectedThumbnail!.path!).existsSync())
-                                    ? Image.file(
-                                        File(_selectedThumbnail!.path!),
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, __, ___) => const Icon(
-                                          Icons.image_outlined,
-                                          color: Colors.white70,
-                                          size: 22,
-                                        ),
-                                      )
-                                    : const Icon(
-                                        Icons.image_rounded,
-                                        color: Colors.white70,
-                                        size: 22,
-                                      ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _selectedThumbnail!.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _formatFileSize(_selectedThumbnail!.size),
-                                style: const TextStyle(
-                                  color: Color(0xFF8E8E93),
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          key: const Key('upload_change_thumbnail_button'),
-                          icon: const Icon(Icons.sync_rounded, color: Colors.white70, size: 20),
-                          tooltip: 'Change thumbnail',
-                          onPressed: _isUploading ? null : _pickThumbnail,
-                        ),
-                        IconButton(
-                          key: const Key('upload_remove_thumbnail_button'),
-                          icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 20),
-                          tooltip: 'Remove thumbnail',
-                          onPressed: _isUploading
-                              ? null
-                              : () {
-                                  setState(() {
-                                    _selectedThumbnail = null;
-                                  });
-                                },
-                        ),
-                      ],
-                    ),
-                  ),
+                  ],
                 ],
 
                 const SizedBox(height: 18),
@@ -898,10 +943,10 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                       ),
                     ),
                     child: _isUploading
-                        ? const Row(
+                        ? Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              SizedBox(
+                              const SizedBox(
                                 width: 18,
                                 height: 18,
                                 child: CircularProgressIndicator(
@@ -909,10 +954,10 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                                   color: Colors.black,
                                 ),
                               ),
-                              SizedBox(width: 12),
+                              const SizedBox(width: 12),
                               Text(
-                                'Uploading Video...',
-                                style: TextStyle(
+                                _isSelectedFileImage ? 'Uploading Photo...' : 'Uploading Video...',
+                                style: const TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.black,
@@ -920,14 +965,14 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                               ),
                             ],
                           )
-                        : const Row(
+                        : Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.arrow_upward_rounded, size: 20, color: Colors.black),
-                              SizedBox(width: 8),
+                              const Icon(Icons.arrow_upward_rounded, size: 20, color: Colors.black),
+                              const SizedBox(width: 8),
                               Text(
-                                'Post Video',
-                                style: TextStyle(
+                                _isSelectedFileImage ? 'Post Photo' : 'Post Video',
+                                style: const TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 0.2,

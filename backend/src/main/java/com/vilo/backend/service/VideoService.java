@@ -47,6 +47,18 @@ public class VideoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Video not found with id: " + id));
     }
 
+    public boolean isImageFile(String filenameOrPath, String contentType) {
+        if (contentType != null && contentType.toLowerCase().startsWith("image/")) {
+            return true;
+        }
+        if (filenameOrPath != null) {
+            String lower = filenameOrPath.toLowerCase().trim();
+            return lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")
+                    || lower.endsWith(".webp") || lower.endsWith(".gif") || lower.endsWith(".bmp");
+        }
+        return false;
+    }
+
     public String normalizeVideoPath(String rawPath) {
         if (rawPath == null || rawPath.isBlank()) {
             return null;
@@ -61,18 +73,31 @@ public class VideoService {
         if (path.startsWith("/")) {
             path = path.substring(1);
         }
+        if (path.startsWith("photos/")) {
+            return "/uploads/" + path;
+        }
+        if (path.startsWith("videos/")) {
+            return "/uploads/" + path;
+        }
+        if (isImageFile(path, null)) {
+            return "/uploads/photos/" + path;
+        }
         return "/uploads/videos/" + path;
     }
 
     @Transactional
     public Video createVideo(Long creatorId, String title, String description, String caption, MultipartFile videoFile, String directPath, MultipartFile thumbnailFile, String thumbnailPath, List<String> tags) {
         String videoUrl;
+        boolean isImage = false;
         if (videoFile != null && !videoFile.isEmpty()) {
-            videoUrl = fileStorageService.storeFile(videoFile, "videos");
+            isImage = isImageFile(videoFile.getOriginalFilename(), videoFile.getContentType());
+            String subDir = isImage ? "photos" : "videos";
+            videoUrl = fileStorageService.storeFile(videoFile, subDir);
         } else if (directPath != null && !directPath.isBlank()) {
+            isImage = isImageFile(directPath, null);
             videoUrl = normalizeVideoPath(directPath);
         } else {
-            throw new IllegalArgumentException("Either videoFile or videoPath must be provided");
+            throw new IllegalArgumentException("Either video/photo file or video/photo path must be provided");
         }
 
         String thumbnailUrl = null;
@@ -80,6 +105,9 @@ public class VideoService {
             thumbnailUrl = fileStorageService.storeFile(thumbnailFile, "thumbnails");
         } else if (thumbnailPath != null && !thumbnailPath.isBlank()) {
             thumbnailUrl = thumbnailPath.trim();
+        } else if (isImage) {
+            // For photo posts without explicit thumbnail, auto-assign the photo URL as thumbnail
+            thumbnailUrl = videoUrl;
         }
 
         String effectiveCaption = caption;
