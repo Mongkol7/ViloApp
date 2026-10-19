@@ -9,20 +9,22 @@ import '../controllers/video_feed_manager.dart';
 
 class UploadVideoSheet extends StatefulWidget {
   final PlatformFile? initialFile;
+  final PlatformFile? initialThumbnail;
 
   const UploadVideoSheet({
     super.key,
     this.initialFile,
+    this.initialThumbnail,
   });
 
-  static Future<VideoModel?> show(BuildContext context, {PlatformFile? initialFile}) {
+  static Future<VideoModel?> show(BuildContext context, {PlatformFile? initialFile, PlatformFile? initialThumbnail}) {
     return showModalBottomSheet<VideoModel>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black87,
-      builder: (ctx) => UploadVideoSheet(initialFile: initialFile),
+      builder: (ctx) => UploadVideoSheet(initialFile: initialFile, initialThumbnail: initialThumbnail),
     );
   }
 
@@ -36,6 +38,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   final TokenStorage _tokenStorage = TokenStorage.instance;
 
   PlatformFile? _selectedFile;
+  PlatformFile? _selectedThumbnail;
 
   final TextEditingController _captionController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
@@ -54,6 +57,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
     if (widget.initialFile != null) {
       _selectedFile = widget.initialFile;
     }
+    if (widget.initialThumbnail != null) {
+      _selectedThumbnail = widget.initialThumbnail;
+    }
     _checkAuthStatus();
   }
 
@@ -63,6 +69,11 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
     if (widget.initialFile != oldWidget.initialFile && widget.initialFile != null) {
       setState(() {
         _selectedFile = widget.initialFile;
+      });
+    }
+    if (widget.initialThumbnail != oldWidget.initialThumbnail && widget.initialThumbnail != null) {
+      setState(() {
+        _selectedThumbnail = widget.initialThumbnail;
       });
     }
   }
@@ -140,6 +151,28 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
     }
   }
 
+  Future<void> _pickThumbnail() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: true,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          _selectedThumbnail = result.files.first;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Could not select thumbnail: $e';
+        });
+      }
+    }
+  }
+
   String _formatFileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
@@ -191,11 +224,22 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
         }
       }
 
+      List<int>? thumbnailBytes = _selectedThumbnail?.bytes;
+      if ((thumbnailBytes == null || thumbnailBytes.isEmpty) && _selectedThumbnail?.path != null) {
+        final localThumb = File(_selectedThumbnail!.path!);
+        if (localThumb.existsSync()) {
+          thumbnailBytes = await localThumb.readAsBytes();
+        }
+      }
+
       final newVideo = await _feedDataSource.uploadVideo(
         caption: caption,
         videoPath: _selectedFile!.path,
         videoBytes: videoBytes,
         videoFilename: _selectedFile!.name,
+        thumbnailPath: _selectedThumbnail?.path,
+        thumbnailBytes: thumbnailBytes,
+        thumbnailFilename: _selectedThumbnail?.name ?? 'thumbnail.jpg',
         tags: tags,
       );
 
@@ -382,7 +426,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
                 const SizedBox(height: 18),
 
-                // System File Picker Section
+                // System Video Picker Section
                 const Text(
                   'VIDEO FILE',
                   style: TextStyle(
@@ -516,6 +560,182 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                               : () {
                                   setState(() {
                                     _selectedFile = null;
+                                  });
+                                },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 18),
+
+                // Thumbnail Image Picker Section (Optional)
+                const Text(
+                  'THUMBNAIL (OPTIONAL)',
+                  style: TextStyle(
+                    color: Color(0xFF8E8E93),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                if (_selectedThumbnail == null) ...[
+                  // Unselected Thumbnail Card
+                  InkWell(
+                    key: const Key('upload_pick_thumbnail_button'),
+                    onTap: _isUploading ? null : _pickThumbnail,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E24),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: const Color(0xFF323238),
+                          width: 1.0,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.add_photo_alternate_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Choose Thumbnail Image',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Pick a .jpg, .png, or .webp cover image',
+                                  style: TextStyle(
+                                    color: Color(0xFF8E8E93),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.chevron_right_rounded,
+                            color: Color(0xFF8E8E93),
+                            size: 20,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  // Selected Thumbnail Preview Tile
+                  Container(
+                    key: const Key('upload_selected_thumbnail_tile'),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E24),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        width: 1.0,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            width: 48,
+                            height: 48,
+                            color: const Color(0xFF2B2B36),
+                            child: _selectedThumbnail!.bytes != null
+                                ? Image.memory(
+                                    _selectedThumbnail!.bytes!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const Icon(
+                                      Icons.image_outlined,
+                                      color: Colors.white70,
+                                      size: 22,
+                                    ),
+                                  )
+                                : (_selectedThumbnail!.path != null &&
+                                        File(_selectedThumbnail!.path!).existsSync())
+                                    ? Image.file(
+                                        File(_selectedThumbnail!.path!),
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => const Icon(
+                                          Icons.image_outlined,
+                                          color: Colors.white70,
+                                          size: 22,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.image_rounded,
+                                        color: Colors.white70,
+                                        size: 22,
+                                      ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _selectedThumbnail!.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _formatFileSize(_selectedThumbnail!.size),
+                                style: const TextStyle(
+                                  color: Color(0xFF8E8E93),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          key: const Key('upload_change_thumbnail_button'),
+                          icon: const Icon(Icons.sync_rounded, color: Colors.white70, size: 20),
+                          tooltip: 'Change thumbnail',
+                          onPressed: _isUploading ? null : _pickThumbnail,
+                        ),
+                        IconButton(
+                          key: const Key('upload_remove_thumbnail_button'),
+                          icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 20),
+                          tooltip: 'Remove thumbnail',
+                          onPressed: _isUploading
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _selectedThumbnail = null;
                                   });
                                 },
                         ),

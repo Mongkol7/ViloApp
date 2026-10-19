@@ -124,25 +124,33 @@ void main() {
     expect(pickButtonRenderBox.size.height, greaterThan(0));
     expect(find.text('Choose Video from Files / Downloads'), findsOneWidget);
 
-    // 4. Verify Caption TextField renders visibly with non-zero size
+    // 4. Verify Thumbnail Picker Button renders visibly with non-zero size
+    final thumbButtonFinder = find.byKey(const Key('upload_pick_thumbnail_button'));
+    expect(thumbButtonFinder, findsOneWidget);
+    final thumbButtonRenderBox = tester.renderObject<RenderBox>(thumbButtonFinder);
+    expect(thumbButtonRenderBox.size.width, greaterThan(0));
+    expect(thumbButtonRenderBox.size.height, greaterThan(0));
+    expect(find.text('Choose Thumbnail Image'), findsOneWidget);
+
+    // 5. Verify Caption TextField renders visibly with non-zero size
     final captionFieldFinder = find.byKey(const Key('upload_caption_field'));
     expect(captionFieldFinder, findsOneWidget);
     final captionRenderBox = tester.renderObject<RenderBox>(captionFieldFinder);
     expect(captionRenderBox.size.width, greaterThan(0));
     expect(captionRenderBox.size.height, greaterThan(0));
 
-    // 5. Verify Tags TextField renders visibly with non-zero size
+    // 6. Verify Tags TextField renders visibly with non-zero size
     final tagsFieldFinder = find.byKey(const Key('upload_tags_field'));
     expect(tagsFieldFinder, findsOneWidget);
     final tagsRenderBox = tester.renderObject<RenderBox>(tagsFieldFinder);
     expect(tagsRenderBox.size.width, greaterThan(0));
     expect(tagsRenderBox.size.height, greaterThan(0));
 
-    // 6. Verify Quick Hashtag chips render
+    // 7. Verify Quick Hashtag chips render
     expect(find.text('#vilo'), findsOneWidget);
     expect(find.text('#trending'), findsOneWidget);
 
-    // 7. Verify Post Video button renders visibly with non-zero size
+    // 8. Verify Post Video button renders visibly with non-zero size
     final postButtonFinder = find.byKey(const Key('upload_post_video_button'));
     expect(postButtonFinder, findsOneWidget);
     final postButtonRenderBox = tester.renderObject<RenderBox>(postButtonFinder);
@@ -150,7 +158,7 @@ void main() {
     expect(postButtonRenderBox.size.height, greaterThan(0));
   });
 
-  testWidgets('UploadVideoSheet displays selected video preview tile and validates required inputs', (WidgetTester tester) async {
+  testWidgets('UploadVideoSheet displays selected video and thumbnail preview tiles and validates required inputs', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.0;
     addTearDown(() {
@@ -179,11 +187,16 @@ void main() {
     await tester.pump();
     expect(find.text('Please select a video file.'), findsOneWidget);
 
-    // Case B: Selected video state with preview tile
+    // Case B: Selected video & thumbnail state with preview tiles
     final fakeVideo = PlatformFile(
       name: 'test_clip.mp4',
       size: 1024 * 1024 * 2,
       path: 'test_clip.mp4',
+    );
+    final fakeThumbnail = PlatformFile(
+      name: 'cover.jpg',
+      size: 1024 * 50,
+      path: 'cover.jpg',
     );
     await tester.pumpWidget(
       MaterialApp(
@@ -192,6 +205,7 @@ void main() {
           body: UploadVideoSheet(
             key: const ValueKey('sheet_with_video'),
             initialFile: fakeVideo,
+            initialThumbnail: fakeThumbnail,
           ),
         ),
       ),
@@ -200,11 +214,17 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    // Verify preview tile renders with video name and action buttons
+    // Verify video preview tile renders with video name and action buttons
     expect(find.byKey(const Key('upload_selected_video_tile')), findsOneWidget);
     expect(find.text('test_clip.mp4'), findsOneWidget);
     expect(find.byKey(const Key('upload_change_video_button')), findsOneWidget);
     expect(find.byKey(const Key('upload_remove_video_button')), findsOneWidget);
+
+    // Verify thumbnail preview tile renders with thumbnail name and action buttons
+    expect(find.byKey(const Key('upload_selected_thumbnail_tile')), findsOneWidget);
+    expect(find.text('cover.jpg'), findsOneWidget);
+    expect(find.byKey(const Key('upload_change_thumbnail_button')), findsOneWidget);
+    expect(find.byKey(const Key('upload_remove_thumbnail_button')), findsOneWidget);
 
     final captionField = find.byKey(const Key('upload_caption_field'));
     final tagsField = find.byKey(const Key('upload_tags_field'));
@@ -221,6 +241,12 @@ void main() {
 
     expect(find.text('My amazing travel clip #cambodia'), findsOneWidget);
     expect(find.text('#travel, #vilo'), findsOneWidget);
+
+    // Test remove thumbnail clears thumbnail preview tile and restores thumbnail picker button
+    await tester.tap(find.byKey(const Key('upload_remove_thumbnail_button')));
+    await tester.pump();
+    expect(find.byKey(const Key('upload_selected_thumbnail_tile')), findsNothing);
+    expect(find.byKey(const Key('upload_pick_thumbnail_button')), findsOneWidget);
 
     // Test remove video button clears preview tile and restores picker button
     await tester.tap(find.byKey(const Key('upload_remove_video_button')));
