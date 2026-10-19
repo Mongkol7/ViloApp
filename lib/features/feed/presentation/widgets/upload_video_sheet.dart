@@ -1,4 +1,3 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../../../auth/data/datasources/auth_remote_data_source.dart';
 import '../../../auth/data/datasources/token_storage.dart';
@@ -7,21 +6,21 @@ import '../../data/models/video_model.dart';
 import '../controllers/video_feed_manager.dart';
 
 class UploadVideoSheet extends StatefulWidget {
-  final PlatformFile? initialFile;
+  final String? initialVideoPath;
 
   const UploadVideoSheet({
     super.key,
-    this.initialFile,
+    this.initialVideoPath,
   });
 
-  static Future<VideoModel?> show(BuildContext context, {PlatformFile? initialFile}) {
+  static Future<VideoModel?> show(BuildContext context, {String? initialVideoPath}) {
     return showModalBottomSheet<VideoModel>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black87,
-      builder: (ctx) => UploadVideoSheet(initialFile: initialFile),
+      builder: (ctx) => UploadVideoSheet(initialVideoPath: initialVideoPath),
     );
   }
 
@@ -34,11 +33,10 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   final AuthRemoteDataSource _authDataSource = AuthRemoteDataSource();
   final TokenStorage _tokenStorage = TokenStorage.instance;
 
+  final TextEditingController _videoPathController = TextEditingController();
   final TextEditingController _captionController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
 
-  PlatformFile? _selectedFile;
-  bool _isPickingFile = false;
   bool _isUploading = false;
   bool _isLoggingIn = false;
   String? _errorMessage;
@@ -50,12 +48,15 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   @override
   void initState() {
     super.initState();
-    _selectedFile = widget.initialFile;
+    if (widget.initialVideoPath != null) {
+      _videoPathController.text = widget.initialVideoPath!;
+    }
     _checkAuthStatus();
   }
 
   @override
   void dispose() {
+    _videoPathController.dispose();
     _captionController.dispose();
     _tagsController.dispose();
     super.dispose();
@@ -72,49 +73,6 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
         _loggedInUsername = username;
         _loggedInDisplayName = displayName;
       });
-    }
-  }
-
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-
-  Future<void> _pickVideoFile() async {
-    setState(() {
-      _isPickingFile = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.video,
-        withData: true,
-      );
-
-      if (result != null && result.files.isNotEmpty) {
-        final file = result.files.single;
-        if (mounted) {
-          setState(() {
-            _selectedFile = file;
-            _isPickingFile = false;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _isPickingFile = false;
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isPickingFile = false;
-          _errorMessage = 'Could not open file picker: $e';
-        });
-      }
     }
   }
 
@@ -148,9 +106,10 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   }
 
   Future<void> _handleUpload() async {
-    if (_selectedFile == null) {
+    final videoPath = _videoPathController.text.trim();
+    if (videoPath.isEmpty) {
       setState(() {
-        _errorMessage = 'Please tap the box above to choose a video file.';
+        _errorMessage = 'Please enter a video filename or path.';
       });
       return;
     }
@@ -186,9 +145,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
       final newVideo = await _feedDataSource.uploadVideo(
         caption: caption,
-        videoPath: _selectedFile!.path,
-        videoBytes: _selectedFile!.bytes,
-        videoFilename: _selectedFile!.name,
+        videoPath: videoPath,
         tags: tags,
       );
 
@@ -375,9 +332,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
                 const SizedBox(height: 18),
 
-                // b) Choose Video File Box
+                // Video Path / Filename Input
                 const Text(
-                  'VIDEO FILE',
+                  'VIDEO PATH / FILENAME',
                   style: TextStyle(
                     color: Color(0xFF8E8E93),
                     fontSize: 11,
@@ -385,137 +342,58 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                     letterSpacing: 0.8,
                   ),
                 ),
-                const SizedBox(height: 10),
-                InkWell(
-                  key: const Key('upload_choose_video_box'),
-                  onTap: _isPickingFile || _isUploading ? null : _pickVideoFile,
-                  borderRadius: BorderRadius.circular(16),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-                    decoration: BoxDecoration(
-                      color: _selectedFile != null ? const Color(0xFF1E222A) : const Color(0xFF1A1A20),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: _selectedFile != null
-                            ? Colors.white
-                            : const Color(0xFF32323A),
-                        width: _selectedFile != null ? 1.8 : 1.2,
-                      ),
+                const SizedBox(height: 8),
+                TextField(
+                  key: const Key('upload_video_path_field'),
+                  controller: _videoPathController,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: 'e.g. video1.mp4 or /uploads/videos/clip.mp4 or assets/videos/vid1.mp4',
+                    hintStyle: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13),
+                    filled: true,
+                    fillColor: const Color(0xFF1E1E24),
+                    prefixIcon: const Icon(Icons.movie_creation_outlined, color: Colors.white70, size: 20),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFF323238), width: 1.0),
                     ),
-                    child: _isPickingFile
-                        ? const Center(
-                            child: SizedBox(
-                              width: 28,
-                              height: 28,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.4,
-                                color: Colors.white,
-                              ),
-                            ),
-                          )
-                        : _selectedFile == null
-                            ? Column(
-                                mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Container(
-                                    width: 52,
-                                    height: 52,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.08),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.cloud_upload_outlined,
-                                      color: Colors.white,
-                                      size: 28,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  const Text(
-                                    'Tap to Choose Video File',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const Text(
-                                    'MP4, MOV, WebM or any device video format',
-                                    style: TextStyle(
-                                      color: Color(0xFF8E8E93),
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : Row(
-                                children: [
-                                  Container(
-                                    width: 48,
-                                    height: 48,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: const Icon(
-                                      Icons.movie_creation_rounded,
-                                      color: Colors.white,
-                                      size: 26,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          _selectedFile!.name,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _formatFileSize(_selectedFile!.size),
-                                          style: const TextStyle(
-                                            color: Color(0xFF8E8E93),
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  TextButton.icon(
-                                    onPressed: _isUploading ? null : _pickVideoFile,
-                                    icon: const Icon(Icons.refresh_rounded, size: 16, color: Colors.white),
-                                    label: const Text(
-                                      'Change',
-                                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                                    ),
-                                    style: TextButton.styleFrom(
-                                      backgroundColor: Colors.white.withValues(alpha: 0.1),
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                      minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Colors.white, width: 1.5),
+                    ),
                   ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  children: ['video1.mp4', 'assets/videos/vid1.mp4', 'assets/videos/vid2.mp4'].map((sample) {
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () {
+                        setState(() {
+                          _videoPathController.text = sample;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                        ),
+                        child: Text(
+                          sample,
+                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                        ),
+                      ),
+                    );
+                  }).toList(),
                 ),
 
                 const SizedBox(height: 18),
 
-                // c) Caption Input Form Field
+                // Caption Input Form Field
                 const Text(
                   'CAPTION',
                   style: TextStyle(
@@ -552,7 +430,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
                 const SizedBox(height: 4),
 
-                // d) Tags Input & Quick Chips
+                // Tags Input & Quick Chips
                 const Text(
                   'TAGS',
                   style: TextStyle(
@@ -650,7 +528,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
                 const SizedBox(height: 24),
 
-                // e) Submit Button: Bright full-width primary action button
+                // Submit Button: Bright full-width primary action button
                 SizedBox(
                   width: double.infinity,
                   height: 52,

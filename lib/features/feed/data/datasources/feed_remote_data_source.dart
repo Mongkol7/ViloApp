@@ -179,8 +179,32 @@ class FeedRemoteDataSource {
       request.fields['tags'] = tagsList.join(',');
     }
 
-    // Video payload
-    if (videoBytes != null && videoBytes.isNotEmpty) {
+    // Video payload (either multipart file or direct videoPath reference)
+    if (videoPath != null && videoPath.trim().isNotEmpty) {
+      final trimmedPath = videoPath.trim();
+      request.fields['videoPath'] = trimmedPath;
+
+      // Also attach file bytes if physical file exists on disk or in assets
+      final fileOnDisk = File(trimmedPath);
+      if (fileOnDisk.existsSync()) {
+        try {
+          request.files.add(await http.MultipartFile.fromPath('videoFile', trimmedPath));
+        } catch (_) {}
+      } else if (trimmedPath.startsWith('assets/')) {
+        try {
+          final byteData = await rootBundle.load(trimmedPath);
+          final bytes = byteData.buffer.asUint8List();
+          final name = trimmedPath.split('/').last;
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'videoFile',
+              bytes,
+              filename: name.isNotEmpty ? name : videoFilename,
+            ),
+          );
+        } catch (_) {}
+      }
+    } else if (videoBytes != null && videoBytes.isNotEmpty) {
       request.files.add(
         http.MultipartFile.fromBytes(
           'videoFile',
@@ -188,26 +212,8 @@ class FeedRemoteDataSource {
           filename: videoFilename,
         ),
       );
-    } else if (videoPath != null && videoPath.isNotEmpty) {
-      final fileOnDisk = File(videoPath);
-      if (fileOnDisk.existsSync()) {
-        request.files.add(await http.MultipartFile.fromPath('videoFile', videoPath));
-      } else if (videoPath.startsWith('assets/')) {
-        final byteData = await rootBundle.load(videoPath);
-        final bytes = byteData.buffer.asUint8List();
-        final name = videoPath.split('/').last;
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'videoFile',
-            bytes,
-            filename: name.isNotEmpty ? name : videoFilename,
-          ),
-        );
-      } else {
-        request.files.add(await http.MultipartFile.fromPath('videoFile', videoPath));
-      }
     } else {
-      throw ApiResponseException('A video file or video bytes must be provided', 400);
+      throw ApiResponseException('A video path or video file must be provided', 400);
     }
 
     // Thumbnail payload (optional)

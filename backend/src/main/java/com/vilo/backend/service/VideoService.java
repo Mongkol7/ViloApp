@@ -47,24 +47,72 @@ public class VideoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Video not found with id: " + id));
     }
 
+    public String normalizeVideoPath(String rawPath) {
+        if (rawPath == null || rawPath.isBlank()) {
+            return null;
+        }
+        String path = rawPath.trim().replace('\\', '/');
+        if (path.startsWith("/uploads/") || path.startsWith("assets/") || path.startsWith("http://") || path.startsWith("https://")) {
+            return path;
+        }
+        if (path.startsWith("uploads/")) {
+            return "/" + path;
+        }
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        return "/uploads/videos/" + path;
+    }
+
     @Transactional
-    public Video uploadVideo(Long creatorId, String caption, MultipartFile videoFile, MultipartFile thumbnailFile, List<String> tags) {
-        String videoUrl = fileStorageService.storeFile(videoFile, "videos");
-        
+    public Video createVideo(Long creatorId, String title, String description, String caption, MultipartFile videoFile, String directPath, MultipartFile thumbnailFile, String thumbnailPath, List<String> tags) {
+        String videoUrl;
+        if (videoFile != null && !videoFile.isEmpty()) {
+            videoUrl = fileStorageService.storeFile(videoFile, "videos");
+        } else if (directPath != null && !directPath.isBlank()) {
+            videoUrl = normalizeVideoPath(directPath);
+        } else {
+            throw new IllegalArgumentException("Either videoFile or videoPath must be provided");
+        }
+
         String thumbnailUrl = null;
         if (thumbnailFile != null && !thumbnailFile.isEmpty()) {
             thumbnailUrl = fileStorageService.storeFile(thumbnailFile, "thumbnails");
+        } else if (thumbnailPath != null && !thumbnailPath.isBlank()) {
+            thumbnailUrl = thumbnailPath.trim();
         }
 
-        Video video = new Video(creatorId, caption, videoUrl, thumbnailUrl);
-        
+        String effectiveCaption = caption;
+        if ((effectiveCaption == null || effectiveCaption.isBlank()) && (title != null || description != null)) {
+            effectiveCaption = ((title != null ? title : "") + (description != null && !description.isBlank() ? " " + description : "")).trim();
+        }
+
+        Video video = new Video(creatorId, title, description, effectiveCaption, videoUrl, thumbnailUrl);
+
         if (tags != null) {
             for (String tag : tags) {
-                video.getTags().add(new VideoTag(video, tag.trim()));
+                if (tag != null && !tag.isBlank()) {
+                    video.getTags().add(new VideoTag(video, tag.trim().replaceAll("^#", "")));
+                }
             }
         }
 
         return videoRepository.save(video);
+    }
+
+    @Transactional
+    public Video createVideo(Long creatorId, String caption, MultipartFile videoFile, String directPath, MultipartFile thumbnailFile, String thumbnailPath, List<String> tags) {
+        return createVideo(creatorId, null, null, caption, videoFile, directPath, thumbnailFile, thumbnailPath, tags);
+    }
+
+    @Transactional
+    public Video uploadVideo(Long creatorId, String caption, MultipartFile videoFile, MultipartFile thumbnailFile, List<String> tags) {
+        return createVideo(creatorId, caption, videoFile, null, thumbnailFile, null, tags);
+    }
+
+    @Transactional
+    public Video createVideoFromPath(Long creatorId, String caption, String videoPath, List<String> tags) {
+        return createVideo(creatorId, caption, null, videoPath, null, null, tags);
     }
 
     @Transactional

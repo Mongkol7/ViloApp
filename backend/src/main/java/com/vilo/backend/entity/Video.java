@@ -18,6 +18,12 @@ public class Video {
     @Column(name = "creator_id", nullable = false)
     private Long creatorId;
 
+    @Column(length = 255)
+    private String title;
+
+    @Column(length = 2000)
+    private String description;
+
     @Column(nullable = false, length = 500)
     private String caption;
 
@@ -56,6 +62,17 @@ public class Video {
         if (this.likeCount == null) this.likeCount = 0L;
         if (this.commentCount == null) this.commentCount = 0L;
         if (this.saveCount == null) this.saveCount = 0L;
+
+        if ((this.caption == null || this.caption.isBlank()) && (this.title != null || this.description != null)) {
+            this.caption = (this.title != null ? this.title : "") + 
+                    (this.description != null && !this.description.isBlank() ? " " + this.description : "");
+        }
+        if (this.title == null && this.caption != null) {
+            this.title = this.caption.length() > 100 ? this.caption.substring(0, 100) : this.caption;
+        }
+        if (this.description == null && this.caption != null) {
+            this.description = this.caption;
+        }
     }
 
     @PreUpdate
@@ -68,6 +85,17 @@ public class Video {
     public Video(Long creatorId, String caption, String videoUrl, String thumbnailUrl) {
         this.creatorId = creatorId;
         this.caption = caption;
+        this.title = caption != null && caption.length() > 100 ? caption.substring(0, 100) : caption;
+        this.description = caption;
+        this.videoUrl = videoUrl;
+        this.thumbnailUrl = thumbnailUrl;
+    }
+
+    public Video(Long creatorId, String title, String description, String caption, String videoUrl, String thumbnailUrl) {
+        this.creatorId = creatorId;
+        this.title = title;
+        this.description = description;
+        this.caption = caption != null && !caption.isBlank() ? caption : (title != null ? title : "");
         this.videoUrl = videoUrl;
         this.thumbnailUrl = thumbnailUrl;
     }
@@ -78,6 +106,12 @@ public class Video {
 
     public Long getCreatorId() { return creatorId; }
     public void setCreatorId(Long creatorId) { this.creatorId = creatorId; }
+
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
 
     public String getCaption() { return caption; }
     public void setCaption(String caption) { this.caption = caption; }

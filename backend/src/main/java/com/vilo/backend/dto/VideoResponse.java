@@ -12,6 +12,8 @@ public class VideoResponse {
     private String username;
     private String displayName;
     private String avatarUrl;
+    private String title;
+    private String description;
     private String caption;
     private String videoUrl;
     private String thumbnailUrl;
@@ -28,7 +30,7 @@ public class VideoResponse {
     }
 
     public VideoResponse(Long id, Long creatorId, String username, String displayName, String avatarUrl,
-                         String caption, String videoUrl, String thumbnailUrl, Long viewCount,
+                         String title, String description, String caption, String videoUrl, String thumbnailUrl, Long viewCount,
                          Long likeCount, Long commentCount, Long saveCount, boolean isLiked,
                          boolean isSaved, List<String> tags, LocalDateTime createdAt) {
         this.id = id;
@@ -36,6 +38,8 @@ public class VideoResponse {
         this.username = username;
         this.displayName = displayName;
         this.avatarUrl = avatarUrl;
+        this.title = title;
+        this.description = description;
         this.caption = caption;
         this.videoUrl = videoUrl;
         this.thumbnailUrl = thumbnailUrl;
@@ -47,6 +51,15 @@ public class VideoResponse {
         this.isSaved = isSaved;
         this.tags = tags != null ? tags : new ArrayList<>();
         this.createdAt = createdAt;
+    }
+
+    public VideoResponse(Long id, Long creatorId, String username, String displayName, String avatarUrl,
+                         String caption, String videoUrl, String thumbnailUrl, Long viewCount,
+                         Long likeCount, Long commentCount, Long saveCount, boolean isLiked,
+                         boolean isSaved, List<String> tags, LocalDateTime createdAt) {
+        this(id, creatorId, username, displayName, avatarUrl, caption, caption, caption,
+                videoUrl, thumbnailUrl, viewCount, likeCount, commentCount, saveCount,
+                isLiked, isSaved, tags, createdAt);
     }
 
     public static Builder builder() {
@@ -91,6 +104,22 @@ public class VideoResponse {
 
     public void setAvatarUrl(String avatarUrl) {
         this.avatarUrl = avatarUrl;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 
     public String getCaption() {
@@ -189,6 +218,8 @@ public class VideoResponse {
         private String username;
         private String displayName;
         private String avatarUrl;
+        private String title;
+        private String description;
         private String caption;
         private String videoUrl;
         private String thumbnailUrl;
@@ -223,6 +254,16 @@ public class VideoResponse {
 
         public Builder avatarUrl(String avatarUrl) {
             this.avatarUrl = avatarUrl;
+            return this;
+        }
+
+        public Builder title(String title) {
+            this.title = title;
+            return this;
+        }
+
+        public Builder description(String description) {
+            this.description = description;
             return this;
         }
 
@@ -282,7 +323,9 @@ public class VideoResponse {
         }
 
         public VideoResponse build() {
-            return new VideoResponse(id, creatorId, username, displayName, avatarUrl, caption,
+            String resolvedCaption = caption != null ? caption : (description != null ? description : title);
+            return new VideoResponse(id, creatorId, username, displayName, avatarUrl,
+                    title, description, resolvedCaption,
                     videoUrl, thumbnailUrl, viewCount, likeCount, commentCount, saveCount,
                     isLiked, isSaved, tags, createdAt);
         }

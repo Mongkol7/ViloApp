@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viloapp/core/theme/app_theme.dart';
@@ -80,7 +79,7 @@ void main() {
     HttpOverrides.global = _MockHttpOverrides();
   });
 
-  testWidgets('Tapping + button in MainNavigationShell opens simplified UploadVideoSheet with file picker box', (WidgetTester tester) async {
+  testWidgets('Tapping + button in MainNavigationShell opens simplified UploadVideoSheet with video path field', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.0;
     addTearDown(() {
@@ -116,22 +115,22 @@ void main() {
     expect(titleRenderBox.size.width, greaterThan(0));
     expect(titleRenderBox.size.height, greaterThan(0));
 
-    // 3. Verify Choose Video File box renders visibly
-    final chooseFileBoxFinder = find.text('Tap to Choose Video File');
-    expect(chooseFileBoxFinder, findsOneWidget);
-    final chooseFileBoxBox = tester.renderObject<RenderBox>(chooseFileBoxFinder);
-    expect(chooseFileBoxBox.size.width, greaterThan(0));
-    expect(chooseFileBoxBox.size.height, greaterThan(0));
+    // 3. Verify Video Path / Filename TextField renders visibly with non-zero size
+    final pathFieldFinder = find.byKey(const Key('upload_video_path_field'));
+    expect(pathFieldFinder, findsOneWidget);
+    final pathRenderBox = tester.renderObject<RenderBox>(pathFieldFinder);
+    expect(pathRenderBox.size.width, greaterThan(0));
+    expect(pathRenderBox.size.height, greaterThan(0));
 
     // 4. Verify Caption TextField renders visibly with non-zero size
-    final captionFieldFinder = find.widgetWithText(TextField, 'Write a caption...');
+    final captionFieldFinder = find.byKey(const Key('upload_caption_field'));
     expect(captionFieldFinder, findsOneWidget);
     final captionRenderBox = tester.renderObject<RenderBox>(captionFieldFinder);
     expect(captionRenderBox.size.width, greaterThan(0));
     expect(captionRenderBox.size.height, greaterThan(0));
 
     // 5. Verify Tags TextField renders visibly with non-zero size
-    final tagsFieldFinder = find.widgetWithText(TextField, '#vilo, #trending');
+    final tagsFieldFinder = find.byKey(const Key('upload_tags_field'));
     expect(tagsFieldFinder, findsOneWidget);
     final tagsRenderBox = tester.renderObject<RenderBox>(tagsFieldFinder);
     expect(tagsRenderBox.size.width, greaterThan(0));
@@ -142,14 +141,14 @@ void main() {
     expect(find.text('#trending'), findsOneWidget);
 
     // 7. Verify Post Video button renders visibly with non-zero size
-    final postButtonFinder = find.widgetWithText(ElevatedButton, 'Post Video');
+    final postButtonFinder = find.byKey(const Key('upload_post_video_button'));
     expect(postButtonFinder, findsOneWidget);
     final postButtonRenderBox = tester.renderObject<RenderBox>(postButtonFinder);
     expect(postButtonRenderBox.size.width, greaterThan(0));
     expect(postButtonRenderBox.size.height, greaterThan(0));
   });
 
-  testWidgets('Direct UploadVideoSheet displays selected file details and handles validation', (WidgetTester tester) async {
+  testWidgets('Direct UploadVideoSheet allows typing video path, caption, tags and validates inputs', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.0;
     addTearDown(() {
@@ -157,17 +156,11 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
-    final testPlatformFile = PlatformFile(
-      name: 'spider_glass.mp4',
-      size: 3900000,
-      path: 'assets/videos/video1.mp4',
-    );
-
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.darkTheme,
-        home: Scaffold(
-          body: UploadVideoSheet(initialFile: testPlatformFile),
+        home: const Scaffold(
+          body: UploadVideoSheet(),
         ),
       ),
     );
@@ -179,31 +172,39 @@ void main() {
     final titleFinder = find.text('Upload Video');
     expect(titleFinder, findsOneWidget);
 
-    // 2. Verify selected file details are displayed
-    expect(find.text('spider_glass.mp4'), findsOneWidget);
-    expect(find.text('3.7 MB'), findsOneWidget);
-    expect(find.text('Change'), findsOneWidget);
+    // 2. Locate form fields
+    final pathField = find.byKey(const Key('upload_video_path_field'));
+    final captionField = find.byKey(const Key('upload_caption_field'));
+    final tagsField = find.byKey(const Key('upload_tags_field'));
+    final postBtn = find.byKey(const Key('upload_post_video_button'));
 
-    // 3. Verify Caption field
-    final captionField = find.widgetWithText(TextField, 'Write a caption...');
+    expect(pathField, findsOneWidget);
     expect(captionField, findsOneWidget);
-
-    // 4. Verify Tags field
-    final tagsField = find.widgetWithText(TextField, '#vilo, #trending');
     expect(tagsField, findsOneWidget);
-
-    // 5. Verify Post Video button
-    final postBtn = find.widgetWithText(ElevatedButton, 'Post Video');
     expect(postBtn, findsOneWidget);
 
-    // 6. Tap "Post Video" without caption -> verify validation error message
+    // 3. Tap "Post Video" without path -> verify path validation error
+    await tester.tap(postBtn);
+    await tester.pump();
+    expect(find.text('Please enter a video filename or path.'), findsOneWidget);
+
+    // 4. Enter video path
+    await tester.enterText(pathField, 'custom_spider_glass.mp4');
+    await tester.pump();
+
+    // 5. Tap "Post Video" without caption -> verify caption validation error
     await tester.tap(postBtn);
     await tester.pump();
     expect(find.text('Please enter a caption for your video.'), findsOneWidget);
 
-    // 7. Type caption in field
-    await tester.enterText(captionField, 'My amazing spider glass clip! #spiderglass');
+    // 6. Enter caption & tags
+    await tester.enterText(captionField, 'Spider glass showcase #spiderglass');
+    await tester.enterText(tagsField, '#customtag, #nature');
     await tester.pump();
-    expect(find.text('My amazing spider glass clip! #spiderglass'), findsOneWidget);
+
+    // Verify all entered values in UI
+    expect(find.text('custom_spider_glass.mp4'), findsOneWidget);
+    expect(find.text('Spider glass showcase #spiderglass'), findsOneWidget);
+    expect(find.text('#customtag, #nature'), findsOneWidget);
   });
 }

@@ -22,6 +22,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
             uploadUri += "/";
         }
         registry.addResourceHandler("/uploads/**")
-                .addResourceLocations(uploadUri);
+                .addResourceLocations(uploadUri, "file:./uploads/", "file:backend/uploads/")
+                .resourceChain(true)
+                .addResolver(new org.springframework.web.servlet.resource.PathResourceResolver());
     }
 }

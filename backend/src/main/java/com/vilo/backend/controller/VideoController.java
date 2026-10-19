@@ -16,7 +16,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -95,13 +94,20 @@ public class VideoController {
 
     /**
      * POST /api/v1/videos/upload
-     * Multipart video upload (owner = currentUser).
+     * Supports both multipart file upload AND direct videoPath/videoUrl reference.
      */
-    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/upload")
     public ResponseEntity<ApiResponse<VideoResponse>> uploadVideo(
-            @RequestParam("videoFile") MultipartFile videoFile,
+            @RequestParam(value = "video", required = false) MultipartFile video,
+            @RequestParam(value = "videoFile", required = false) MultipartFile videoFile,
+            @RequestParam(value = "videoPath", required = false) String videoPath,
+            @RequestParam(value = "videoUrl", required = false) String videoUrl,
+            @RequestParam(value = "thumbnail", required = false) MultipartFile thumbnail,
             @RequestParam(value = "thumbnailFile", required = false) MultipartFile thumbnailFile,
-            @RequestParam("caption") String caption,
+            @RequestParam(value = "thumbnailPath", required = false) String thumbnailPath,
+            @RequestParam(value = "title", required = false) String title,
+            @RequestParam(value = "description", required = false) String description,
+            @RequestParam(value = "caption", required = false) String caption,
             @RequestParam(value = "tags", required = false) List<String> tags,
             @AuthenticationPrincipal User currentUser
     ) {
@@ -109,7 +115,32 @@ public class VideoController {
             throw new AccessDeniedException("Full authentication is required to upload videos");
         }
 
-        Video savedVideo = videoService.uploadVideo(currentUser.getId(), caption, videoFile, thumbnailFile, tags);
+        MultipartFile effectiveVideoFile = (video != null && !video.isEmpty()) ? video : videoFile;
+        MultipartFile effectiveThumbnailFile = (thumbnail != null && !thumbnail.isEmpty()) ? thumbnail : thumbnailFile;
+
+        String directPath = videoPath != null && !videoPath.isBlank() 
+                ? videoPath.trim() 
+                : (videoUrl != null && !videoUrl.isBlank() ? videoUrl.trim() : null);
+
+        if ((effectiveVideoFile == null || effectiveVideoFile.isEmpty()) && (directPath == null || directPath.isBlank())) {
+            throw new IllegalArgumentException("Either video/videoFile or videoPath must be provided");
+        }
+
+        String effectiveCaption = (caption != null && !caption.isBlank())
+                ? caption.trim()
+                : ((title != null ? title : "") + (description != null && !description.isBlank() ? " " + description : "")).trim();
+
+        Video savedVideo = videoService.createVideo(
+                currentUser.getId(),
+                title,
+                description,
+                effectiveCaption,
+                effectiveVideoFile,
+                directPath,
+                effectiveThumbnailFile,
+                thumbnailPath,
+                tags
+        );
         VideoResponse response = mapToVideoResponse(savedVideo, currentUser.getId());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Video uploaded successfully", response));
@@ -334,6 +365,8 @@ public class VideoController {
                 .username(username)
                 .displayName(displayName)
                 .avatarUrl(avatarUrl)
+                .title(video.getTitle())
+                .description(video.getDescription())
                 .caption(video.getCaption())
                 .videoUrl(video.getVideoUrl())
                 .thumbnailUrl(video.getThumbnailUrl())
