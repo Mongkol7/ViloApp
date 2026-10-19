@@ -6,6 +6,8 @@ import '../../../inbox_activity/domain/entities/shared_thought_story.dart';
 import '../../../inbox_activity/presentation/pages/share_thought_screen.dart';
 import '../../../inbox_activity/presentation/pages/story_viewer_screen.dart';
 import '../../../inbox_activity/presentation/widgets/animated_mini_music_wave.dart';
+import '../../../feed/data/datasources/feed_remote_data_source.dart';
+import '../../../feed/data/models/video_feed_model.dart';
 import '../../data/datasources/profile_remote_data_source.dart';
 import '../../data/datasources/profile_sync_service.dart';
 import '../mock/profile_mock_data.dart';
@@ -23,10 +25,15 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
+class _ProfileScreenState extends State<ProfileScreen>
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   late TabController _tabController;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   UserModel? _user;
+  List<VideoFeedModel> _myVideos = [];
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -58,7 +65,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           _user = _user!.copyWith(followingCount: updatedFollowing);
         });
       }
-      _loadProfile();
     }
   }
 
@@ -69,6 +75,15 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         setState(() => _user = user);
         ProfileSyncService.instance.cachedMyProfile = user;
       }
+
+      // Load user's posted videos from backend
+      try {
+        final videos = await FeedRemoteDataSource.instance.getUserVideos(user.id);
+        if (mounted && videos.isNotEmpty) {
+          setState(() => _myVideos = videos);
+        }
+      } catch (_) {}
+
       // Pre-warm following & followers cache in background for zero-latency instant listing
       if (user.id > 0) {
         ProfileRemoteDataSource.instance.getFollowing(user.id).then((fl) {
@@ -172,6 +187,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final currentUsername = _user?.username.isNotEmpty == true ? _user!.username : ProfileMockData.username;
     final currentDisplayName = _user?.displayName.isNotEmpty == true ? _user!.displayName : currentUsername;
     final currentAvatarUrl = _user?.avatarUrl?.isNotEmpty == true ? _user!.avatarUrl! : ProfileMockData.avatarUrl;
@@ -438,7 +454,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           controller: _tabController,
           children: [
             CustomScrollView(slivers: buildProfileTabSlivers(0)), // Music
-            CustomScrollView(slivers: buildProfileTabSlivers(1)), // Grid
+            CustomScrollView(slivers: buildProfileTabSlivers(1, userVideos: _myVideos)), // Grid
             CustomScrollView(slivers: buildProfileTabSlivers(2)), // Shop
             CustomScrollView(slivers: buildProfileTabSlivers(3)), // Saved
             CustomScrollView(slivers: buildProfileTabSlivers(4)), // Liked

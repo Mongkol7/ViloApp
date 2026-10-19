@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../profile/presentation/screens/public_profile_screen.dart';
 
 class CommentBottomSheet extends StatelessWidget {
   const CommentBottomSheet({super.key});
@@ -158,6 +159,20 @@ class _CommentItem extends StatelessWidget {
 
   const _CommentItem({required this.data});
 
+  void _navigateToProfile(BuildContext context) {
+    final rawName = data['name']?.toString() ?? 'User';
+    final cleanUsername = rawName.toLowerCase().replaceAll(' ', '_');
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PublicProfileScreen(
+          displayName: rawName,
+          username: cleanUsername,
+          avatarUrl: data['avatar']?.toString(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -166,9 +181,12 @@ class _CommentItem extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Avatar
-          CircleAvatar(
-            radius: 20,
-            backgroundImage: NetworkImage(data['avatar']),
+          GestureDetector(
+            onTap: () => _navigateToProfile(context),
+            child: CircleAvatar(
+              radius: 20,
+              backgroundImage: NetworkImage(data['avatar']),
+            ),
           ),
           const SizedBox(width: 12),
           
@@ -178,12 +196,15 @@ class _CommentItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Username
-                Text(
-                  data['name'],
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
+                GestureDetector(
+                  onTap: () => _navigateToProfile(context),
+                  child: Text(
+                    data['name'],
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 4),

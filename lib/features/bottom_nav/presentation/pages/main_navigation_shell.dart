@@ -29,10 +29,10 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   double _accumulatedDelta = 0.0;
 
   List<Widget> get _pages => [
-    HomeFeedPage(isActive: _currentIndex == 0),
-    const PeopleScreen(),
-    const InboxScreen(),
-    const ProfileScreen(),
+    HomeFeedPage(key: const PageStorageKey('main_nav_home'), isActive: _currentIndex == 0),
+    const PeopleScreen(key: PageStorageKey('main_nav_people')),
+    const InboxScreen(key: PageStorageKey('main_nav_inbox')),
+    const ProfileScreen(key: PageStorageKey('main_nav_profile')),
   ];
 
   @override

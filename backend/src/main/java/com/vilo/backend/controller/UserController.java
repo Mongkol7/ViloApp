@@ -46,48 +46,52 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok("Suggested users retrieved", suggestions));
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<UserResponse>> getUserById(
-            @PathVariable Long id,
+    @GetMapping("/{identifier}")
+    public ResponseEntity<ApiResponse<UserResponse>> getUserByIdOrUsername(
+            @PathVariable String identifier,
             @AuthenticationPrincipal User currentUser
     ) {
-        UserResponse response = userService.getUserById(id, currentUser);
+        UserResponse response = userService.getUserByIdOrUsername(identifier, currentUser);
         return ResponseEntity.ok(ApiResponse.ok("User profile retrieved", response));
     }
 
-    @GetMapping("/{id}/followers")
+    @GetMapping("/{identifier}/followers")
     public ResponseEntity<ApiResponse<List<UserResponse>>> getFollowers(
-            @PathVariable Long id,
+            @PathVariable String identifier,
             @AuthenticationPrincipal User currentUser
     ) {
+        Long id = userService.resolveUserId(identifier);
         List<UserResponse> followers = userService.getFollowers(id, currentUser);
         return ResponseEntity.ok(ApiResponse.ok("Followers retrieved", followers));
     }
 
-    @GetMapping("/{id}/following")
+    @GetMapping("/{identifier}/following")
     public ResponseEntity<ApiResponse<List<UserResponse>>> getFollowing(
-            @PathVariable Long id,
+            @PathVariable String identifier,
             @AuthenticationPrincipal User currentUser
     ) {
+        Long id = userService.resolveUserId(identifier);
         List<UserResponse> following = userService.getFollowing(id, currentUser);
         return ResponseEntity.ok(ApiResponse.ok("Following retrieved", following));
     }
 
-    @PostMapping("/{id}/follow")
+    @PostMapping("/{identifier}/follow")
     public ResponseEntity<ApiResponse<Map<String, Object>>> toggleFollow(
             @AuthenticationPrincipal User currentUser,
-            @PathVariable Long id
+            @PathVariable String identifier
     ) {
+        Long id = userService.resolveUserId(identifier);
         boolean isFollowing = userService.toggleFollow(currentUser, id);
         String actionMessage = isFollowing ? "Followed successfully" : "Unfollowed successfully";
         return ResponseEntity.ok(ApiResponse.ok(actionMessage, Map.of("following", isFollowing, "userId", id)));
     }
 
-    @DeleteMapping("/{id}/follow")
+    @DeleteMapping("/{identifier}/follow")
     public ResponseEntity<ApiResponse<Map<String, Object>>> unfollow(
             @AuthenticationPrincipal User currentUser,
-            @PathVariable Long id
+            @PathVariable String identifier
     ) {
+        Long id = userService.resolveUserId(identifier);
         userService.unfollow(currentUser, id);
         return ResponseEntity.ok(ApiResponse.ok("Unfollowed successfully", Map.of("following", false, "userId", id)));
     }

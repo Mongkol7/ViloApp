@@ -49,8 +49,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/search").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/explore/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/sounds/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/videos/**").permitAll()
                         .requestMatchers("/api/v1/users/me").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/users/{id:\\d+}").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex

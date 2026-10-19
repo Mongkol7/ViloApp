@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../../bottom_nav/presentation/pages/main_navigation_shell.dart';
+import '../../../feed/data/datasources/feed_remote_data_source.dart';
+import '../../../feed/data/models/video_feed_model.dart';
 import '../../data/datasources/profile_remote_data_source.dart';
 import '../../data/datasources/profile_sync_service.dart';
 import '../mock/profile_mock_data.dart';
@@ -17,6 +19,7 @@ class PublicProfileScreen extends StatefulWidget {
   final String? avatarUrl;
   final String? bio;
   final bool isFollowing;
+  final List<VideoFeedModel>? initialVideos;
 
   const PublicProfileScreen({
     super.key,
@@ -26,6 +29,7 @@ class PublicProfileScreen extends StatefulWidget {
     this.avatarUrl,
     this.bio,
     this.isFollowing = false,
+    this.initialVideos,
   });
 
   @override
@@ -37,6 +41,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
   late bool _isFollowing;
   int _followersCount = ProfileSyncService.instance.mockFollowersCount;
   UserModel? _loadedUser;
+  List<VideoFeedModel> _userVideos = [];
   bool _isLoading = false;
 
   @override
@@ -44,25 +49,68 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
     super.initState();
     _tabController = TabController(length: 5, vsync: this, initialIndex: 1);
     _isFollowing = widget.isFollowing;
-    if (widget.userId != null) {
+
+    // Zero-latency instant load: Check initialVideos or in-memory cache
+    final identifier = (widget.username != null && widget.username!.isNotEmpty)
+        ? widget.username!
+        : (widget.userId != null ? widget.userId.toString() : null);
+
+    final cachedUser = identifier != null
+        ? ProfileRemoteDataSource.instance.getCachedUser(identifier)
+        : (widget.userId != null
+            ? ProfileRemoteDataSource.instance.getCachedUser(widget.userId)
+            : null);
+
+    if (cachedUser != null) {
+      _loadedUser = cachedUser;
+      _isFollowing = cachedUser.isFollowing;
+      _followersCount = cachedUser.followersCount;
+    }
+
+    final cachedVideos = widget.initialVideos ??
+        (identifier != null ? FeedRemoteDataSource.instance.getCachedUserVideos(identifier) : null) ??
+        (widget.username != null ? FeedRemoteDataSource.instance.getCachedUserVideos(widget.username!) : null) ??
+        (widget.userId != null ? FeedRemoteDataSource.instance.getCachedUserVideos(widget.userId.toString()) : null);
+
+    if (cachedVideos != null && cachedVideos.isNotEmpty) {
+      _userVideos = List.from(cachedVideos);
+    }
+
+    if (widget.userId != null || (widget.username != null && widget.username!.isNotEmpty)) {
       _fetchPublicProfile();
     }
   }
 
   Future<void> _fetchPublicProfile() async {
-    if (widget.userId == null) return;
-    setState(() => _isLoading = true);
+    final identifier = (widget.username != null && widget.username!.isNotEmpty)
+        ? widget.username!
+        : (widget.userId != null ? widget.userId.toString() : null);
+    if (identifier == null) return;
+
+    if (_userVideos.isEmpty) {
+      setState(() => _isLoading = true);
+    }
+
     try {
-      final user = await ProfileRemoteDataSource.instance.getUserById(widget.userId!);
-      if (mounted) {
-        setState(() {
-          _loadedUser = user;
-          _isFollowing = user.isFollowing;
-          _followersCount = user.followersCount;
-        });
-      }
-    } catch (_) {
-      // Fallback to widget initial properties
+      // Execute profile fetch and video postings fetch concurrently in parallel
+      await Future.wait([
+        ProfileRemoteDataSource.instance.getUser(identifier).then((user) {
+          if (mounted) {
+            setState(() {
+              _loadedUser = user;
+              _isFollowing = user.isFollowing;
+              _followersCount = user.followersCount;
+            });
+          }
+        }).catchError((_) {}),
+        FeedRemoteDataSource.instance.getUserVideos(identifier).then((videos) {
+          if (mounted && videos.isNotEmpty) {
+            setState(() {
+              _userVideos = videos;
+            });
+          }
+        }).catchError((_) {}),
+      ]);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -142,10 +190,12 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
 
   @override
   Widget build(BuildContext context) {
-    final username = _loadedUser?.username ?? widget.username ?? ProfileMockData.username;
+    final rawUsername = _loadedUser?.username ?? widget.username ?? ProfileMockData.username;
+    final cleanUsername = rawUsername.startsWith('@') ? rawUsername.substring(1) : rawUsername;
+    final username = cleanUsername;
     final displayName = _loadedUser?.displayName.isNotEmpty == true
         ? _loadedUser!.displayName
-        : (widget.displayName?.isNotEmpty == true ? widget.displayName! : username);
+        : (widget.displayName?.isNotEmpty == true ? widget.displayName! : cleanUsername);
     final avatarUrl = _loadedUser?.avatarUrl?.isNotEmpty == true
         ? _loadedUser!.avatarUrl!
         : (widget.avatarUrl?.isNotEmpty == true ? widget.avatarUrl! : ProfileMockData.avatarUrl);
@@ -218,7 +268,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
                   ),
                   const SizedBox(height: 12),
                   // Username
-                  Text('@$username', style: PulseTypography.headlineSm),
+                  Text('@$cleanUsername', style: PulseTypography.headlineSm),
                   const SizedBox(height: 20),
                   // Stats Row
                   Row(
@@ -389,7 +439,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
           controller: _tabController,
           children: [
             CustomScrollView(slivers: buildProfileTabSlivers(0)), // Music
-            CustomScrollView(slivers: buildProfileTabSlivers(1)), // Grid
+            CustomScrollView(slivers: buildProfileTabSlivers(1, userVideos: _userVideos, isLoading: _isLoading)), // Grid
             CustomScrollView(slivers: buildProfileTabSlivers(2)), // Shop
             CustomScrollView(slivers: buildProfileTabSlivers(3)), // Saved
             CustomScrollView(slivers: buildProfileTabSlivers(4)), // Liked

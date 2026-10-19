@@ -37,8 +37,43 @@ public class UserService {
     public UserResponse getUserById(Long id, User currentUser) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
+        return buildUserResponse(user, currentUser);
+    }
+
+    @Transactional(readOnly = true)
+    public UserResponse getUserByIdOrUsername(String identifier, User currentUser) {
+        User user = null;
+        try {
+            Long id = Long.parseLong(identifier);
+            user = userRepository.findById(id).orElse(null);
+        } catch (NumberFormatException ignored) {}
+
+        if (user == null) {
+            String clean = identifier.startsWith("@") ? identifier.substring(1) : identifier;
+            user = userRepository.findByUsername(clean).orElse(null);
+        }
+
+        if (user == null) {
+            throw new ResourceNotFoundException("User not found with identifier: " + identifier);
+        }
+
+        return buildUserResponse(user, currentUser);
+    }
+
+    public Long resolveUserId(String identifier) {
+        try {
+            return Long.parseLong(identifier);
+        } catch (NumberFormatException ignored) {}
+
+        String clean = identifier.startsWith("@") ? identifier.substring(1) : identifier;
+        return userRepository.findByUsername(clean)
+                .map(User::getId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with identifier: " + identifier));
+    }
+
+    private UserResponse buildUserResponse(User user, User currentUser) {
         UserResponse response = UserResponse.fromEntity(user);
-        if (currentUser != null && !currentUser.getId().equals(id)) {
+        if (currentUser != null && !currentUser.getId().equals(user.getId())) {
             boolean following = user.getFollowers().stream()
                     .anyMatch(f -> f.getId().equals(currentUser.getId()));
             boolean followsYou = user.getFollowing().stream()

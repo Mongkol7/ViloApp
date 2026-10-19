@@ -13,8 +13,12 @@ class HomeFeedPage extends StatefulWidget {
   State<HomeFeedPage> createState() => _HomeFeedPageState();
 }
 
-class _HomeFeedPageState extends State<HomeFeedPage> with SingleTickerProviderStateMixin {
+class _HomeFeedPageState extends State<HomeFeedPage>
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   late TabController _tabController;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -39,6 +43,7 @@ class _HomeFeedPageState extends State<HomeFeedPage> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: Colors.black, // Dark background as per screenshots
       body: Stack(
@@ -47,10 +52,18 @@ class _HomeFeedPageState extends State<HomeFeedPage> with SingleTickerProviderSt
           TabBarView(
             controller: _tabController,
             children: [
-              const CommunityFeedPage(),
-              VideoFeedPage(isActive: widget.isActive && _tabController.index == 1), // Following
-              VideoFeedPage(isActive: widget.isActive && _tabController.index == 2), // For You
-              const ShopPage(),
+              const CommunityFeedPage(key: PageStorageKey('tab_community')),
+              VideoFeedPage(
+                key: const PageStorageKey('tab_following'),
+                feedType: 'FOLLOWING',
+                isActive: widget.isActive && _tabController.index == 1,
+              ),
+              VideoFeedPage(
+                key: const PageStorageKey('tab_for_you'),
+                feedType: 'FOR_YOU',
+                isActive: widget.isActive && _tabController.index == 2,
+              ),
+              const ShopPage(key: PageStorageKey('tab_shop')),
             ],
           ),
 

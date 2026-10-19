@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../auth/data/models/user_model.dart';
+import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../data/datasources/profile_remote_data_source.dart';
 import '../../data/datasources/profile_sync_service.dart';
 import '../screens/public_profile_screen.dart';
@@ -434,6 +435,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
       color: Colors.white,
       backgroundColor: const Color(0xFF1E1E24),
       child: ListView.separated(
+        key: PageStorageKey('followers_following_list_${isFollowersTab ? "followers" : "following"}'),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         itemCount: users.length,
         separatorBuilder: (_, _) => const SizedBox(height: 12),
@@ -543,6 +545,10 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
   }
 
   void _openPublicProfile(UserModel user) async {
+    ProfileRemoteDataSource.instance.cacheUser(user);
+    final cached = FeedRemoteDataSource.instance.getCachedUserVideos(user.username) ??
+        (user.id > 0 ? FeedRemoteDataSource.instance.getCachedUserVideos(user.id.toString()) : null);
+
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PublicProfileScreen(
@@ -552,6 +558,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
           avatarUrl: user.avatarUrl,
           bio: user.bio,
           isFollowing: user.isFollowing,
+          initialVideos: cached,
         ),
       ),
     );

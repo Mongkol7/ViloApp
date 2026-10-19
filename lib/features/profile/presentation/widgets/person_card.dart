@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../domain/entities/person_suggestion.dart';
 import '../screens/public_profile_screen.dart';
 
@@ -18,17 +19,22 @@ class PersonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     void goToProfile() {
+      final username = (person.username != null && person.username!.isNotEmpty)
+          ? person.username!
+          : person.name.toLowerCase().replaceAll(' ', '_');
+      final cached = FeedRemoteDataSource.instance.getCachedUserVideos(username) ??
+          (person.id.isNotEmpty ? FeedRemoteDataSource.instance.getCachedUserVideos(person.id) : null);
+
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => PublicProfileScreen(
             userId: int.tryParse(person.id),
-            username: (person.username != null && person.username!.isNotEmpty)
-                ? person.username!
-                : person.name.toLowerCase().replaceAll(' ', '_'),
+            username: username,
             displayName: person.name,
             bio: person.subtitle,
             avatarUrl: person.avatarUrl,
             isFollowing: person.isFollowed,
+            initialVideos: cached,
           ),
         ),
       );

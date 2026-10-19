@@ -1,11 +1,21 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 
-class CommunityFeedPage extends StatelessWidget {
+class CommunityFeedPage extends StatefulWidget {
   const CommunityFeedPage({super.key});
 
   @override
+  State<CommunityFeedPage> createState() => _CommunityFeedPageState();
+}
+
+class _CommunityFeedPageState extends State<CommunityFeedPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     // Mock data for the staggered grid
     final List<Map<String, dynamic>> mockPosts = [
       {
@@ -114,6 +124,7 @@ class CommunityFeedPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SingleChildScrollView(
+        key: const PageStorageKey('community_feed_scroll_view'),
         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,

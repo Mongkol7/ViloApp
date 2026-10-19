@@ -2,88 +2,140 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:video_player/video_player.dart';
 import '../../../../app/app.dart';
+import '../../data/datasources/feed_remote_data_source.dart';
+import '../../data/models/video_feed_model.dart';
 import '../widgets/share_bottom_sheet.dart';
 import '../widgets/comment_bottom_sheet.dart';
 import 'sound_detail_page.dart';
+import '../../../auth/data/models/user_model.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../../profile/presentation/screens/public_profile_screen.dart';
 
 class VideoFeedPage extends StatefulWidget {
   final bool isActive;
+  final String feedType; // 'FOR_YOU' or 'FOLLOWING'
 
-  const VideoFeedPage({super.key, this.isActive = true});
+  const VideoFeedPage({
+    super.key,
+    this.isActive = true,
+    this.feedType = 'FOR_YOU',
+  });
 
   @override
   State<VideoFeedPage> createState() => _VideoFeedPageState();
 }
 
-class _VideoFeedPageState extends State<VideoFeedPage> {
-  int _currentPage = 0;
+class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveClientMixin {
+  static final Map<String, int> _savedPageIndices = {};
+
+  late int _currentPage;
+  late PageController _pageController;
+  List<VideoFeedModel> _videos = [];
+  bool _isLoading = true;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentPage = _savedPageIndices[widget.feedType] ?? 0;
+    _pageController = PageController(initialPage: _currentPage);
+
+    // Instant zero-latency display if feed is already in memory cache
+    final cached = FeedRemoteDataSource.instance.getCachedFeed(widget.feedType);
+    if (cached != null && cached.isNotEmpty) {
+      _videos = cached;
+      _isLoading = false;
+    }
+
+    _loadVideos();
+    ProfileSyncService.instance.followEvents.addListener(_onGlobalFollowChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant VideoFeedPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.feedType != widget.feedType) {
+      _currentPage = _savedPageIndices[widget.feedType] ?? 0;
+      _pageController.dispose();
+      _pageController = PageController(initialPage: _currentPage);
+      _loadVideos();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    ProfileSyncService.instance.followEvents.removeListener(_onGlobalFollowChanged);
+    super.dispose();
+  }
+
+  void _onGlobalFollowChanged() {
+    if (!mounted) return;
+    final event = ProfileSyncService.instance.followEvents.value;
+    if (event != null) {
+      setState(() {
+        _videos = _videos.map((v) {
+          if (v.creatorId == event.targetUserId) {
+            return v.copyWith(isFollowing: event.isFollowing);
+          }
+          return v;
+        }).toList();
+      });
+    }
+  }
+
+  Future<void> _loadVideos() async {
+    if (_videos.isEmpty) {
+      setState(() => _isLoading = true);
+    }
+    final feed = await FeedRemoteDataSource.instance.getFeed(feedType: widget.feedType);
+    if (mounted) {
+      setState(() {
+        _videos = feed;
+        _isLoading = false;
+      });
+      if (_currentPage >= feed.length && feed.isNotEmpty) {
+        _currentPage = feed.length - 1;
+        _savedPageIndices[widget.feedType] = _currentPage;
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Mock data for the video feed
-    final List<Map<String, dynamic>> mockVideos = [
-      {
-        'videoUrl': 'assets/videos/vid1.mp4',
-        'username': '@beach_lover',
-        'caption': 'Enjoying the sunset at the beach #sunset #vibes',
-        'music': 'Relaxing Waves - Ocean Sounds',
-        'likes': '1.2M',
-        'comments': '45.2K',
-        'saves': '120K',
-        'avatar': 'https://i.pravatar.cc/150?img=11',
-      },
-      {
-        'videoUrl': 'assets/videos/vid2.mp4',
-        'username': '@city_explorer',
-        'caption': 'Night walk through the neon streets #citylife #neon',
-        'music': 'Cyberpunk Beats - Synthwave',
-        'likes': '890K',
-        'comments': '12.1K',
-        'saves': '85K',
-        'avatar': 'https://i.pravatar.cc/150?img=12',
-      },
-      {
-        'videoUrl': 'assets/videos/vid3.mp4',
-        'username': '@nature_hiker',
-        'caption': 'Found this hidden waterfall today! 🌿💧 #hiking #nature',
-        'music': 'Nature Sounds - Waterfall',
-        'likes': '340K',
-        'comments': '3.2K',
-        'saves': '20K',
-        'avatar': 'https://i.pravatar.cc/150?img=13',
-      },
-      {
-        'videoUrl': 'assets/videos/vid4.mp4',
-        'username': '@fitness_journey',
-        'caption': 'Morning workout done! 💪 #fitness #gym',
-        'music': 'Workout Mix 2026 - DJ Flex',
-        'likes': '550K',
-        'comments': '8.4K',
-        'saves': '15K',
-        'avatar': 'https://i.pravatar.cc/150?img=14',
-      },
-      {
-        'videoUrl': 'assets/videos/vid1.mp4',
-        'username': '@travel_diaries',
-        'caption': 'The view from the top is breathtaking ⛰️ #mountains',
-        'music': 'Epic Mountain Theme - Hans Zimmer',
-        'likes': '2.1M',
-        'comments': '110K',
-        'saves': '400K',
-        'avatar': 'https://i.pravatar.cc/150?img=15',
-      },
-      {
-        'videoUrl': 'assets/videos/vid2.mp4',
-        'username': '@boathouse',
-        'caption': 'Peaceful morning on the lake 🛶 #lake #peace',
-        'music': 'Morning Coffee Acoustic - Indie Band',
-        'likes': '420K',
-        'comments': '5.1K',
-        'saves': '18K',
-        'avatar': 'https://i.pravatar.cc/150?img=16',
-      },
-    ];
+    super.build(context);
+
+    if (_isLoading && _videos.isEmpty) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+        ),
+      );
+    }
+
+    if (_videos.isEmpty) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.videocam_outlined, color: Colors.white38, size: 56),
+              const SizedBox(height: 12),
+              Text(
+                widget.feedType == 'FOLLOWING'
+                    ? 'Follow creators to see their videos here!'
+                    : 'No videos available yet.',
+                style: const TextStyle(color: Colors.white70, fontSize: 15),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -96,16 +148,20 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
           },
         ),
         child: PageView.builder(
+          key: PageStorageKey('video_page_view_${widget.feedType}'),
+          controller: _pageController,
           scrollDirection: Axis.vertical,
-          itemCount: mockVideos.length,
+          itemCount: _videos.length,
           onPageChanged: (index) {
             setState(() {
               _currentPage = index;
+              _savedPageIndices[widget.feedType] = index;
             });
           },
           itemBuilder: (context, index) {
             return _VideoPostWidget(
-              data: mockVideos[index],
+              key: ValueKey('video_${_videos[index].id}'),
+              video: _videos[index],
               isCurrentPage: _currentPage == index,
               isActive: widget.isActive,
             );
@@ -117,12 +173,13 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
 }
 
 class _VideoPostWidget extends StatefulWidget {
-  final Map<String, dynamic> data;
+  final VideoFeedModel video;
   final bool isCurrentPage;
   final bool isActive;
 
   const _VideoPostWidget({
-    required this.data,
+    super.key,
+    required this.video,
     required this.isCurrentPage,
     required this.isActive,
   });
@@ -132,15 +189,27 @@ class _VideoPostWidget extends StatefulWidget {
 }
 
 class _VideoPostWidgetState extends State<_VideoPostWidget>
-    with RouteAware, WidgetsBindingObserver {
+    with RouteAware, WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
   late VideoPlayerController _controller;
   bool _manuallyPaused = false;
+  late bool _isFollowing;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
+    _isFollowing = widget.video.isFollowing;
     WidgetsBinding.instance.addObserver(this);
-    _controller = VideoPlayerController.asset(widget.data['videoUrl']);
+
+    final url = widget.video.videoUrl;
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      _controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    } else {
+      _controller = VideoPlayerController.asset(url);
+    }
+
     _controller.addListener(_videoListener);
     _controller.initialize().then((_) {
       if (!mounted) return;
@@ -150,14 +219,14 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
         _controller.play();
       }
     }).catchError((error) {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      setState(() {});
     });
   }
 
   void _videoListener() {
     if (!mounted || !_controller.value.isInitialized) return;
     final value = _controller.value;
-    // Guarantee non-stop continuous looping even across short video bounds
     if (value.duration > Duration.zero && value.position >= value.duration) {
       _controller.seekTo(Duration.zero);
       if (widget.isActive && widget.isCurrentPage && !_manuallyPaused) {
@@ -180,6 +249,30 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   @override
   void didUpdateWidget(covariant _VideoPostWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.video.isFollowing != widget.video.isFollowing) {
+      _isFollowing = widget.video.isFollowing;
+    }
+
+    if (oldWidget.video.videoUrl != widget.video.videoUrl) {
+      _controller.removeListener(_videoListener);
+      _controller.dispose();
+      final url = widget.video.videoUrl;
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        _controller = VideoPlayerController.networkUrl(Uri.parse(url));
+      } else {
+        _controller = VideoPlayerController.asset(url);
+      }
+      _controller.addListener(_videoListener);
+      _controller.initialize().then((_) {
+        if (!mounted) return;
+        _controller.setLooping(true);
+        setState(() {});
+        if (widget.isActive && widget.isCurrentPage && !_manuallyPaused) {
+          _controller.play();
+        }
+      }).catchError((_) {});
+    }
+
     final shouldPlay = widget.isActive && widget.isCurrentPage && !_manuallyPaused;
     if (_controller.value.isInitialized) {
       if (shouldPlay && !_controller.value.isPlaying) {
@@ -192,7 +285,6 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
 
   @override
   void didPushNext() {
-    // Automatically pause video when navigating to another page (like SearchScreen)
     if (_controller.value.isInitialized && _controller.value.isPlaying) {
       _controller.pause();
       if (mounted) setState(() {});
@@ -201,7 +293,6 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
 
   @override
   void didPopNext() {
-    // Automatically resume video when returning back to Home feed from SearchScreen
     if (widget.isActive && widget.isCurrentPage && !_manuallyPaused && _controller.value.isInitialized) {
       _controller.play();
       if (mounted) setState(() {});
@@ -248,16 +339,50 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const PublicProfileScreen(),
+        builder: (context) => PublicProfileScreen(
+          userId: widget.video.creatorId > 0 ? widget.video.creatorId : null,
+          username: widget.video.username,
+          displayName: widget.video.displayName,
+          avatarUrl: widget.video.avatarUrl,
+          isFollowing: _isFollowing,
+          initialVideos: [widget.video],
+        ),
       ),
     );
   }
 
+  void _toggleFollow() async {
+    final newFollowState = !_isFollowing;
+    setState(() {
+      _isFollowing = newFollowState;
+    });
+
+    ProfileSyncService.instance.notifyFollowChanged(
+      targetUserId: widget.video.creatorId,
+      isFollowing: newFollowState,
+      targetUser: UserModel(
+        id: widget.video.creatorId,
+        username: widget.video.username.replaceAll('@', ''),
+        email: '',
+        displayName: widget.video.displayName,
+        avatarUrl: widget.video.avatarUrl,
+        isVerified: widget.video.isVerified,
+        isFollowing: newFollowState,
+        followersCount: 0,
+        followingCount: 0,
+      ),
+    );
+
+    final identifier = widget.video.creatorId > 0 ? widget.video.creatorId : widget.video.username;
+    await FeedRemoteDataSource.instance.toggleFollow(identifier, skipNotify: true);
+  }
+
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Stack(
       children: [
-        // Background Video/Image
+        // Background Video
         Positioned.fill(
           child: _controller.value.isInitialized &&
                   _controller.value.size.width > 0 &&
@@ -277,7 +402,6 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                           ),
                         ),
                       ),
-                      // Center Pause / Play indicator icon when paused
                       if (!_controller.value.isPlaying)
                         Container(
                           width: 68,
@@ -350,37 +474,50 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Profile Avatar with + button
-              GestureDetector(
-                onTap: _goToProfile,
-                child: SizedBox(
-                  height: 56,
-                  width: 48,
-                  child: Stack(
-                    alignment: Alignment.topCenter,
-                    children: [
-                      CircleAvatar(
-                        radius: 22,
-                        backgroundImage: NetworkImage(widget.data['avatar']),
-                        backgroundColor: Colors.grey,
+              // Profile Avatar with + follow button
+              SizedBox(
+                height: 56,
+                width: 48,
+                child: Stack(
+                  alignment: Alignment.topCenter,
+                  clipBehavior: Clip.none,
+                  children: [
+                    GestureDetector(
+                      onTap: _goToProfile,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white24, width: 1.2),
+                        ),
+                        child: CircleAvatar(
+                          radius: 22,
+                          backgroundImage: NetworkImage(widget.video.avatarUrl),
+                          onBackgroundImageError: (_, __) {},
+                          backgroundColor: Colors.grey[900],
+                        ),
                       ),
+                    ),
+                    // Only show + badge if NOT already followed and NOT current user
+                    if (!_isFollowing && !widget.video.isMe)
                       Positioned(
                         bottom: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: const BoxDecoration(
-                            color: Colors.blue,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.add,
-                            color: Colors.white,
-                            size: 14,
+                        child: GestureDetector(
+                          onTap: _toggleFollow,
+                          child: Container(
+                            padding: const EdgeInsets.all(2.5),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFFE2C55), // Red follow badge
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.add,
+                              color: Colors.white,
+                              size: 13,
+                            ),
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
@@ -388,7 +525,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
               // Like
               _InteractionButton(
                 icon: Icons.favorite, 
-                label: widget.data['likes'],
+                label: widget.video.likes,
                 activeColor: Colors.red,
                 isToggleable: true,
               ),
@@ -396,7 +533,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
               // Comment
               _InteractionButton(
                 icon: Icons.comment, 
-                label: widget.data['comments'],
+                label: widget.video.comments,
                 onTap: () {
                   showModalBottomSheet(
                     context: context,
@@ -410,7 +547,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
               // Bookmark
               _InteractionButton(
                 icon: Icons.bookmark, 
-                label: widget.data['saves'],
+                label: widget.video.saves,
                 activeColor: Colors.yellow,
                 isToggleable: true,
               ),
@@ -430,7 +567,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                 },
               ),
               
-              // Record/Music Disc
+              // Music Disc
               const SizedBox(height: 16),
               GestureDetector(
                 onTap: () {
@@ -444,7 +581,8 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                 child: CircleAvatar(
                   radius: 18,
                   backgroundColor: Colors.grey[800],
-                  backgroundImage: const NetworkImage('https://i.pravatar.cc/100?img=50'),
+                  backgroundImage: const NetworkImage('https://images.unsplash.com/photo-1518770660439-4636190af475?w=100'),
+                  onBackgroundImageError: (_, __) {},
                 ),
               ),
             ],
@@ -460,20 +598,28 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              GestureDetector(
-                onTap: _goToProfile,
-                child: Text(
-                  widget.data['username'],
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: _goToProfile,
+                    child: Text(
+                      widget.video.username,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
                   ),
-                ),
+                  if (widget.video.isVerified) ...[
+                    const SizedBox(width: 6),
+                    const Icon(Icons.verified, color: Colors.blueAccent, size: 16),
+                  ],
+                ],
               ),
               const SizedBox(height: 8),
               Text(
-                widget.data['caption'],
+                widget.video.caption,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
@@ -484,11 +630,15 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                 children: [
                   const Icon(Icons.music_note, color: Colors.white, size: 16),
                   const SizedBox(width: 8),
-                  Text(
-                    widget.data['music'],
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
+                  Expanded(
+                    child: Text(
+                      widget.video.musicTitle,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
