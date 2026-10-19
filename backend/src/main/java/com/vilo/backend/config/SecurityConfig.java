@@ -45,6 +45,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers("/uploads/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/videos/feed").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/videos/{id:\\d+}").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/videos/{id:\\d+}/comments").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/videos/{id:\\d+}/view").permitAll()
                         .requestMatchers("/api/v1/users/me").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/users/{id:\\d+}").permitAll()
                         .anyRequest().authenticated()

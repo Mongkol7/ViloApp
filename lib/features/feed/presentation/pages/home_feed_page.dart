@@ -48,8 +48,14 @@ class _HomeFeedPageState extends State<HomeFeedPage> with SingleTickerProviderSt
             controller: _tabController,
             children: [
               const CommunityFeedPage(),
-              VideoFeedPage(isActive: widget.isActive && _tabController.index == 1), // Following
-              VideoFeedPage(isActive: widget.isActive && _tabController.index == 2), // For You
+              VideoFeedPage(
+                isActive: widget.isActive && _tabController.index == 1,
+                feedType: 'following',
+              ),
+              VideoFeedPage(
+                isActive: widget.isActive && _tabController.index == 2,
+                feedType: 'foryou',
+              ),
               const ShopPage(),
             ],
           ),

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:video_player/video_player.dart';
 import '../../../../app/app.dart';
+import '../../data/datasources/feed_remote_data_source.dart';
+import '../../data/models/video_model.dart';
+import '../controllers/video_feed_manager.dart';
 import '../widgets/share_bottom_sheet.dart';
 import '../widgets/comment_bottom_sheet.dart';
 import 'sound_detail_page.dart';
@@ -9,90 +12,232 @@ import '../../../profile/presentation/screens/public_profile_screen.dart';
 
 class VideoFeedPage extends StatefulWidget {
   final bool isActive;
+  final String feedType;
 
-  const VideoFeedPage({super.key, this.isActive = true});
+  const VideoFeedPage({
+    super.key,
+    this.isActive = true,
+    this.feedType = 'foryou',
+  });
 
   @override
   State<VideoFeedPage> createState() => _VideoFeedPageState();
 }
 
 class _VideoFeedPageState extends State<VideoFeedPage> {
-  int _currentPage = 0;
+  final FeedRemoteDataSource _dataSource = FeedRemoteDataSource();
+  late final PageController _pageController = PageController();
 
-  void _goToProfile() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const PublicProfileScreen(),
-      ),
-    );
+  List<VideoModel> _videos = [];
+  bool _isLoading = true;
+  int _currentPage = 0;
+  int _apiPage = 0;
+  bool _hasMore = true;
+  bool _isLoadingMore = false;
+
+  static final List<VideoModel> _fallbackVideos = [
+    const VideoModel(
+      id: 1,
+      creatorId: 1,
+      username: '@beach_lover',
+      displayName: 'Beach Lover',
+      avatarUrl: 'https://i.pravatar.cc/150?img=11',
+      caption: 'Enjoying the sunset at the beach #sunset #vibes',
+      videoUrl: 'assets/videos/vid1.mp4',
+      likeCount: 1200000,
+      commentCount: 45200,
+      saveCount: 120000,
+    ),
+    const VideoModel(
+      id: 2,
+      creatorId: 2,
+      username: '@city_explorer',
+      displayName: 'City Explorer',
+      avatarUrl: 'https://i.pravatar.cc/150?img=12',
+      caption: 'Night walk through the neon streets #citylife #neon',
+      videoUrl: 'assets/videos/vid2.mp4',
+      likeCount: 890000,
+      commentCount: 12100,
+      saveCount: 85000,
+    ),
+    const VideoModel(
+      id: 3,
+      creatorId: 3,
+      username: '@nature_hiker',
+      displayName: 'Nature Hiker',
+      avatarUrl: 'https://i.pravatar.cc/150?img=13',
+      caption: 'Found this hidden waterfall today! 🌿💧 #hiking #nature',
+      videoUrl: 'assets/videos/vid3.mp4',
+      likeCount: 340000,
+      commentCount: 3200,
+      saveCount: 20000,
+    ),
+    const VideoModel(
+      id: 4,
+      creatorId: 4,
+      username: '@fitness_journey',
+      displayName: 'Fitness Journey',
+      avatarUrl: 'https://i.pravatar.cc/150?img=14',
+      caption: 'Morning workout done! 💪 #fitness #gym',
+      videoUrl: 'assets/videos/vid4.mp4',
+      likeCount: 550000,
+      commentCount: 8400,
+      saveCount: 15000,
+    ),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    VideoFeedManager.instance.latestUploadedVideoNotifier.addListener(_onNewVideoUploaded);
+    _fetchFeed();
+  }
+
+  @override
+  void dispose() {
+    VideoFeedManager.instance.latestUploadedVideoNotifier.removeListener(_onNewVideoUploaded);
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _onNewVideoUploaded() {
+    final newVideo = VideoFeedManager.instance.latestUploadedVideoNotifier.value;
+    if (newVideo == null || !mounted) return;
+
+    if (!_videos.any((v) => v.id == newVideo.id)) {
+      setState(() {
+        _videos.insert(0, newVideo);
+        _currentPage = 0;
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_pageController.hasClients) {
+          _pageController.animateToPage(
+            0,
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    }
+  }
+
+  Future<void> _fetchFeed({bool refresh = false}) async {
+    if (refresh) {
+      _apiPage = 0;
+      _hasMore = true;
+    }
+
+    try {
+      final fetched = await _dataSource.getFeed(
+        page: _apiPage,
+        size: 10,
+        type: widget.feedType,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        if (refresh) {
+          _videos = fetched.isNotEmpty ? fetched : _fallbackVideos;
+        } else {
+          if (fetched.isNotEmpty) {
+            _videos.addAll(fetched);
+          } else if (_videos.isEmpty) {
+            _videos = List.from(_fallbackVideos);
+          }
+        }
+        _hasMore = fetched.length >= 10;
+        _isLoading = false;
+        _isLoadingMore = false;
+      });
+
+      // Record view count for first video if active
+      if (_videos.isNotEmpty && widget.isActive) {
+        _recordView(_videos[0].id);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        if (_videos.isEmpty) {
+          _videos = List.from(_fallbackVideos);
+        }
+        _isLoading = false;
+        _isLoadingMore = false;
+      });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoadingMore || !_hasMore) return;
+    _isLoadingMore = true;
+    _apiPage++;
+    await _fetchFeed(refresh: false);
+  }
+
+  void _recordView(int videoId) {
+    _dataSource.incrementView(videoId);
+  }
+
+  void _onLikeToggled(int index) async {
+    final video = _videos[index];
+    final newLiked = !video.isLiked;
+    final newLikeCount = newLiked ? video.likeCount + 1 : (video.likeCount > 0 ? video.likeCount - 1 : 0);
+
+    setState(() {
+      _videos[index] = video.copyWith(
+        isLiked: newLiked,
+        likeCount: newLikeCount,
+      );
+    });
+
+    try {
+      final res = await _dataSource.toggleLike(video.id, currentlyLiked: video.isLiked);
+      if (mounted && res['likeCount'] != null) {
+        setState(() {
+          _videos[index] = _videos[index].copyWith(
+            isLiked: res['isLiked'] as bool?,
+            likeCount: res['likeCount'] as int?,
+          );
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _onSaveToggled(int index) async {
+    final video = _videos[index];
+    final newSaved = !video.isSaved;
+    final newSaveCount = newSaved ? video.saveCount + 1 : (video.saveCount > 0 ? video.saveCount - 1 : 0);
+
+    setState(() {
+      _videos[index] = video.copyWith(
+        isSaved: newSaved,
+        saveCount: newSaveCount,
+      );
+    });
+
+    try {
+      final res = await _dataSource.toggleSave(video.id, currentlySaved: video.isSaved);
+      if (mounted && res['saveCount'] != null) {
+        setState(() {
+          _videos[index] = _videos[index].copyWith(
+            isSaved: res['isSaved'] as bool?,
+            saveCount: res['saveCount'] as int?,
+          );
+        });
+      }
+    } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) {
-    // Mock data for the video feed
-    final List<Map<String, dynamic>> mockVideos = [
-      {
-        'videoUrl': 'assets/videos/vid1.mp4',
-        'username': '@beach_lover',
-        'caption': 'Enjoying the sunset at the beach #sunset #vibes',
-        'music': 'Relaxing Waves - Ocean Sounds',
-        'likes': '1.2M',
-        'comments': '45.2K',
-        'saves': '120K',
-        'avatar': 'https://i.pravatar.cc/150?img=11',
-      },
-      {
-        'videoUrl': 'assets/videos/vid2.mp4',
-        'username': '@city_explorer',
-        'caption': 'Night walk through the neon streets #citylife #neon',
-        'music': 'Cyberpunk Beats - Synthwave',
-        'likes': '890K',
-        'comments': '12.1K',
-        'saves': '85K',
-        'avatar': 'https://i.pravatar.cc/150?img=12',
-      },
-      {
-        'videoUrl': 'assets/videos/vid3.mp4',
-        'username': '@nature_hiker',
-        'caption': 'Found this hidden waterfall today! 🌿💧 #hiking #nature',
-        'music': 'Nature Sounds - Waterfall',
-        'likes': '340K',
-        'comments': '3.2K',
-        'saves': '20K',
-        'avatar': 'https://i.pravatar.cc/150?img=13',
-      },
-      {
-        'videoUrl': 'assets/videos/vid4.mp4',
-        'username': '@fitness_journey',
-        'caption': 'Morning workout done! 💪 #fitness #gym',
-        'music': 'Workout Mix 2026 - DJ Flex',
-        'likes': '550K',
-        'comments': '8.4K',
-        'saves': '15K',
-        'avatar': 'https://i.pravatar.cc/150?img=14',
-      },
-      {
-        'videoUrl': 'assets/videos/vid1.mp4',
-        'username': '@travel_diaries',
-        'caption': 'The view from the top is breathtaking ⛰️ #mountains',
-        'music': 'Epic Mountain Theme - Hans Zimmer',
-        'likes': '2.1M',
-        'comments': '110K',
-        'saves': '400K',
-        'avatar': 'https://i.pravatar.cc/150?img=15',
-      },
-      {
-        'videoUrl': 'assets/videos/vid2.mp4',
-        'username': '@boathouse',
-        'caption': 'Peaceful morning on the lake 🛶 #lake #peace',
-        'music': 'Morning Coffee Acoustic - Indie Band',
-        'likes': '420K',
-        'comments': '5.1K',
-        'saves': '18K',
-        'avatar': 'https://i.pravatar.cc/150?img=16',
-      },
-    ];
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -105,18 +250,34 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
           },
         ),
         child: PageView.builder(
+          controller: _pageController,
           scrollDirection: Axis.vertical,
-          itemCount: mockVideos.length,
+          itemCount: _videos.length,
           onPageChanged: (index) {
             setState(() {
               _currentPage = index;
             });
+
+            if (index < _videos.length) {
+              _recordView(_videos[index].id);
+            }
+
+            if (index >= _videos.length - 2 && _hasMore) {
+              _loadMore();
+            }
           },
           itemBuilder: (context, index) {
             return _VideoPostWidget(
-              data: mockVideos[index],
+              video: _videos[index],
               isCurrentPage: _currentPage == index,
               isActive: widget.isActive,
+              onLikeTap: () => _onLikeToggled(index),
+              onSaveTap: () => _onSaveToggled(index),
+              onCommentCountChanged: (newCount) {
+                setState(() {
+                  _videos[index] = _videos[index].copyWith(commentCount: newCount);
+                });
+              },
             );
           },
         ),
@@ -126,14 +287,20 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
 }
 
 class _VideoPostWidget extends StatefulWidget {
-  final Map<String, dynamic> data;
+  final VideoModel video;
   final bool isCurrentPage;
   final bool isActive;
+  final VoidCallback onLikeTap;
+  final VoidCallback onSaveTap;
+  final ValueChanged<int> onCommentCountChanged;
 
   const _VideoPostWidget({
-    required this.data,
+    required this.video,
     required this.isCurrentPage,
     required this.isActive,
+    required this.onLikeTap,
+    required this.onSaveTap,
+    required this.onCommentCountChanged,
   });
 
   @override
@@ -144,12 +311,23 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
     with RouteAware, WidgetsBindingObserver {
   late VideoPlayerController _controller;
   bool _manuallyPaused = false;
+  bool _hasControllerError = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _controller = VideoPlayerController.asset(widget.data['videoUrl']);
+    _initController();
+  }
+
+  void _initController() {
+    final url = widget.video.videoUrl;
+    if (url.startsWith('assets/')) {
+      _controller = VideoPlayerController.asset(url);
+    } else {
+      _controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    }
+
     _controller.addListener(_videoListener);
     _controller.initialize().then((_) {
       if (!mounted) return;
@@ -159,14 +337,17 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
         _controller.play();
       }
     }).catchError((error) {
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {
+          _hasControllerError = true;
+        });
+      }
     });
   }
 
   void _videoListener() {
     if (!mounted || !_controller.value.isInitialized) return;
     final value = _controller.value;
-    // Guarantee non-stop continuous looping even across short video bounds
     if (value.duration > Duration.zero && value.position >= value.duration) {
       _controller.seekTo(Duration.zero);
       if (widget.isActive && widget.isCurrentPage && !_manuallyPaused) {
@@ -201,7 +382,6 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
 
   @override
   void didPushNext() {
-    // Automatically pause video when navigating to another page (like SearchScreen)
     if (_controller.value.isInitialized && _controller.value.isPlaying) {
       _controller.pause();
       if (mounted) setState(() {});
@@ -210,7 +390,6 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
 
   @override
   void didPopNext() {
-    // Automatically resume video when returning back to Home feed from SearchScreen
     if (widget.isActive && widget.isCurrentPage && !_manuallyPaused && _controller.value.isInitialized) {
       _controller.play();
       if (mounted) setState(() {});
@@ -264,9 +443,12 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
 
   @override
   Widget build(BuildContext context) {
+    final video = widget.video;
+    final avatar = video.avatarUrl ?? 'https://i.pravatar.cc/150?img=11';
+
     return Stack(
       children: [
-        // Background Video/Image
+        // Background Video / Cover
         Positioned.fill(
           child: _controller.value.isInitialized &&
                   _controller.value.size.width > 0 &&
@@ -311,7 +493,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
               : Container(
                   color: const Color(0xFF121216),
                   child: Center(
-                    child: _controller.value.hasError
+                    child: (_controller.value.hasError || _hasControllerError)
                         ? Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -355,7 +537,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
         // Right side interaction buttons
         Positioned(
           right: 16,
-          bottom: 140, // Leave space for bottom nav
+          bottom: 140,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -370,7 +552,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                     children: [
                       CircleAvatar(
                         radius: 22,
-                        backgroundImage: NetworkImage(widget.data['avatar']),
+                        backgroundImage: NetworkImage(avatar),
                         backgroundColor: Colors.grey,
                       ),
                       Positioned(
@@ -393,41 +575,47 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                 ),
               ),
               const SizedBox(height: 16),
-              
+
               // Like
               _InteractionButton(
-                icon: Icons.favorite, 
-                label: widget.data['likes'],
+                icon: Icons.favorite,
+                label: video.formattedLikes,
+                isActive: video.isLiked,
                 activeColor: Colors.red,
-                isToggleable: true,
+                onTap: widget.onLikeTap,
               ),
-              
+
               // Comment
               _InteractionButton(
-                icon: Icons.comment, 
-                label: widget.data['comments'],
+                icon: Icons.comment,
+                label: video.formattedComments,
                 onTap: () {
                   showModalBottomSheet(
                     context: context,
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
-                    builder: (context) => const CommentBottomSheet(),
+                    builder: (context) => CommentBottomSheet(
+                      videoId: video.id,
+                      initialCommentCount: video.commentCount,
+                      onCommentCountChanged: widget.onCommentCountChanged,
+                    ),
                   );
                 },
               ),
-              
-              // Bookmark
+
+              // Bookmark / Save
               _InteractionButton(
-                icon: Icons.bookmark, 
-                label: widget.data['saves'],
-                activeColor: Colors.yellow,
-                isToggleable: true,
+                icon: Icons.bookmark,
+                label: video.formattedSaves,
+                isActive: video.isSaved,
+                activeColor: Colors.amber,
+                onTap: widget.onSaveTap,
               ),
-              
+
               // Share
               _InteractionButton(
-                icon: Icons.reply, 
-                label: 'Share', 
+                icon: Icons.reply,
+                label: 'Share',
                 showLabel: false,
                 onTap: () {
                   showModalBottomSheet(
@@ -438,7 +626,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                   );
                 },
               ),
-              
+
               // Record/Music Disc
               const SizedBox(height: 16),
               GestureDetector(
@@ -463,8 +651,8 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
         // Bottom left user info and caption
         Positioned(
           left: 16,
-          bottom: 140, // Leave space for bottom nav
-          right: 80, // Prevent overlapping with right column
+          bottom: 140,
+          right: 80,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -472,7 +660,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
               GestureDetector(
                 onTap: _goToProfile,
                 child: Text(
-                  widget.data['username'],
+                  video.username.startsWith('@') ? video.username : '@${video.username}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -482,20 +670,20 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
               ),
               const SizedBox(height: 8),
               Text(
-                widget.data['caption'],
+                video.caption,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
                 ),
               ),
               const SizedBox(height: 12),
-              Row(
+              const Row(
                 children: [
-                  const Icon(Icons.music_note, color: Colors.white, size: 16),
-                  const SizedBox(width: 8),
+                  Icon(Icons.music_note, color: Colors.white, size: 16),
+                  SizedBox(width: 8),
                   Text(
-                    widget.data['music'],
-                    style: const TextStyle(
+                    'Original Sound - Vilo Audio',
+                    style: TextStyle(
                       color: Colors.white,
                       fontSize: 14,
                     ),
@@ -510,12 +698,12 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   }
 }
 
-class _InteractionButton extends StatefulWidget {
+class _InteractionButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool showLabel;
   final Color? activeColor;
-  final bool isToggleable;
+  final bool isActive;
   final VoidCallback? onTap;
 
   const _InteractionButton({
@@ -523,55 +711,26 @@ class _InteractionButton extends StatefulWidget {
     required this.label,
     this.showLabel = true,
     this.activeColor,
-    this.isToggleable = false,
+    this.isActive = false,
     this.onTap,
   });
 
   @override
-  State<_InteractionButton> createState() => _InteractionButtonState();
-}
-
-class _InteractionButtonState extends State<_InteractionButton> {
-  bool _isActive = false;
-
-  void _handleTap() {
-    if (widget.isToggleable) {
-      setState(() {
-        _isActive = !_isActive;
-      });
-    }
-    if (widget.onTap != null) {
-      widget.onTap!();
-    }
-  }
-
-  void _goToProfile() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const PublicProfileScreen(),
-      ),
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final color = (_isActive && widget.activeColor != null) 
-        ? widget.activeColor! 
-        : Colors.white;
+    final color = (isActive && activeColor != null) ? activeColor! : Colors.white;
 
     return GestureDetector(
-      onTap: _handleTap,
+      onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Padding(
         padding: const EdgeInsets.only(bottom: 16.0),
         child: Column(
           children: [
-            Icon(widget.icon, color: color, size: 32),
-            if (widget.showLabel) ...[
+            Icon(icon, color: color, size: 32),
+            if (showLabel) ...[
               const SizedBox(height: 4),
               Text(
-                widget.label,
+                label,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 12,

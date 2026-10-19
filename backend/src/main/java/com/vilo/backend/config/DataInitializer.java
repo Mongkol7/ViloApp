@@ -2,13 +2,16 @@ package com.vilo.backend.config;
 
 import com.vilo.backend.entity.Role;
 import com.vilo.backend.entity.User;
+import com.vilo.backend.entity.Video;
 import com.vilo.backend.repository.UserRepository;
+import com.vilo.backend.repository.VideoRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Set;
 
 @Component
@@ -18,10 +21,14 @@ public class DataInitializer implements CommandLineRunner {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final VideoRepository videoRepository;
 
-    public DataInitializer(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public DataInitializer(UserRepository userRepository,
+                           PasswordEncoder passwordEncoder,
+                           VideoRepository videoRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.videoRepository = videoRepository;
     }
 
     @Override
@@ -62,8 +69,38 @@ public class DataInitializer implements CommandLineRunner {
                     .roles(Set.of(Role.ROLE_USER, Role.ROLE_ADMIN))
                     .build();
 
-            userRepository.saveAll(java.util.List.of(mongkol, bunheng, admin));
+            userRepository.saveAll(List.of(mongkol, bunheng, admin));
             log.info("Default seed users created successfully: 'mongkol', 'bunheng', 'admin' (passwords: 'password123' / 'admin123')");
+        }
+
+        if (videoRepository.count() == 0) {
+            log.info("Seeding sample feed videos...");
+
+            Video v1 = new Video(
+                1L, 
+                "Exploring the stunning architecture of Phnom Penh! 🇰🇭✨ #travel #vilo", 
+                "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4", 
+                "https://images.unsplash.com/photo-1583491954714-a6da9249763e?w=800"
+            );
+            
+            Video v2 = new Video(
+                2L, 
+                "Building a high-performance Flutter short-form video app with Spring Boot 3! #coding #flutter", 
+                "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4", 
+                "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800"
+            );
+
+            Video v3 = new Video(
+                2L, 
+                "spider glass", 
+                "/uploads/videos/video1.mp4", 
+                "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800"
+            );
+
+            videoRepository.save(v1);
+            videoRepository.save(v2);
+            videoRepository.save(v3);
+            log.info("Initialized sample videos into PostgreSQL database.");
         }
     }
 }

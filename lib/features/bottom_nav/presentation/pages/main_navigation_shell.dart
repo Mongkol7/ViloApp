@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../feed/data/models/video_model.dart';
 import '../../../feed/presentation/pages/home_feed_page.dart';
+import '../../../feed/presentation/widgets/upload_video_sheet.dart';
 import '../../../inbox_activity/presentation/pages/inbox_screen.dart';
 import '../../../profile/presentation/pages/people_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
@@ -51,10 +53,28 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     });
   }
 
-  void _onAddPressed() {
+  void _onAddPressed() async {
     setState(() {
-      _isAddActive = !_isAddActive;
+      _isAddActive = true;
     });
+
+    final createdVideo = await showModalBottomSheet<VideoModel>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black87,
+      builder: (ctx) => const UploadVideoSheet(),
+    );
+
+    if (mounted) {
+      setState(() {
+        _isAddActive = false;
+        if (createdVideo != null && _currentIndex != 0) {
+          _currentIndex = 0;
+        }
+      });
+    }
   }
 
   bool _handleScrollNotification(ScrollNotification notification) {
