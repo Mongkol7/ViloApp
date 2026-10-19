@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../feed/data/datasources/feed_remote_data_source.dart';
+import '../../../feed/data/models/video_model.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../domain/entities/search_results.dart';
 import 'static_search_data.dart';
@@ -277,13 +279,42 @@ class SearchRemoteDataSource {
     final List<TrendingVideo> videos = [];
     if (data['trendingVideos'] is List) {
       for (final v in data['trendingVideos']) {
+        final rawThumb = v['thumbnailUrl']?.toString() ?? '';
+        final resolvedThumb = VideoModel.resolveMediaUrl(rawThumb);
+        final rawVideo = v['videoUrl']?.toString() ?? '';
+        final resolvedVideo = VideoModel.resolveMediaUrl(rawVideo);
+
+        final rawTags = v['tags'];
+        final List<String> tagsList = [];
+        if (rawTags is List) {
+          for (final t in rawTags) {
+            final clean = t?.toString().replaceAll('#', '').trim() ?? '';
+            if (clean.isNotEmpty && !tagsList.contains(clean)) {
+              tagsList.add(clean);
+            }
+          }
+        }
+
+        final title = v['title']?.toString() ?? '';
+        final caption = v['caption']?.toString() ?? title;
+
         videos.add(TrendingVideo(
           id: v['id']?.toString() ?? '',
-          title: v['title']?.toString() ?? '',
+          title: title,
+          caption: caption,
           authorUsername: v['authorUsername']?.toString() ?? '',
           authorName: v['authorName']?.toString() ?? '',
-          thumbnailUrl: v['thumbnailUrl']?.toString() ?? '',
-          views: v['views']?.toString() ?? '1.2M',
+          thumbnailUrl: resolvedThumb.isNotEmpty ? resolvedThumb : rawThumb,
+          videoUrl: resolvedVideo.isNotEmpty ? resolvedVideo : rawVideo,
+          views: v['views']?.toString() ?? (v['viewCount'] != null ? '${v['viewCount']}' : '1.2M'),
+          viewCount: (v['viewCount'] is num) ? (v['viewCount'] as num).toInt() : 0,
+          likeCount: (v['likeCount'] is num) ? (v['likeCount'] as num).toInt() : ((v['likesCount'] is num) ? (v['likesCount'] as num).toInt() : 0),
+          commentCount: (v['commentCount'] is num) ? (v['commentCount'] as num).toInt() : ((v['commentsCount'] is num) ? (v['commentsCount'] as num).toInt() : 0),
+          saveCount: (v['saveCount'] is num) ? (v['saveCount'] as num).toInt() : ((v['savesCount'] is num) ? (v['savesCount'] as num).toInt() : 0),
+          musicTitle: v['musicTitle']?.toString() ?? 'Original Sound',
+          creatorId: (v['creatorId'] is num) ? (v['creatorId'] as num).toInt() : null,
+          avatarUrl: v['avatarUrl']?.toString(),
+          tags: tagsList,
         ));
       }
     }
@@ -291,7 +322,10 @@ class SearchRemoteDataSource {
     final List<String> hashtags = [];
     if (data['hashtags'] is List) {
       for (final h in data['hashtags']) {
-        hashtags.add(h['formattedTag']?.toString() ?? '#${h['tag']}');
+        final rawTag = h['formattedTag']?.toString() ?? '#${h['tag']}';
+        if (rawTag.isNotEmpty && !hashtags.contains(rawTag)) {
+          hashtags.add(rawTag);
+        }
       }
     }
 
@@ -361,34 +395,85 @@ class SearchRemoteDataSource {
       }).toList();
     }
 
-    // 3. Match Hashtags
+    // 3. Match Hashtags (combine static tags + tags from cached/posted videos)
+    final cachedVideos = FeedRemoteDataSource.instance.getAllCachedVideos();
+    final Set<String> allHashtags = Set.from(StaticSearchData.hashtags);
+    for (final v in cachedVideos) {
+      for (final t in v.tags) {
+        allHashtags.add(t.startsWith('#') ? t : '#$t');
+      }
+      final matches = RegExp(r'#([a-zA-Z0-9_]+)').allMatches(v.caption);
+      for (final m in matches) {
+        final tag = m.group(1);
+        if (tag != null && tag.isNotEmpty) {
+          allHashtags.add('#$tag');
+        }
+      }
+    }
+
     List<String> filteredHashtags = [];
     if (type == 'ALL') {
-      filteredHashtags = StaticSearchData.hashtags.where((tag) {
-        return _matchesFuzzy(tag, cleanQ) || cleanQ.isEmpty;
+      filteredHashtags = allHashtags.where((tag) {
+        final cleanTag = tag.replaceAll('#', '').toLowerCase();
+        return _matchesFuzzy(cleanTag, cleanQ) || cleanQ.isEmpty;
       }).toList();
     }
 
     // 4. Match Videos:
-    // - by title
-    // - by author username or author display name (shows videos from that person if searching that user account!)
-    // - by hashtag tags
-    // - if an account was found, include all public videos authored by that person
+    // Gather all local video candidates (Cached/posted videos + static mock videos)
+    final Map<String, TrendingVideo> allCandidates = {};
+
+    for (final cv in cachedVideos) {
+      final key = 'cached_${cv.id}';
+      allCandidates[key] = TrendingVideo(
+        id: '${cv.id}',
+        title: cv.caption,
+        caption: cv.caption,
+        authorUsername: cv.username.startsWith('@') ? cv.username : '@${cv.username}',
+        authorName: cv.displayName,
+        thumbnailUrl: cv.thumbnailUrl ?? cv.videoUrl,
+        videoUrl: cv.videoUrl,
+        views: '${cv.viewCount}',
+        viewCount: cv.viewCount,
+        likeCount: cv.likeCount,
+        commentCount: cv.commentCount,
+        saveCount: cv.saveCount,
+        musicTitle: cv.musicTitle,
+        tags: cv.tags,
+        avatarUrl: cv.avatarUrl,
+        creatorId: cv.creatorId,
+      );
+    }
+
+    // 4c. Static mock videos
+    for (final sv in StaticSearchData.trendingVideos) {
+      if (!allCandidates.containsKey(sv.id)) {
+        allCandidates[sv.id] = sv;
+      }
+    }
+
     final matchedUsernames = filteredAccounts
         .map((a) => a.username.toLowerCase().replaceAll('@', ''))
         .toSet();
 
     List<TrendingVideo> filteredVideos = [];
     if (type == 'ALL' || type == 'VIDEOS') {
-      filteredVideos = StaticSearchData.trendingVideos.where((v) {
+      filteredVideos = allCandidates.values.where((v) {
         final vAuthor = v.authorUsername.toLowerCase().replaceAll('@', '');
         final vAuthorName = v.authorName.toLowerCase();
+        final vTitle = v.title.toLowerCase();
+        final vCaption = v.caption.toLowerCase();
 
         if (matchedUsernames.contains(vAuthor)) return true;
-        if (_matchesFuzzy(v.title, cleanQ)) return true;
+        if (_matchesFuzzy(vTitle, cleanQ)) return true;
+        if (_matchesFuzzy(vCaption, cleanQ)) return true;
         if (v.authorUsername.isNotEmpty && _matchesFuzzy(vAuthor, cleanQ)) return true;
         if (v.authorName.isNotEmpty && _matchesFuzzy(vAuthorName, cleanQ)) return true;
         if (v.tags.any((tag) => _matchesFuzzy(tag, cleanQ))) return true;
+
+        // Also check if caption has matching hashtag
+        if (vCaption.contains('#$cleanQ') || (cleanQ.length >= 2 && vCaption.contains(cleanQ))) return true;
+
         return false;
       }).toList();
     }
