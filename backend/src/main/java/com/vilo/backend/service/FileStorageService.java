@@ -20,4 +20,11 @@ public interface FileStorageService {
      * @return true if deleted or not present, false if deletion failed
      */
     boolean deleteFile(String fileUrl);
+
+    /**
+     * Resolves the actual thumbnail folder name present on disk ("thumbnails", "thumnail", or "thumbnail").
+     *
+     * @return the resolved thumbnail directory name
+     */
+    String getThumbnailDirectoryName();
 }

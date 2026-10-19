@@ -85,6 +85,27 @@ public class VideoService {
         return "/uploads/videos/" + path;
     }
 
+    public String normalizeThumbnailPath(String rawPath) {
+        if (rawPath == null || rawPath.isBlank()) {
+            return null;
+        }
+        String path = rawPath.trim().replace('\\', '/');
+        if (path.startsWith("/uploads/") || path.startsWith("assets/") || path.startsWith("http://") || path.startsWith("https://")) {
+            return path;
+        }
+        if (path.startsWith("uploads/")) {
+            return "/" + path;
+        }
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        if (path.startsWith("thumbnails/") || path.startsWith("thumnail/") || path.startsWith("thumbnail/") || path.startsWith("photos/")) {
+            return "/uploads/" + path;
+        }
+        String thumbDir = fileStorageService.getThumbnailDirectoryName();
+        return "/uploads/" + thumbDir + "/" + path;
+    }
+
     @Transactional
     public Video createVideo(Long creatorId, String title, String description, String caption, MultipartFile videoFile, String directPath, MultipartFile thumbnailFile, String thumbnailPath, List<String> tags) {
         String videoUrl;
@@ -102,9 +123,10 @@ public class VideoService {
 
         String thumbnailUrl = null;
         if (thumbnailFile != null && !thumbnailFile.isEmpty()) {
-            thumbnailUrl = fileStorageService.storeFile(thumbnailFile, "thumbnails");
+            String thumbDir = fileStorageService.getThumbnailDirectoryName();
+            thumbnailUrl = fileStorageService.storeFile(thumbnailFile, thumbDir);
         } else if (thumbnailPath != null && !thumbnailPath.isBlank()) {
-            thumbnailUrl = thumbnailPath.trim();
+            thumbnailUrl = normalizeThumbnailPath(thumbnailPath);
         } else if (isImage) {
             // For photo posts without explicit thumbnail, auto-assign the photo URL as thumbnail
             thumbnailUrl = videoUrl;

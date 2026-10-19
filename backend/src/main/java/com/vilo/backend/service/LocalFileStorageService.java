@@ -33,12 +33,35 @@ public class LocalFileStorageService implements FileStorageService {
             Files.createDirectories(this.rootStoragePath);
             Files.createDirectories(this.rootStoragePath.resolve("videos"));
             Files.createDirectories(this.rootStoragePath.resolve("photos"));
-            Files.createDirectories(this.rootStoragePath.resolve("thumbnails"));
-            log.info("Local storage directories initialized at: {}", this.rootStoragePath);
+            String thumbDir = getThumbnailDirectoryName();
+            Files.createDirectories(this.rootStoragePath.resolve(thumbDir));
+            log.info("Local storage directories initialized at: {} with thumbnail subfolder: {}", this.rootStoragePath, thumbDir);
         } catch (IOException e) {
             log.error("Failed to initialize upload directory: {}", e.getMessage(), e);
             throw new RuntimeException("Could not initialize local storage folder", e);
         }
+    }
+
+    @Override
+    public String getThumbnailDirectoryName() {
+        if (this.rootStoragePath != null) {
+            if (Files.exists(this.rootStoragePath.resolve("thumnail"))) {
+                return "thumnail";
+            }
+            if (Files.exists(this.rootStoragePath.resolve("thumbnail"))) {
+                return "thumbnail";
+            }
+            if (Files.exists(this.rootStoragePath.resolve("thumbnails"))) {
+                return "thumbnails";
+            }
+        }
+        if (Files.exists(Paths.get("uploads", "thumnail")) || Files.exists(Paths.get("backend", "uploads", "thumnail"))) {
+            return "thumnail";
+        }
+        if (Files.exists(Paths.get("uploads", "thumbnail")) || Files.exists(Paths.get("backend", "uploads", "thumbnail"))) {
+            return "thumbnail";
+        }
+        return "thumbnails";
     }
 
     @Override
@@ -57,8 +80,13 @@ public class LocalFileStorageService implements FileStorageService {
 
         String uniqueFilename = UUID.randomUUID().toString() + extension;
 
+        String resolvedSubDir = subDirectory;
+        if ("thumbnails".equalsIgnoreCase(subDirectory) || "thumnail".equalsIgnoreCase(subDirectory) || "thumbnail".equalsIgnoreCase(subDirectory)) {
+            resolvedSubDir = getThumbnailDirectoryName();
+        }
+
         try {
-            Path targetDirectory = this.rootStoragePath.resolve(subDirectory).normalize();
+            Path targetDirectory = this.rootStoragePath.resolve(resolvedSubDir).normalize();
             if (!Files.exists(targetDirectory)) {
                 Files.createDirectories(targetDirectory);
             }
@@ -73,7 +101,7 @@ public class LocalFileStorageService implements FileStorageService {
             Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
             log.debug("Stored file {} to {}", uniqueFilename, targetPath);
 
-            return "/uploads/" + subDirectory + "/" + uniqueFilename;
+            return "/uploads/" + resolvedSubDir + "/" + uniqueFilename;
         } catch (IOException e) {
             log.error("Failed to store file {}: {}", uniqueFilename, e.getMessage(), e);
             throw new BadRequestException("Failed to store file: " + e.getMessage());

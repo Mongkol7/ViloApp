@@ -159,7 +159,8 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   Future<void> _pickThumbnail() async {
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
         allowMultiple: false,
         withData: true,
       );
