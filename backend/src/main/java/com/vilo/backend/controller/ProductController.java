@@ -28,7 +28,7 @@ public class ProductController {
         this.productService = productService;
     }
 
-    @PostMapping
+    @PostMapping({"", "/"})
     public ResponseEntity<ApiResponse<ProductResponse>> createProduct(
             @AuthenticationPrincipal User currentUser,
             @Valid @RequestBody CreateProductRequest request
