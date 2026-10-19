@@ -5,6 +5,7 @@ import '../../../feed/presentation/pages/home_feed_page.dart';
 import '../../../inbox_activity/presentation/pages/inbox_screen.dart';
 import '../../../profile/presentation/pages/people_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
+import '../../../shop/presentation/pages/add_product_screen.dart';
 import '../widgets/vilo_floating_bottom_bar.dart';
 
 class MainNavigationShell extends StatefulWidget {
@@ -52,9 +53,11 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   }
 
   void _onAddPressed() {
-    setState(() {
-      _isAddActive = !_isAddActive;
-    });
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const AddProductScreen(),
+      ),
+    );
   }
 
   bool _handleScrollNotification(ScrollNotification notification) {

@@ -127,12 +127,22 @@ class ShopService {
       // Return from fallback if available
     }
 
-    final all = [...Product.screenshotFeedProducts, ...Product.screenshotTopSellers, ...Product.creatorProducts];
+    final all = [
+      ...Product.userAddedProducts,
+      ...Product.screenshotFeedProducts,
+      ...Product.screenshotTopSellers,
+      ...Product.creatorProducts,
+    ];
     try {
       return all.firstWhere((p) => p.id == id);
     } catch (_) {
       return null;
     }
+  }
+
+  /// Adds a product listed by a creator/merchant to the active local catalog
+  void addProduct(Product product) {
+    Product.addCreatorProduct(product);
   }
 
   /// Applies category and query filtering locally if needed
@@ -165,6 +175,7 @@ class ShopService {
   /// High-fidelity offline fallback catalog matching exact design screenshot
   List<Product> _getFallbackProducts({String? category, String? query}) {
     final List<Product> catalog = [
+      ...Product.userAddedProducts,
       ...Product.screenshotFeedProducts,
       ...Product.creatorProducts,
     ];

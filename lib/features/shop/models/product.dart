@@ -162,6 +162,18 @@ class Product {
   @override
   int get hashCode => id.hashCode;
 
+  /// Dynamic catalog of products added/listed by creators & merchants
+  static final List<Product> userAddedProducts = [];
+
+  static void addCreatorProduct(Product product) {
+    userAddedProducts.removeWhere((p) => p.id == product.id);
+    userAddedProducts.insert(0, product);
+  }
+
+  static void clearUserAddedProducts() {
+    userAddedProducts.clear();
+  }
+
   String get fallbackImageUrl {
     switch (id) {
       case 'ts-1':

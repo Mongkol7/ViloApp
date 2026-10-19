@@ -529,7 +529,7 @@ class CartPage extends StatelessWidget {
             ],
           ),
           const Spacer(),
-          // Dark glassmorphic "Send Message" action button (Replacing Checkout)
+          // Dark glassmorphic "Send Message" action button (Matching original design)
           GestureDetector(
             onTap: () => _handleGlobalSendMessage(context, ctrl),
             child: Container(
@@ -585,7 +585,15 @@ class CartPage extends StatelessWidget {
     final sellerGroups = _groupItemsBySeller(cart.items);
     if (sellerGroups.isEmpty) return;
 
-    // 1. Create and persist orders for ALL distinct companies & register in Inbox
+    // Identify first product added to cart and its merchant
+    final firstItem = cart.items.first;
+    final firstSellerName = firstItem.sellerName?.trim().isNotEmpty == true
+        ? firstItem.sellerName!.trim()
+        : 'TechHorizon Global';
+    final firstSellerHandle = firstSellerName.startsWith('@') ? firstSellerName : '@$firstSellerName';
+    final firstSellerThreadId = 'order_chat_${firstSellerName.hashCode.abs()}';
+
+    // 1. Dispatch order inquiries for ALL distinct merchants & register in Inbox
     DirectMessageThread? firstRegisteredThread;
 
     for (final entry in sellerGroups.entries) {
@@ -596,12 +604,10 @@ class CartPage extends StatelessWidget {
       final itemsSummary = items.map((e) => '${e.productTitle} (x${e.quantity})').join('\n- ');
       final msg = 'Hi! I would like to order ${items.length} item(s) (Total: \$${subtotal.toStringAsFixed(2)}) from $handle:\n- $itemsSummary\nAre these ready to ship?';
 
-      final order = ShopRemoteDataSource.instance.createOrderFromCartItems(
-        sellerName: seller,
-        items: items,
-        customNote: msg,
-      );
-      ShopRemoteDataSource.instance.addOrder(order);
+      final itemImages = items
+          .map((e) => e.productImage)
+          .where((img) => img.trim().isNotEmpty)
+          .toList();
 
       final thread = DirectMessageThread(
         id: 'order_chat_${seller.hashCode.abs()}',
@@ -618,22 +624,25 @@ class CartPage extends StatelessWidget {
             isMe: true,
             timestamp: 'Just now',
             status: 'Sent',
+            imageUrl: itemImages.isNotEmpty ? itemImages.first : null,
+            imageUrls: itemImages,
           ),
         ],
       );
 
       final registered = InboxMessageManager.instance.addOrUpdateThread(thread);
-      if (entry.key == sellerGroups.entries.first.key) {
+      if (seller == firstSellerName || entry.key == sellerGroups.entries.first.key) {
         firstRegisteredThread = registered;
       }
     }
 
-    // 2. Clear entire cart
-    ctrl.clearCart();
+    // Always deterministically resolve the thread belonging to the first product added to the cart
+    final targetThread = InboxMessageManager.instance.getThread(firstSellerThreadId) ??
+        InboxMessageManager.instance.getThreadByUsername(firstSellerHandle) ??
+        firstRegisteredThread ??
+        InboxMessageManager.instance.threads.first;
 
-    final targetThread = firstRegisteredThread ?? InboxMessageManager.instance.threads.first;
-
-    // 4. SnackBar Notification
+    // 2. SnackBar Notification (Inquiries sent across all merchants, no orders created)
     final count = sellerGroups.length;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -650,8 +659,8 @@ class CartPage extends StatelessWidget {
             Expanded(
               child: Text(
                 count > 1
-                    ? 'Sent order inquiries to $count merchants! Redirecting to first chat...'
-                    : 'Order inquiry sent to ${targetThread.username}! Added to My Orders.',
+                    ? 'Sent order inquiries to $count merchants! Redirecting to first product\'s chat...'
+                    : 'Order inquiry sent to ${targetThread.username}! Redirecting to chat...',
                 style: const TextStyle(color: Colors.white, fontSize: 13),
               ),
             ),
@@ -660,7 +669,10 @@ class CartPage extends StatelessWidget {
       ),
     );
 
-    // 5. Navigate to first company's messenger page
+    // 3. Clear all items from cart upon sending inquiries for all products
+    ctrl.clearCart();
+
+    // 4. Navigate directly to the first product's chat page
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -682,20 +694,12 @@ class CartPage extends StatelessWidget {
     final defaultNote = 'Hi! I would like to order ${items.length} item(s) (Total: \$${companySubtotal.toStringAsFixed(2)}) from $displayHandle:\n- $itemsSummary\nAre these ready to ship?';
     final messageText = (customNote != null && customNote.trim().isNotEmpty) ? customNote.trim() : defaultNote;
 
-    // 1. Create and persist order into Order History
-    final order = ShopRemoteDataSource.instance.createOrderFromCartItems(
-      sellerName: sellerName,
-      items: items,
-      customNote: messageText,
-    );
-    ShopRemoteDataSource.instance.addOrder(order);
+    final itemImages = items
+        .map((e) => e.productImage)
+        .where((img) => img.trim().isNotEmpty)
+        .toList();
 
-    // 2. Remove ordered items from cart
-    for (final item in items) {
-      ctrl.removeItem(item.id);
-    }
-
-    // 3. Construct and register DirectMessageThread with InboxMessageManager
+    // 1. Construct and register DirectMessageThread with InboxMessageManager
     final thread = DirectMessageThread(
       id: 'order_chat_${sellerName.hashCode.abs()}',
       username: displayHandle,
@@ -711,13 +715,15 @@ class CartPage extends StatelessWidget {
           isMe: true,
           timestamp: 'Just now',
           status: 'Sent',
+          imageUrl: itemImages.isNotEmpty ? itemImages.first : null,
+          imageUrls: itemImages,
         ),
       ],
     );
 
     final registeredThread = InboxMessageManager.instance.addOrUpdateThread(thread);
 
-    // 4. SnackBar feedback
+    // 2. SnackBar feedback (Inquiry sent, no order created)
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: const Color(0xFF1E1E22),
@@ -732,7 +738,7 @@ class CartPage extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Order message sent to $displayHandle! Added to My Orders.',
+                'Order inquiry sent to $displayHandle! Redirecting to chat...',
                 style: const TextStyle(color: Colors.white, fontSize: 13),
               ),
             ),
@@ -741,7 +747,12 @@ class CartPage extends StatelessWidget {
       ),
     );
 
-    // 5. Navigate to ChatDetailScreen
+    // 3. Clear only the sent merchant's products from cart
+    for (final item in items) {
+      ctrl.removeItem(item.id);
+    }
+
+    // 4. Navigate to ChatDetailScreen
     Navigator.push(
       context,
       MaterialPageRoute(

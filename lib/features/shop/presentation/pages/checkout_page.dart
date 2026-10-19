@@ -51,10 +51,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
         shippingAddress: address,
         paymentMethod: _selectedPaymentMethod,
         notes: _notesController.text.trim(),
+        items: cart.items,
       );
 
-      // Refresh cart state
-      await CartController.instance.loadCart();
+      // Clear the cart upon successful payment
+      await CartController.instance.clearCart();
 
       if (!mounted) return;
       _showSuccessDialog(order);

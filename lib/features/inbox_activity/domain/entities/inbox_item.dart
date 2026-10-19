@@ -80,6 +80,8 @@ class ChatMessage {
   final bool isMe;
   final String timestamp;
   final String? status;
+  final String? imageUrl;
+  final List<String>? imageUrls;
 
   const ChatMessage({
     required this.id,
@@ -87,5 +89,22 @@ class ChatMessage {
     required this.isMe,
     required this.timestamp,
     this.status = 'Sent',
+    this.imageUrl,
+    this.imageUrls,
   });
+
+  bool get hasImages =>
+      (imageUrl != null && imageUrl!.trim().isNotEmpty) ||
+      (imageUrls != null && imageUrls!.isNotEmpty);
+
+  List<String> get allImages {
+    if (imageUrls != null && imageUrls!.isNotEmpty) {
+      return imageUrls!;
+    }
+    if (imageUrl != null && imageUrl!.trim().isNotEmpty) {
+      return [imageUrl!];
+    }
+    return const [];
+  }
 }
+

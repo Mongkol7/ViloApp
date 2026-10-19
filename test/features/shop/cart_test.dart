@@ -8,6 +8,7 @@ import 'package:viloapp/features/shop/models/cart_item.dart';
 import 'package:viloapp/features/shop/models/product.dart';
 import 'package:viloapp/features/shop/presentation/controllers/cart_controller.dart';
 import 'package:viloapp/features/shop/presentation/pages/cart_page.dart';
+import 'package:viloapp/features/shop/presentation/pages/checkout_page.dart';
 import 'package:viloapp/features/shop/presentation/pages/order_history_page.dart';
 
 void main() {
@@ -333,7 +334,7 @@ void main() {
       expect(find.text('Send Message'), findsWidgets);
     });
 
-    testWidgets('Tapping bottom bar Send Message dispatches to all companies, clears cart, and redirects to first company ChatDetailScreen', (tester) async {
+    testWidgets('Tapping bottom bar Send Message dispatches inquiries with images, keeps cart items intact, does not create orders, and redirects to first company ChatDetailScreen', (tester) async {
       await CartController.instance.clearCart();
       ShopRemoteDataSource.instance.clearLocalOrders();
 
@@ -374,7 +375,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Find the bottom bar Send Message button (the one displaying '2')
+      // Find the bottom bar Send Message button (with count badge '2')
       expect(find.text('Send Message'), findsWidgets);
       expect(find.text('2'), findsOneWidget);
 
@@ -390,19 +391,201 @@ void main() {
       expect(find.byType(ChatDetailScreen), findsOneWidget);
       expect(find.text('@Vilo Lifestyle'), findsWidgets);
 
-      // 2. Cart should now be cleared
+      // 2. Cart items must be cleared upon sending all inquiries
       expect(CartController.instance.itemCount, 0);
 
-      // 3. Both orders must be persisted in ShopRemoteDataSource
+      // 3. NO orders should be created in Order History from chat inquiry
       final orders = await ShopRemoteDataSource.instance.getOrderHistory();
-      expect(orders.length, 2);
-      expect(orders.any((o) => o.orderNumber.contains('VILOLIFESTYLE')), true);
-      expect(orders.any((o) => o.orderNumber.contains('AERO')), true);
+      expect(orders.length, 0);
 
       // 4. Both threads must be registered in InboxMessageManager
       final threads = InboxMessageManager.instance.threads;
       expect(threads.any((t) => t.username == '@Vilo Lifestyle'), true);
       expect(threads.any((t) => t.username == '@AeroMount Studio'), true);
+
+      // 5. Verify order ChatMessage contains product image attachment
+      final viloThread = threads.firstWhere((t) => t.username == '@Vilo Lifestyle');
+      expect(viloThread.messages.first.hasImages, true);
+      expect(viloThread.messages.first.imageUrl, 'assets/images/products/tote.png');
+
+      final aeroThread = threads.firstWhere((t) => t.username == '@AeroMount Studio');
+      expect(aeroThread.messages.first.hasImages, true);
+      expect(aeroThread.messages.first.imageUrl, 'https://example.com/mount.jpg');
+    });
+
+    testWidgets('Global Send Message deterministically redirects to first product added to cart and clears all cart items', (tester) async {
+      await CartController.instance.clearCart();
+      ShopRemoteDataSource.instance.clearLocalOrders();
+
+      const prod1 = ProductModel(
+        id: 801,
+        title: 'Vilo Signature Canvas Tote Bag',
+        description: 'Durable canvas tote',
+        price: 24.99,
+        stock: 50,
+        rating: 4.8,
+        reviewCount: 320,
+        salesCount: 1200,
+        images: ['assets/images/products/tote.png'],
+        sellerName: 'Vilo Lifestyle',
+      );
+      const prod2 = ProductModel(
+        id: 802,
+        title: 'MagSafe Magnetic Phone Mount',
+        description: 'Solid aluminum mount',
+        price: 19.99,
+        stock: 30,
+        rating: 4.9,
+        reviewCount: 150,
+        salesCount: 650,
+        images: ['https://example.com/mount.jpg'],
+        sellerName: 'AeroMount Studio',
+      );
+
+      // Add prod2 (AeroMount Studio) FIRST
+      await CartController.instance.addToCart(prod2, quantity: 1);
+      // Add prod1 (Vilo Lifestyle) SECOND
+      await CartController.instance.addToCart(prod1, quantity: 1);
+
+      expect(CartController.instance.items.first.productTitle, 'MagSafe Magnetic Phone Mount');
+      expect(CartController.instance.itemCount, 2);
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: CartPage(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap bottom bar Send Message
+      final bottomSendButton = find.descendant(
+        of: find.byType(GestureDetector),
+        matching: find.text('Send Message'),
+      ).last;
+      await tester.tap(bottomSendButton);
+      await tester.pumpAndSettle();
+
+      // Must navigate to ChatDetailScreen for the FIRST product's merchant (@AeroMount Studio)
+      expect(find.byType(ChatDetailScreen), findsOneWidget);
+      expect(find.text('@AeroMount Studio'), findsWidgets);
+
+      // Verify the active chat bubble contains prod2's image
+      final aeroThread = InboxMessageManager.instance.getThreadByUsername('@AeroMount Studio');
+      expect(aeroThread, isNotNull);
+      expect(aeroThread!.messages.first.imageUrl, 'https://example.com/mount.jpg');
+
+      // Cart should now be cleared
+      expect(CartController.instance.itemCount, 0);
+    });
+
+    testWidgets('Tapping per-company Send Message clears only that company items from cart', (tester) async {
+      await CartController.instance.clearCart();
+      ShopRemoteDataSource.instance.clearLocalOrders();
+
+      const prod1 = ProductModel(
+        id: 801,
+        title: 'Vilo Signature Canvas Tote Bag',
+        description: 'Durable canvas tote',
+        price: 24.99,
+        stock: 50,
+        rating: 4.8,
+        reviewCount: 320,
+        salesCount: 1200,
+        images: ['assets/images/products/tote.png'],
+        sellerName: 'Vilo Lifestyle',
+      );
+      const prod2 = ProductModel(
+        id: 802,
+        title: 'MagSafe Magnetic Phone Mount',
+        description: 'Solid aluminum mount',
+        price: 19.99,
+        stock: 30,
+        rating: 4.9,
+        reviewCount: 150,
+        salesCount: 650,
+        images: ['https://example.com/mount.jpg'],
+        sellerName: 'AeroMount Studio',
+      );
+
+      await CartController.instance.addToCart(prod1, quantity: 1);
+      await CartController.instance.addToCart(prod2, quantity: 1);
+      expect(CartController.instance.itemCount, 2);
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: CartPage(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Find the Send Message button for Vilo Lifestyle
+      final companySendBtn = find.text('Send Message').first;
+      await tester.tap(companySendBtn);
+      await tester.pumpAndSettle();
+
+      // Tap the action button in the inquiry bottom sheet
+      final sheetSendBtn = find.descendant(
+        of: find.byType(ElevatedButton),
+        matching: find.text('Send Message'),
+      );
+      expect(sheetSendBtn, findsOneWidget);
+      await tester.tap(sheetSendBtn);
+      await tester.pumpAndSettle();
+
+      // Should navigate to ChatDetailScreen for @Vilo Lifestyle
+      expect(find.byType(ChatDetailScreen), findsOneWidget);
+      expect(find.text('@Vilo Lifestyle'), findsWidgets);
+
+      // Vilo items removed, but AeroMount Studio item remains in cart!
+      expect(CartController.instance.itemCount, 1);
+      expect(CartController.instance.items.first.sellerName, 'AeroMount Studio');
+    });
+
+    testWidgets('CheckoutPage places order, clears cart, and records PAID order in My Orders', (tester) async {
+      await CartController.instance.clearCart();
+      ShopRemoteDataSource.instance.clearLocalOrders();
+
+      const prod = ProductModel(
+        id: 850,
+        title: 'V-Watch Ultra Rugged Titanium Smartwatch',
+        description: 'Titanium smartwatch',
+        price: 89.90,
+        stock: 20,
+        rating: 4.9,
+        reviewCount: 420,
+        salesCount: 1500,
+        images: ['assets/images/v_watch_ultra.jpg'],
+        sellerName: 'Titan Monitoring',
+      );
+
+      await CartController.instance.addToCart(prod, quantity: 1);
+      expect(CartController.instance.itemCount, 1);
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: CheckoutPage(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap Place Order button
+      final placeOrderButton = find.text('Place Order');
+      expect(placeOrderButton, findsOneWidget);
+      await tester.tap(placeOrderButton);
+      await tester.pumpAndSettle();
+
+      // Verify order success dialog appeared with PAID status
+      expect(find.text('Order Placed!'), findsOneWidget);
+      expect(find.text('Status: PAID'), findsOneWidget);
+
+      // Verify cart is now cleared
+      expect(CartController.instance.itemCount, 0);
+
+      // Verify PAID order is recorded in ShopRemoteDataSource
+      final orders = await ShopRemoteDataSource.instance.getOrderHistory();
+      expect(orders.length, 1);
+      expect(orders.first.status, 'PAID');
+      expect(orders.first.items.first.productTitle, 'V-Watch Ultra Rugged Titanium Smartwatch');
     });
 
     testWidgets('OrderHistoryPage renders persisted orders with items and status', (tester) async {

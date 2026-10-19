@@ -98,5 +98,74 @@ void main() {
       expect(find.byType(ChatDetailScreen), findsOneWidget);
       expect(find.text('@Vilo Lifestyle'), findsWidgets);
     });
+
+    testWidgets('ChatDetailScreen renders message with product image attachment', (tester) async {
+      const imageThread = DirectMessageThread(
+        id: 'order_chat_titan',
+        username: '@Titan Monitoring',
+        avatarUrl: 'assets/images/v_watch_ultra.jpg',
+        lastMessage: 'Hi! I would like to order 1 item(s)',
+        timeAgo: 'Just now',
+        isVerified: true,
+        messages: [
+          ChatMessage(
+            id: 'msg_order_1',
+            text: 'Hi! I would like to order 1 item(s) from @Titan Monitoring:\n- V-Watch Ultra Rugged Titanium Smartwatch (x1)\nAre these ready to ship?',
+            isMe: true,
+            timestamp: 'Just now',
+            imageUrl: 'assets/images/v_watch_ultra.jpg',
+            imageUrls: ['assets/images/v_watch_ultra.jpg'],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ChatDetailScreen(thread: imageThread),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 1. Verify text is displayed
+      expect(find.textContaining('V-Watch Ultra Rugged Titanium Smartwatch'), findsOneWidget);
+
+      // 2. Verify image widget is rendered
+      expect(find.byType(Image), findsWidgets);
+      expect(find.byIcon(Icons.fullscreen_rounded), findsOneWidget);
+    });
+  });
+
+  group('ChatMessage Image Model Unit Tests', () {
+    test('ChatMessage correctly identifies single and multiple image attachments', () {
+      const textOnly = ChatMessage(
+        id: '1',
+        text: 'Hello',
+        isMe: true,
+        timestamp: 'now',
+      );
+      expect(textOnly.hasImages, false);
+      expect(textOnly.allImages, isEmpty);
+
+      const singleImg = ChatMessage(
+        id: '2',
+        text: 'Order 1 item',
+        isMe: true,
+        timestamp: 'now',
+        imageUrl: 'assets/images/v_watch_ultra.jpg',
+      );
+      expect(singleImg.hasImages, true);
+      expect(singleImg.allImages, ['assets/images/v_watch_ultra.jpg']);
+
+      const multiImg = ChatMessage(
+        id: '3',
+        text: 'Order 2 items',
+        isMe: true,
+        timestamp: 'now',
+        imageUrls: ['assets/images/v_watch_ultra.jpg', 'assets/images/canvas_tote.jpg'],
+      );
+      expect(multiImg.hasImages, true);
+      expect(multiImg.allImages.length, 2);
+    });
   });
 }
+
