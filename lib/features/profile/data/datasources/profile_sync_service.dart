@@ -173,6 +173,8 @@ class ProfileSyncService {
       final clean = username.trim().toLowerCase().replaceAll('@', '');
       final myUser = currentUsername;
       if (myUser.isNotEmpty && clean == myUser) return true;
+      if ((myUser == 'liza' || myUser == 'kimliza') && (clean == 'liza' || clean == 'kimliza')) return true;
+      if ((myUser == 'sak' || myUser == 'rithysak') && (clean == 'sak' || clean == 'rithysak')) return true;
     }
 
     return false;

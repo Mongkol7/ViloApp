@@ -24,7 +24,7 @@ public class StoryController {
         this.storyService = storyService;
     }
 
-    @GetMapping("/active")
+    @GetMapping({"", "/active"})
     public ResponseEntity<ApiResponse<List<StoryResponse>>> getActiveStories(
             @AuthenticationPrincipal User currentUser
     ) {

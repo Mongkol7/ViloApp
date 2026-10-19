@@ -25,6 +25,8 @@ class StoryRemoteDataSource {
           ),
         ];
 
+        SharedThoughtStory? myActiveStory;
+
         for (final item in response) {
           if (item is Map) {
             final id = item['id']?.toString() ?? '';
@@ -32,7 +34,11 @@ class StoryRemoteDataSource {
             final uname = item['username'] ?? 'user';
             final avatarUrl = item['avatarUrl'] ??
                 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
-            final isMy = item['isMyStory'] == true;
+            final isMy = item['isMyStory'] == true ||
+                ProfileSyncService.instance.isCurrentUser(
+                  username: uname,
+                  id: item['userId']?.toString(),
+                );
             final message = item['message'] as String? ?? '';
             final mediaUrl = item['mediaUrl'] as String?;
             final mediaType = item['mediaType'] as String? ?? 'TEXT';
@@ -66,7 +72,23 @@ class StoryRemoteDataSource {
             );
 
             if (isMy) {
-              ThoughtStoryManager.instance.setStory(story);
+              myActiveStory ??= story;
+              items.add(StoryItem(
+                id: id,
+                title: username,
+                imageUrl: avatarUrl,
+                isCreate: false,
+                message: message,
+                mediaUrl: mediaUrl,
+                mediaType: mediaType,
+                privacy: privacy,
+                musicTitle: musicTitle,
+                musicArtist: musicArtist,
+                timestamp: 'Recently',
+                viewCount: viewCount,
+                isMyStory: true,
+                authorUsername: uname,
+              ));
             } else {
               items.add(StoryItem(
                 id: id,
@@ -86,6 +108,10 @@ class StoryRemoteDataSource {
               ));
             }
           }
+        }
+
+        if (myActiveStory != null) {
+          ThoughtStoryManager.instance.setStory(myActiveStory);
         }
         return items;
       }

@@ -79,53 +79,82 @@ class _InboxScreenState extends State<InboxScreen> {
   List<StoryViewerItem> _buildStoryViewerList() {
     final List<StoryViewerItem> items = [];
 
-    final myStory = ThoughtStoryManager.instance.currentStory;
-    if (myStory != null) {
-      items.add(
-        StoryViewerItem(
-          story: myStory,
-          isOwner: true,
-          authorName: 'Your Story',
-          authorAvatarUrl: myStory.authorAvatarUrl ?? ProfileSyncService.instance.currentUserAvatar,
-        ),
-      );
+    // Collect ALL of current user's stories from _stories
+    final myStories = _stories
+        .where((s) => !s.isCreate && (s.isMyStory || ProfileSyncService.instance.isCurrentUser(username: s.authorUsername)))
+        .toList();
+
+    if (myStories.isNotEmpty) {
+      for (final s in myStories) {
+        final mediaT = (s.mediaType.isNotEmpty && s.mediaType != 'TEXT')
+            ? s.mediaType
+            : ((s.mediaUrl != null &&
+                    (s.mediaUrl!.toLowerCase().endsWith('.mp4') ||
+                        s.mediaUrl!.toLowerCase().endsWith('.mov')))
+                ? 'VIDEO'
+                : (s.mediaUrl != null && s.mediaUrl!.isNotEmpty ? 'IMAGE' : 'TEXT'));
+
+        items.add(
+          StoryViewerItem(
+            story: SharedThoughtStory(
+              id: s.id,
+              message: s.message ?? '',
+              mediaUrl: s.mediaUrl,
+              mediaType: mediaT,
+              privacy: s.privacy,
+              musicTrack: s.musicTitle != null
+                  ? MusicTrack(
+                      id: 'm_${s.id}',
+                      title: s.musicTitle!,
+                      artist: s.musicArtist ?? 'Unknown Artist',
+                      albumArtUrl: s.imageUrl,
+                      duration: '0:30',
+                    )
+                  : null,
+              timestamp: s.timestamp ?? 'Just now',
+              viewCount: s.viewCount,
+              authorUsername: s.authorUsername,
+              authorName: s.title,
+            ),
+            isOwner: true,
+            authorName: 'Your Story',
+            authorAvatarUrl: s.imageUrl.isNotEmpty
+                ? s.imageUrl
+                : ProfileSyncService.instance.currentUserAvatar,
+          ),
+        );
+      }
+    } else {
+      final myStory = ThoughtStoryManager.instance.currentStory;
+      if (myStory != null) {
+        items.add(
+          StoryViewerItem(
+            story: myStory,
+            isOwner: true,
+            authorName: 'Your Story',
+            authorAvatarUrl: myStory.authorAvatarUrl ?? ProfileSyncService.instance.currentUserAvatar,
+          ),
+        );
+      }
     }
 
     for (final s in _stories) {
-      if (s.isCreate) continue;
-      if (s.isMyStory) {
-        if (myStory == null) {
-          final myBackendStory = SharedThoughtStory(
-            id: s.id,
-            message: s.message ?? '',
-            mediaUrl: s.mediaUrl,
-            mediaType: s.mediaType,
-            privacy: s.privacy,
-            timestamp: s.timestamp ?? 'Just now',
-            viewCount: s.viewCount,
-            authorUsername: s.authorUsername,
-            authorName: s.title,
-          );
-          ThoughtStoryManager.instance.setStory(myBackendStory);
-          items.insert(
-            0,
-            StoryViewerItem(
-              story: myBackendStory,
-              isOwner: true,
-              authorName: 'Your Story',
-              authorAvatarUrl: s.imageUrl,
-            ),
-          );
-        }
-        continue;
-      }
+      if (s.isCreate || s.isMyStory || ProfileSyncService.instance.isCurrentUser(username: s.authorUsername)) continue;
+      final mediaT = (s.mediaType.isNotEmpty && s.mediaType != 'TEXT')
+          ? s.mediaType
+          : ((s.mediaUrl != null &&
+                  (s.mediaUrl!.toLowerCase().endsWith('.mp4') ||
+                      s.mediaUrl!.toLowerCase().endsWith('.mov')))
+              ? 'VIDEO'
+              : (s.mediaUrl != null && s.mediaUrl!.isNotEmpty ? 'IMAGE' : 'TEXT'));
+
       items.add(
         StoryViewerItem(
           story: SharedThoughtStory(
             id: s.id,
             message: s.message ?? "Living the moment ✨",
             mediaUrl: s.mediaUrl,
-            mediaType: s.mediaType,
+            mediaType: mediaT,
             privacy: s.privacy,
             musicTrack: s.musicTitle != null
                 ? MusicTrack(
@@ -161,7 +190,7 @@ class _InboxScreenState extends State<InboxScreen> {
         tray.add(s);
         continue;
       }
-      if (s.isMyStory) {
+      if (s.isMyStory || ProfileSyncService.instance.isCurrentUser(username: s.authorUsername)) {
         continue;
       }
       final authorKey = (s.authorUsername != null && s.authorUsername!.isNotEmpty)

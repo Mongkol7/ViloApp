@@ -4,6 +4,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../data/datasources/story_remote_data_source.dart';
 import '../../domain/entities/shared_thought_story.dart';
 import '../../../profile/presentation/screens/public_profile_screen.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
 
 class StoryViewersBottomSheet extends StatefulWidget {
   final int viewCount;
@@ -66,6 +67,7 @@ class _StoryViewersBottomSheetState extends State<StoryViewersBottomSheet> {
         final vName = v.username.replaceAll('@', '').toLowerCase();
         if (myUid != null && vId == myUid) return false;
         if (myUsername != null && (vName == myUsername || vName == 'me' || vName == 'you')) return false;
+        if (ProfileSyncService.instance.isCurrentUser(username: vName, id: vId)) return false;
         if (authId != null && vId == authId) return false;
         if (authName != null && (vName == authName || v.fullName.toLowerCase() == authName)) return false;
         return true;

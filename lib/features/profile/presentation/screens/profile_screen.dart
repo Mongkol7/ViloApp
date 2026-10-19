@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../auth/data/datasources/token_storage.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../../inbox_activity/data/datasources/thought_story_manager.dart';
+import '../../../inbox_activity/data/datasources/story_remote_data_source.dart';
 import '../../../inbox_activity/domain/entities/shared_thought_story.dart';
 import '../../../inbox_activity/presentation/pages/story_viewer_screen.dart';
 import '../../../inbox_activity/presentation/pages/upload_story_screen.dart';
@@ -259,6 +260,11 @@ class _ProfileScreenState extends State<ProfileScreen>
         ProfileSyncService.instance.cachedFollowers = List.from(f);
       }).catchError((_) {});
     }
+
+    // 4. Fetch active stories to ensure profile avatar story ring & thought balloon are up to date
+    try {
+      await StoryRemoteDataSource.instance.getActiveStories();
+    } catch (_) {}
   }
 
   Future<void> _handleEditProfile() async {
@@ -398,12 +404,18 @@ class _ProfileScreenState extends State<ProfileScreen>
       // If story exists, open StoryViewerScreen and handle deletion
       final result = await Navigator.of(context).push<String>(
         MaterialPageRoute(
-          builder: (_) => StoryViewerScreen(story: currentStory),
+          builder: (_) => StoryViewerScreen(
+            story: currentStory,
+            isOwner: true,
+            authorName: 'Your Story',
+            authorAvatarUrl: _user?.avatarUrl ?? ProfileSyncService.instance.currentUserAvatar,
+          ),
         ),
       );
 
       if (result == 'delete' && mounted) {
         ThoughtStoryManager.instance.deleteStory();
+        _loadProfile(forceRefresh: true);
       }
     } else {
       // If no story, open UploadStoryScreen (gallery picker)
@@ -415,6 +427,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       if (result != null && mounted) {
         ThoughtStoryManager.instance.setStory(result);
+        _loadProfile(forceRefresh: true);
       }
     }
   }
