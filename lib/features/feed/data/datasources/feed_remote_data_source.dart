@@ -47,6 +47,21 @@ class FeedRemoteDataSource {
     _userVideosCache[clean] = List<VideoModel>.from(videos);
   }
 
+  void prependUserVideo(dynamic identifier, VideoModel video) {
+    if (identifier == null) return;
+    final clean = identifier.toString().replaceAll('@', '').trim().toLowerCase();
+    _userVideosCache.putIfAbsent(clean, () => []);
+    final list = _userVideosCache[clean]!;
+    list.removeWhere((v) => v.id == video.id);
+    list.insert(0, video);
+  }
+
+  void invalidateUserVideos(dynamic identifier) {
+    if (identifier == null) return;
+    final clean = identifier.toString().replaceAll('@', '').trim().toLowerCase();
+    _userVideosCache.remove(clean);
+  }
+
   /// Unified getFeed supporting pagination, cache, and both feedType and type parameters
   Future<List<VideoModel>> getFeed({
     int page = 0,
@@ -139,8 +154,17 @@ class FeedRemoteDataSource {
   }
 
   /// Fetch creator videos for instant profile loading
-  Future<List<VideoModel>> getUserVideos(dynamic identifier) async {
+  Future<List<VideoModel>> getUserVideos(dynamic identifier, {bool forceRefresh = false}) async {
     final clean = identifier.toString().replaceAll('@', '').trim().toLowerCase();
+    if (!forceRefresh && _userVideosCache.containsKey(clean) && _userVideosCache[clean]!.isNotEmpty) {
+      _fetchUserVideosFromNetwork(clean).catchError((_) => <VideoModel>[]);
+      return List<VideoModel>.from(_userVideosCache[clean]!);
+    }
+
+    return await _fetchUserVideosFromNetwork(clean);
+  }
+
+  Future<List<VideoModel>> _fetchUserVideosFromNetwork(String clean) async {
     try {
       final endpoint = '/videos/user/$clean';
       final response = await _client.get(endpoint, requireAuth: false);
@@ -154,7 +178,7 @@ class FeedRemoteDataSource {
         list = response['videos'] as List;
       }
 
-      if (list != null && list.isNotEmpty) {
+      if (list != null) {
         final videos = list
             .whereType<Map<String, dynamic>>()
             .map((item) => VideoModel.fromJson(item))
@@ -473,7 +497,17 @@ class FeedRemoteDataSource {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final json = jsonDecode(response.body);
       final data = json['data'] ?? json;
-      return VideoModel.fromJson(data as Map<String, dynamic>);
+      final newVideo = VideoModel.fromJson(data as Map<String, dynamic>);
+
+      // Prepend to creator's caches for instant profile grid display
+      if (newVideo.creatorId > 0) {
+        prependUserVideo(newVideo.creatorId, newVideo);
+      }
+      if (newVideo.username.isNotEmpty) {
+        prependUserVideo(newVideo.username, newVideo);
+      }
+
+      return newVideo;
     } else {
       String errorMessage = 'Failed to upload video (${response.statusCode})';
       try {

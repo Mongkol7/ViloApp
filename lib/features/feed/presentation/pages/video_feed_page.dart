@@ -15,11 +15,15 @@ import '../../../profile/presentation/screens/public_profile_screen.dart';
 class VideoFeedPage extends StatefulWidget {
   final bool isActive;
   final String feedType; // 'FOR_YOU' or 'FOLLOWING'
+  final List<VideoModel>? initialVideos;
+  final int initialIndex;
 
   const VideoFeedPage({
     super.key,
     this.isActive = true,
     this.feedType = 'FOR_YOU',
+    this.initialVideos,
+    this.initialIndex = 0,
   });
 
   @override
@@ -45,17 +49,25 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
   @override
   void initState() {
     super.initState();
-    _currentPage = _savedPageIndices[widget.feedType] ?? 0;
-    _pageController = PageController(initialPage: _currentPage);
-
-    // Instant zero-latency display if feed is already in memory cache
-    final cached = _dataSource.getCachedFeed(widget.feedType);
-    if (cached != null && cached.isNotEmpty) {
-      _videos = cached;
+    if (widget.initialVideos != null && widget.initialVideos!.isNotEmpty) {
+      _videos = List.from(widget.initialVideos!);
       _isLoading = false;
-    }
+      _currentPage = widget.initialIndex.clamp(0, _videos.length - 1);
+      _pageController = PageController(initialPage: _currentPage);
+      _hasMore = false;
+    } else {
+      _currentPage = _savedPageIndices[widget.feedType] ?? 0;
+      _pageController = PageController(initialPage: _currentPage);
 
-    _fetchFeed();
+      // Instant zero-latency display if feed is already in memory cache
+      final cached = _dataSource.getCachedFeed(widget.feedType);
+      if (cached != null && cached.isNotEmpty) {
+        _videos = cached;
+        _isLoading = false;
+      }
+
+      _fetchFeed();
+    }
     ProfileSyncService.instance.followEvents.addListener(_onGlobalFollowChanged);
     VideoFeedManager.instance.latestUploadedVideoNotifier.addListener(_onNewVideoUploaded);
   }
@@ -118,6 +130,8 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
   }
 
   Future<void> _fetchFeed({bool refresh = false}) async {
+    if (widget.initialVideos != null && widget.initialVideos!.isNotEmpty) return;
+
     if (refresh) {
       _apiPage = 0;
       _hasMore = true;
@@ -265,49 +279,69 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: ScrollConfiguration(
-        behavior: ScrollConfiguration.of(context).copyWith(
-          dragDevices: {
-            PointerDeviceKind.touch,
-            PointerDeviceKind.mouse,
-            PointerDeviceKind.trackpad,
-          },
-        ),
-        child: PageView.builder(
-          key: PageStorageKey('video_page_view_${widget.feedType}'),
-          controller: _pageController,
-          scrollDirection: Axis.vertical,
-          itemCount: _videos.length,
-          onPageChanged: (index) {
-            setState(() {
-              _currentPage = index;
-              _savedPageIndices[widget.feedType] = index;
-            });
-
-            if (index < _videos.length) {
-              _recordView(_videos[index].id);
-            }
-
-            if (index >= _videos.length - 2 && _hasMore) {
-              _loadMore();
-            }
-          },
-          itemBuilder: (context, index) {
-            return _VideoPostWidget(
-              key: ValueKey('video_${_videos[index].id}'),
-              video: _videos[index],
-              isCurrentPage: _currentPage == index,
-              isActive: widget.isActive,
-              onLikeTap: () => _onLikeToggled(index),
-              onSaveTap: () => _onSaveToggled(index),
-              onCommentCountChanged: (newCount) {
-                setState(() {
-                  _videos[index] = _videos[index].copyWith(commentCount: newCount);
-                });
+      body: Stack(
+        children: [
+          ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              dragDevices: {
+                PointerDeviceKind.touch,
+                PointerDeviceKind.mouse,
+                PointerDeviceKind.trackpad,
               },
-            );
-          },
-        ),
+            ),
+            child: PageView.builder(
+              key: PageStorageKey('video_page_view_${widget.feedType}'),
+              controller: _pageController,
+              scrollDirection: Axis.vertical,
+              itemCount: _videos.length,
+              onPageChanged: (index) {
+                setState(() {
+                  _currentPage = index;
+                  _savedPageIndices[widget.feedType] = index;
+                });
+
+                if (index < _videos.length) {
+                  _recordView(_videos[index].id);
+                }
+
+                if (index >= _videos.length - 2 && _hasMore) {
+                  _loadMore();
+                }
+              },
+              itemBuilder: (context, index) {
+                return _VideoPostWidget(
+                  key: ValueKey('video_${_videos[index].id}'),
+                  video: _videos[index],
+                  isCurrentPage: _currentPage == index,
+                  isActive: widget.isActive,
+                  onLikeTap: () => _onLikeToggled(index),
+                  onSaveTap: () => _onSaveToggled(index),
+                  onCommentCountChanged: (newCount) {
+                    setState(() {
+                      _videos[index] = _videos[index].copyWith(commentCount: newCount);
+                    });
+                  },
+                );
+              },
+            ),
+          ),
+          if (Navigator.of(context).canPop())
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              left: 12,
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

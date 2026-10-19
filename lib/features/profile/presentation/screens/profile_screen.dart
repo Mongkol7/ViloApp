@@ -8,6 +8,7 @@ import '../../../inbox_activity/presentation/pages/story_viewer_screen.dart';
 import '../../../inbox_activity/presentation/widgets/animated_mini_music_wave.dart';
 import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../../feed/data/models/video_feed_model.dart';
+import '../../../feed/presentation/pages/video_feed_page.dart';
 import '../../data/datasources/profile_remote_data_source.dart';
 import '../../data/datasources/profile_sync_service.dart';
 import '../mock/profile_mock_data.dart';
@@ -53,6 +54,15 @@ class _ProfileScreenState extends State<ProfileScreen>
           followingCount: ProfileSyncService.instance.mockFollowingCount,
         );
     ProfileSyncService.instance.followEvents.addListener(_onFollowEvent);
+    ProfileSyncService.instance.videoUploadedEvents.addListener(_onVideoUploaded);
+
+    // Instant zero-latency seed from cache if available
+    final cached = FeedRemoteDataSource.instance.getCachedUserVideos(_user!.id) ??
+        FeedRemoteDataSource.instance.getCachedUserVideos(_user!.username);
+    if (cached != null && cached.isNotEmpty) {
+      _myVideos = List.from(cached);
+    }
+
     _loadProfile();
   }
 
@@ -68,33 +78,52 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  Future<void> _loadProfile() async {
+  void _onVideoUploaded() {
+    final video = ProfileSyncService.instance.videoUploadedEvents.value;
+    if (video != null && mounted) {
+      setState(() {
+        final existingIndex = _myVideos.indexWhere((v) => v.id == video.id);
+        if (existingIndex != -1) {
+          _myVideos[existingIndex] = video;
+        } else {
+          _myVideos = [video, ..._myVideos];
+        }
+      });
+    }
+  }
+
+  Future<void> _loadProfile({bool forceRefresh = false}) async {
+    // 1. Attempt to fetch current user profile details
     try {
       final user = await ProfileRemoteDataSource.instance.getMyProfile();
       if (mounted) {
         setState(() => _user = user);
         ProfileSyncService.instance.cachedMyProfile = user;
       }
+    } catch (e) {
+      debugPrint('[ProfileScreen] getMyProfile notice: $e');
+    }
 
-      // Load user's posted videos from backend
-      try {
-        final videos = await FeedRemoteDataSource.instance.getUserVideos(user.id);
-        if (mounted && videos.isNotEmpty) {
-          setState(() => _myVideos = videos);
-        }
-      } catch (_) {}
-
-      // Pre-warm following & followers cache in background for zero-latency instant listing
-      if (user.id > 0) {
-        ProfileRemoteDataSource.instance.getFollowing(user.id).then((fl) {
-          ProfileSyncService.instance.cachedFollowing = List.from(fl);
-        }).catchError((_) {});
-        ProfileRemoteDataSource.instance.getFollowers(user.id).then((f) {
-          ProfileSyncService.instance.cachedFollowers = List.from(f);
-        }).catchError((_) {});
+    // 2. Always fetch posted videos from backend for the user
+    try {
+      final identifier = _user?.id ?? 1;
+      final videos = await FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: forceRefresh);
+      if (mounted) {
+        setState(() => _myVideos = List.from(videos));
       }
-    } catch (_) {
-      // Keep existing user state if network fetch fails
+    } catch (e) {
+      debugPrint('[ProfileScreen] getUserVideos notice: $e');
+    }
+
+    // 3. Pre-warm following & followers cache in background for zero-latency instant listing
+    final targetId = _user?.id ?? 1;
+    if (targetId > 0) {
+      ProfileRemoteDataSource.instance.getFollowing(targetId).then((fl) {
+        ProfileSyncService.instance.cachedFollowing = List.from(fl);
+      }).catchError((_) {});
+      ProfileRemoteDataSource.instance.getFollowers(targetId).then((f) {
+        ProfileSyncService.instance.cachedFollowers = List.from(f);
+      }).catchError((_) {});
     }
   }
 
@@ -154,6 +183,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void dispose() {
     ProfileSyncService.instance.followEvents.removeListener(_onFollowEvent);
+    ProfileSyncService.instance.videoUploadedEvents.removeListener(_onVideoUploaded);
     _tabController.dispose();
     super.dispose();
   }
@@ -223,7 +253,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _loadProfile,
+        onRefresh: () => _loadProfile(forceRefresh: true),
         color: Colors.white,
         backgroundColor: const Color(0xFF1E1E24),
         child: NestedScrollView(
@@ -453,11 +483,40 @@ class _ProfileScreenState extends State<ProfileScreen>
         body: TabBarView(
           controller: _tabController,
           children: [
-            CustomScrollView(slivers: buildProfileTabSlivers(0)), // Music
-            CustomScrollView(slivers: buildProfileTabSlivers(1, userVideos: _myVideos)), // Grid
-            CustomScrollView(slivers: buildProfileTabSlivers(2)), // Shop
-            CustomScrollView(slivers: buildProfileTabSlivers(3)), // Saved
-            CustomScrollView(slivers: buildProfileTabSlivers(4)), // Liked
+            CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: buildProfileTabSlivers(0),
+            ), // Music
+            CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: buildProfileTabSlivers(
+                1,
+                userVideos: _myVideos,
+                onVideoTap: (video, index) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => VideoFeedPage(
+                        isActive: true,
+                        initialVideos: _myVideos,
+                        initialIndex: index,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ), // Grid
+            CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: buildProfileTabSlivers(2),
+            ), // Shop
+            CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: buildProfileTabSlivers(3),
+            ), // Saved
+            CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: buildProfileTabSlivers(4),
+            ), // Liked
           ],
         ),
       ),

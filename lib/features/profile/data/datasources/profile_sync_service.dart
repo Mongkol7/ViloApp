@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../../../auth/data/models/user_model.dart';
+import '../../../feed/data/models/video_model.dart';
 import '../../presentation/mock/profile_mock_data.dart';
 
 class FollowChangeEvent {
@@ -22,6 +23,13 @@ class ProfileSyncService {
 
   /// Emits whenever follow state changes anywhere in the app
   final ValueNotifier<FollowChangeEvent?> followEvents = ValueNotifier<FollowChangeEvent?>(null);
+
+  /// Emits whenever a new video or photo is uploaded by the current user
+  final ValueNotifier<VideoModel?> videoUploadedEvents = ValueNotifier<VideoModel?>(null);
+
+  void notifyVideoUploaded(VideoModel video) {
+    videoUploadedEvents.value = video;
+  }
 
   /// Cached user profile for immediate optimistic updates across screens
   UserModel? cachedMyProfile;

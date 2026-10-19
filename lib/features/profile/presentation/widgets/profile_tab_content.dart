@@ -18,6 +18,7 @@ List<Widget> buildProfileTabSlivers(
   int selectedIndex, {
   List<VideoFeedModel>? userVideos,
   bool isLoading = false,
+  void Function(VideoFeedModel video, int index)? onVideoTap,
 }) {
   switch (selectedIndex) {
     case 0: // Sounds
@@ -74,12 +75,20 @@ List<Widget> buildProfileTabSlivers(
               delegate: SliverChildBuilderDelegate(
                 (context, i) {
                   final video = userVideos[i];
-                  final thumb = (video.thumbnailUrl != null && video.thumbnailUrl!.isNotEmpty)
-                      ? video.thumbnailUrl!
-                      : 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500';
+                  String thumb;
+                  if (video.thumbnailUrl != null && video.thumbnailUrl!.trim().isNotEmpty) {
+                    thumb = video.thumbnailUrl!.trim();
+                  } else if (video.isImagePost && video.videoUrl.trim().isNotEmpty) {
+                    thumb = video.videoUrl.trim();
+                  } else {
+                    final mockThumbs = ProfileMockData.videoThumbnails;
+                    thumb = mockThumbs[video.id.abs() % mockThumbs.length];
+                  }
+
                   return VideoGridItem(
                     thumbnailUrl: thumb,
                     viewsLabel: video.likes,
+                    onTap: onVideoTap != null ? () => onVideoTap(video, i) : null,
                   );
                 },
                 childCount: userVideos.length,

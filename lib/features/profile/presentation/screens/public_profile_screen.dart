@@ -4,6 +4,7 @@ import '../../../auth/data/models/user_model.dart';
 import '../../../bottom_nav/presentation/pages/main_navigation_shell.dart';
 import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../../feed/data/models/video_feed_model.dart';
+import '../../../feed/presentation/pages/video_feed_page.dart';
 import '../../data/datasources/profile_remote_data_source.dart';
 import '../../data/datasources/profile_sync_service.dart';
 import '../mock/profile_mock_data.dart';
@@ -438,11 +439,41 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
         body: TabBarView(
           controller: _tabController,
           children: [
-            CustomScrollView(slivers: buildProfileTabSlivers(0)), // Music
-            CustomScrollView(slivers: buildProfileTabSlivers(1, userVideos: _userVideos, isLoading: _isLoading)), // Grid
-            CustomScrollView(slivers: buildProfileTabSlivers(2)), // Shop
-            CustomScrollView(slivers: buildProfileTabSlivers(3)), // Saved
-            CustomScrollView(slivers: buildProfileTabSlivers(4)), // Liked
+            CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: buildProfileTabSlivers(0),
+            ), // Music
+            CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: buildProfileTabSlivers(
+                1,
+                userVideos: _userVideos,
+                isLoading: _isLoading,
+                onVideoTap: (video, index) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => VideoFeedPage(
+                        isActive: true,
+                        initialVideos: _userVideos,
+                        initialIndex: index,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ), // Grid
+            CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: buildProfileTabSlivers(2),
+            ), // Shop
+            CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: buildProfileTabSlivers(3),
+            ), // Saved
+            CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: buildProfileTabSlivers(4),
+            ), // Liked
           ],
         ),
       ),

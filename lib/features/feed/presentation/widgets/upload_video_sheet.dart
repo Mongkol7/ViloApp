@@ -8,6 +8,7 @@ import '../../../auth/data/datasources/token_storage.dart';
 import '../../data/datasources/feed_remote_data_source.dart';
 import '../../data/models/video_model.dart';
 import '../controllers/video_feed_manager.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
 
 class UploadVideoSheet extends StatefulWidget {
   final PlatformFile? initialFile;
@@ -356,8 +357,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
         tags: tags,
       );
 
-      // Prepend to active feed and trigger live sync
+      // Prepend to active feed and trigger live sync across feeds and profile
       VideoFeedManager.instance.prependVideo(newVideo);
+      ProfileSyncService.instance.notifyVideoUploaded(newVideo);
 
       if (mounted) {
         Navigator.of(context).pop(newVideo);
