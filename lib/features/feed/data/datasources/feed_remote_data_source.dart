@@ -1,57 +1,92 @@
+import 'dart:convert';
+import 'dart:io' show File;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:http/http.dart' as http;
 import '../../../../core/network/api_client.dart';
+import '../../../auth/data/datasources/token_storage.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
-import '../models/video_feed_model.dart';
+import '../models/comment_model.dart';
+import '../models/video_model.dart';
 
 class FeedRemoteDataSource {
   static final FeedRemoteDataSource instance = FeedRemoteDataSource._();
-  FeedRemoteDataSource._();
 
-  final ApiClient _client = ApiClient.instance;
+  final ApiClient _client;
+  final TokenStorage _tokenStorage;
 
-  final Map<String, List<VideoFeedModel>> _feedCache = {};
-  final Map<String, List<VideoFeedModel>> _userVideosCache = {};
+  final Map<String, List<VideoModel>> _feedCache = {};
+  final Map<String, List<VideoModel>> _userVideosCache = {};
 
-  List<VideoFeedModel>? getCachedFeed(String feedType) => _feedCache[feedType];
+  FeedRemoteDataSource({ApiClient? client, TokenStorage? tokenStorage})
+      : _client = client ?? ApiClient.instance,
+        _tokenStorage = tokenStorage ?? TokenStorage.instance;
 
-  List<VideoFeedModel>? getCachedUserVideos(dynamic identifier) {
+  FeedRemoteDataSource._()
+      : _client = ApiClient.instance,
+        _tokenStorage = TokenStorage.instance;
+
+  List<VideoModel>? getCachedFeed(String feedType) {
+    final clean = feedType.toLowerCase().replaceAll('_', '');
+    return _feedCache[clean];
+  }
+
+  List<VideoModel>? getCachedUserVideos(dynamic identifier) {
     if (identifier == null) return null;
     final clean = identifier.toString().replaceAll('@', '').trim().toLowerCase();
     final cached = _userVideosCache[clean];
     if (cached != null && cached.isNotEmpty) {
-      return List<VideoFeedModel>.from(cached);
+      return List<VideoModel>.from(cached);
     }
     return null;
   }
 
-  void cacheUserVideos(dynamic identifier, List<VideoFeedModel> videos) {
+  void cacheUserVideos(dynamic identifier, List<VideoModel> videos) {
     if (identifier == null || videos.isEmpty) return;
     final clean = identifier.toString().replaceAll('@', '').trim().toLowerCase();
-    _userVideosCache[clean] = List<VideoFeedModel>.from(videos);
+    _userVideosCache[clean] = List<VideoModel>.from(videos);
   }
 
-  Future<List<VideoFeedModel>> getFeed({required String feedType, bool forceRefresh = false}) async {
-    if (!forceRefresh && _feedCache[feedType] != null && _feedCache[feedType]!.isNotEmpty) {
-      return _feedCache[feedType]!;
+  /// Unified getFeed supporting pagination, cache, and both feedType and type parameters
+  Future<List<VideoModel>> getFeed({
+    int page = 0,
+    int size = 10,
+    String? type,
+    String? feedType,
+    bool forceRefresh = false,
+  }) async {
+    final rawType = (type ?? feedType ?? 'foryou').trim();
+    final normalizedType = (rawType.toUpperCase() == 'FOLLOWING') ? 'following' : 'foryou';
+    final cacheKey = normalizedType.replaceAll('_', '');
+
+    if (!forceRefresh && page == 0 && _feedCache[cacheKey] != null && _feedCache[cacheKey]!.isNotEmpty) {
+      return _feedCache[cacheKey]!;
     }
 
     try {
-      final endpoint = '/videos/feed?type=${Uri.encodeComponent(feedType)}';
+      final endpoint = '/videos/feed?page=$page&size=$size&type=$normalizedType';
       final response = await _client.get(endpoint, requireAuth: false);
 
       List<dynamic>? list;
-      if (response is List) {
-        list = response;
+      if (response is Map && response['videos'] is List) {
+        list = response['videos'] as List;
+      } else if (response is Map && response['data'] is Map && response['data']['videos'] is List) {
+        list = response['data']['videos'] as List;
       } else if (response is Map && response['data'] is List) {
         list = response['data'] as List;
+      } else if (response is List) {
+        list = response;
       }
 
       if (list != null && list.isNotEmpty) {
         final videos = list
-            .map((item) => VideoFeedModel.fromJson(item as Map<String, dynamic>))
+            .whereType<Map<String, dynamic>>()
+            .map((item) => VideoModel.fromJson(item))
             .toList();
 
-        _feedCache[feedType] = videos;
+        if (page == 0) {
+          _feedCache[cacheKey] = videos;
+        }
 
         // Pre-cache user videos into _userVideosCache so opening their profiles is instantaneous
         for (final v in videos) {
@@ -72,22 +107,39 @@ class FeedRemoteDataSource {
         return videos;
       }
     } catch (e) {
-      debugPrint('[FeedRemoteDataSource] Remote feed error, using local fallback: $e');
+      debugPrint('[FeedRemoteDataSource] Remote feed error: $e');
     }
 
-    final fallback = _getFallbackFeed(feedType);
-    _feedCache[feedType] = fallback;
-    for (final v in fallback) {
-      final uName = v.username.replaceAll('@', '').trim().toLowerCase();
-      _userVideosCache.putIfAbsent(uName, () => []);
-      if (!_userVideosCache[uName]!.any((x) => x.id == v.id)) {
-        _userVideosCache[uName]!.add(v);
+    if (page == 0) {
+      final fallback = _getFallbackFeed(normalizedType);
+      _feedCache[cacheKey] = fallback;
+      for (final v in fallback) {
+        final uName = v.username.replaceAll('@', '').trim().toLowerCase();
+        _userVideosCache.putIfAbsent(uName, () => []);
+        if (!_userVideosCache[uName]!.any((x) => x.id == v.id)) {
+          _userVideosCache[uName]!.add(v);
+        }
       }
+      return fallback;
     }
-    return fallback;
+
+    return [];
   }
 
-  Future<List<VideoFeedModel>> getUserVideos(dynamic identifier) async {
+  /// Fetch single video by ID
+  Future<VideoModel> getVideoById(int id) async {
+    final response = await _client.get(
+      '/videos/$id',
+      requireAuth: true,
+    );
+    final data = (response is Map && response['data'] is Map)
+        ? response['data'] as Map<String, dynamic>
+        : response as Map<String, dynamic>;
+    return VideoModel.fromJson(data);
+  }
+
+  /// Fetch creator videos for instant profile loading
+  Future<List<VideoModel>> getUserVideos(dynamic identifier) async {
     final clean = identifier.toString().replaceAll('@', '').trim().toLowerCase();
     try {
       final endpoint = '/videos/user/$clean';
@@ -98,11 +150,14 @@ class FeedRemoteDataSource {
         list = response;
       } else if (response is Map && response['data'] is List) {
         list = response['data'] as List;
+      } else if (response is Map && response['videos'] is List) {
+        list = response['videos'] as List;
       }
 
       if (list != null && list.isNotEmpty) {
         final videos = list
-            .map((item) => VideoFeedModel.fromJson(item as Map<String, dynamic>))
+            .whereType<Map<String, dynamic>>()
+            .map((item) => VideoModel.fromJson(item))
             .toList();
         _userVideosCache[clean] = videos;
         return videos;
@@ -111,10 +166,10 @@ class FeedRemoteDataSource {
       debugPrint('[FeedRemoteDataSource] Get user videos error: $e');
     }
 
-    // Return cached if available on error or empty
     return _userVideosCache[clean] ?? [];
   }
 
+  /// Toggle follow creator
   Future<bool> toggleFollow(dynamic creatorId, {bool skipNotify = false}) async {
     try {
       final clean = creatorId.toString().replaceAll('@', '').trim();
@@ -140,9 +195,252 @@ class FeedRemoteDataSource {
     }
   }
 
-  List<VideoFeedModel> _getFallbackFeed(String feedType) {
+  /// Toggle like status
+  Future<Map<String, dynamic>> toggleLike(
+    int videoId, {
+    required bool currentlyLiked,
+  }) async {
+    final endpoint = '/videos/$videoId/like';
+    final dynamic response;
+    if (currentlyLiked) {
+      response = await _client.delete(endpoint, requireAuth: true);
+    } else {
+      response = await _client.post(endpoint, requireAuth: true);
+    }
+    final data = (response is Map && response['data'] is Map)
+        ? response['data'] as Map<String, dynamic>
+        : (response is Map ? response : <String, dynamic>{});
+    return {
+      'isLiked': data['isLiked'] ?? !currentlyLiked,
+      'likeCount': (data['likeCount'] as num?)?.toInt() ?? 0,
+    };
+  }
+
+  /// Toggle save/bookmark status
+  Future<Map<String, dynamic>> toggleSave(
+    int videoId, {
+    required bool currentlySaved,
+  }) async {
+    final endpoint = '/videos/$videoId/save';
+    final dynamic response;
+    if (currentlySaved) {
+      response = await _client.delete(endpoint, requireAuth: true);
+    } else {
+      response = await _client.post(endpoint, requireAuth: true);
+    }
+    final data = (response is Map && response['data'] is Map)
+        ? response['data'] as Map<String, dynamic>
+        : (response is Map ? response : <String, dynamic>{});
+    return {
+      'isSaved': data['isSaved'] ?? !currentlySaved,
+      'saveCount': (data['saveCount'] as num?)?.toInt() ?? 0,
+    };
+  }
+
+  /// Increment view count asynchronously
+  Future<int> incrementView(int videoId) async {
+    try {
+      final response = await _client.post(
+        '/videos/$videoId/view',
+        requireAuth: false,
+      );
+      if (response is Map) {
+        final data = response['data'] ?? response;
+        if (data is Map && data['viewCount'] != null) {
+          return (data['viewCount'] as num).toInt();
+        }
+      }
+    } catch (_) {}
+    return 0;
+  }
+
+  /// Fetch paginated comments for a video
+  Future<List<CommentModel>> getComments(
+    int videoId, {
+    int page = 0,
+    int size = 20,
+  }) async {
+    final response = await _client.get(
+      '/videos/$videoId/comments?page=$page&size=$size',
+      requireAuth: false,
+    );
+
+    List<dynamic>? list;
+    if (response is Map && response['comments'] is List) {
+      list = response['comments'] as List;
+    } else if (response is Map && response['data'] is Map && response['data']['comments'] is List) {
+      list = response['data']['comments'] as List;
+    } else if (response is List) {
+      list = response;
+    }
+
+    if (list != null) {
+      return list
+          .whereType<Map<String, dynamic>>()
+          .map((json) => CommentModel.fromJson(json))
+          .toList();
+    }
+    return [];
+  }
+
+  /// Post a new comment or reply
+  Future<CommentModel> postComment(
+    int videoId,
+    String content, {
+    int? parentId,
+  }) async {
+    final body = <String, dynamic>{
+      'content': content.trim(),
+    };
+    if (parentId != null) {
+      body['parentId'] = parentId;
+    }
+
+    final response = await _client.post(
+      '/videos/$videoId/comments',
+      body: body,
+      requireAuth: true,
+    );
+
+    final data = (response is Map && response['data'] is Map)
+        ? response['data'] as Map<String, dynamic>
+        : response as Map<String, dynamic>;
+    return CommentModel.fromJson(data);
+  }
+
+  /// Multipart video upload
+  Future<VideoModel> uploadVideo({
+    required String caption,
+    String? videoPath,
+    List<int>? videoBytes,
+    String videoFilename = 'upload.mp4',
+    String? thumbnailPath,
+    List<int>? thumbnailBytes,
+    String thumbnailFilename = 'thumbnail.jpg',
+    List<String>? tags,
+  }) async {
+    final uri = Uri.parse('${ApiClient.baseUrl}/videos/upload');
+    final request = http.MultipartRequest('POST', uri);
+
+    final token = await _tokenStorage.getAccessToken();
+    if (token != null && token.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    request.fields['caption'] = caption;
+
+    // Handle tags (normalize, strip leading #, join by comma)
+    final tagsList = <String>[];
+    if (tags != null) {
+      tagsList.addAll(
+        tags
+            .map((t) => t.replaceAll('#', '').trim())
+            .where((t) => t.isNotEmpty),
+      );
+    }
+    if (tagsList.isEmpty) {
+      final matches = RegExp(r'#(\w+)').allMatches(caption);
+      for (final m in matches) {
+        final t = m.group(1);
+        if (t != null && t.isNotEmpty && !tagsList.contains(t)) {
+          tagsList.add(t);
+        }
+      }
+    }
+    if (tagsList.isNotEmpty) {
+      request.fields['tags'] = tagsList.join(',');
+    }
+
+    // Video payload (either multipart file or direct videoPath reference)
+    if (videoBytes != null && videoBytes.isNotEmpty) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'videoFile',
+          videoBytes,
+          filename: videoFilename,
+        ),
+      );
+      if (videoPath != null && videoPath.trim().isNotEmpty) {
+        request.fields['videoPath'] = videoPath.trim();
+      }
+    } else if (videoPath != null && videoPath.trim().isNotEmpty) {
+      final trimmedPath = videoPath.trim();
+      request.fields['videoPath'] = trimmedPath;
+
+      final fileOnDisk = File(trimmedPath);
+      if (fileOnDisk.existsSync()) {
+        try {
+          request.files.add(await http.MultipartFile.fromPath('videoFile', trimmedPath));
+        } catch (_) {}
+      } else if (trimmedPath.startsWith('assets/')) {
+        try {
+          final byteData = await rootBundle.load(trimmedPath);
+          final bytes = byteData.buffer.asUint8List();
+          final name = trimmedPath.split('/').last;
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'videoFile',
+              bytes,
+              filename: name.isNotEmpty ? name : videoFilename,
+            ),
+          );
+        } catch (_) {}
+      }
+    } else {
+      throw ApiResponseException('A video path or video file must be provided', 400);
+    }
+
+    // Thumbnail payload (optional)
+    if (thumbnailBytes != null && thumbnailBytes.isNotEmpty) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'thumbnailFile',
+          thumbnailBytes,
+          filename: thumbnailFilename,
+        ),
+      );
+    } else if (thumbnailPath != null && thumbnailPath.isNotEmpty) {
+      final thumbOnDisk = File(thumbnailPath);
+      if (thumbOnDisk.existsSync()) {
+        request.files.add(await http.MultipartFile.fromPath('thumbnailFile', thumbnailPath));
+      } else if (thumbnailPath.startsWith('assets/')) {
+        final byteData = await rootBundle.load(thumbnailPath);
+        final bytes = byteData.buffer.asUint8List();
+        final name = thumbnailPath.split('/').last;
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'thumbnailFile',
+            bytes,
+            filename: name.isNotEmpty ? name : thumbnailFilename,
+          ),
+        );
+      } else {
+        request.files.add(await http.MultipartFile.fromPath('thumbnailFile', thumbnailPath));
+      }
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final json = jsonDecode(response.body);
+      final data = json['data'] ?? json;
+      return VideoModel.fromJson(data as Map<String, dynamic>);
+    } else {
+      String errorMessage = 'Failed to upload video (${response.statusCode})';
+      try {
+        final errJson = jsonDecode(response.body);
+        if (errJson['message'] != null) {
+          errorMessage = errJson['message'];
+        }
+      } catch (_) {}
+      throw ApiResponseException(errorMessage, response.statusCode);
+    }
+  }
+
+  List<VideoModel> _getFallbackFeed(String feedType) {
     final allVideos = [
-      VideoFeedModel(
+      const VideoModel(
         id: 1,
         creatorId: 2,
         username: '@bunheng',
@@ -152,13 +450,13 @@ class FeedRemoteDataSource {
         videoUrl: 'assets/videos/vid2.mp4',
         caption: 'Night walk through the neon streets #citylife #neon #cyberpunk',
         musicTitle: 'Cyberpunk Beats - Synthwave',
-        likes: '890K',
-        comments: '12.1K',
-        saves: '85K',
-        isFollowing: true, // Default followed by mongkol
+        likeCount: 890000,
+        commentCount: 12100,
+        saveCount: 85000,
+        isFollowing: true,
         isMe: false,
       ),
-      VideoFeedModel(
+      const VideoModel(
         id: 2,
         creatorId: 7,
         username: '@sophia_art',
@@ -168,13 +466,13 @@ class FeedRemoteDataSource {
         videoUrl: 'assets/videos/vid1.mp4',
         caption: 'The view from the top is breathtaking ⛰️ #mountains #visuals',
         musicTitle: 'Epic Mountain Theme - Hans Zimmer',
-        likes: '2.1M',
-        comments: '110K',
-        saves: '400K',
-        isFollowing: true, // Default followed by mongkol
+        likeCount: 2100000,
+        commentCount: 110000,
+        saveCount: 400000,
+        isFollowing: true,
         isMe: false,
       ),
-      VideoFeedModel(
+      const VideoModel(
         id: 3,
         creatorId: 10,
         username: '@davi_beats',
@@ -184,13 +482,13 @@ class FeedRemoteDataSource {
         videoUrl: 'assets/videos/vid3.mp4',
         caption: 'Found this hidden waterfall today! 🌿💧 #hiking #nature',
         musicTitle: 'Nature Sounds - Waterfall',
-        likes: '340K',
-        comments: '3.2K',
-        saves: '20K',
-        isFollowing: true, // Default followed by mongkol
+        likeCount: 340000,
+        commentCount: 3200,
+        saveCount: 20000,
+        isFollowing: true,
         isMe: false,
       ),
-      VideoFeedModel(
+      const VideoModel(
         id: 4,
         creatorId: 11,
         username: '@sarah_fit',
@@ -200,13 +498,13 @@ class FeedRemoteDataSource {
         videoUrl: 'assets/videos/vid4.mp4',
         caption: 'Morning workout done! 💪 HIIT session #fitness #gym',
         musicTitle: 'Workout Mix 2026 - DJ Flex',
-        likes: '550K',
-        comments: '8.4K',
-        saves: '15K',
+        likeCount: 550000,
+        commentCount: 8400,
+        saveCount: 15000,
         isFollowing: false,
         isMe: false,
       ),
-      VideoFeedModel(
+      const VideoModel(
         id: 5,
         creatorId: 9,
         username: '@linda_travel',
@@ -216,13 +514,13 @@ class FeedRemoteDataSource {
         videoUrl: 'assets/videos/vid2.mp4',
         caption: 'Peaceful morning on the lake 🛶 #lake #peace',
         musicTitle: 'Morning Coffee Acoustic - Indie Band',
-        likes: '420K',
-        comments: '5.1K',
-        saves: '18K',
+        likeCount: 420000,
+        commentCount: 5100,
+        saveCount: 18000,
         isFollowing: false,
         isMe: false,
       ),
-      VideoFeedModel(
+      const VideoModel(
         id: 6,
         creatorId: 16,
         username: '@kevin_tech',
@@ -232,13 +530,13 @@ class FeedRemoteDataSource {
         videoUrl: 'assets/videos/vid3.mp4',
         caption: 'Next-gen desk setup tour 🖥️ Minimal aesthetic #tech',
         musicTitle: 'Midnight City Pulse - Neon Dreams',
-        likes: '310K',
-        comments: '4.2K',
-        saves: '31K',
+        likeCount: 310000,
+        commentCount: 4200,
+        saveCount: 31000,
         isFollowing: false,
         isMe: false,
       ),
-      VideoFeedModel(
+      const VideoModel(
         id: 7,
         creatorId: 1,
         username: '@mongkol',
@@ -248,15 +546,15 @@ class FeedRemoteDataSource {
         videoUrl: 'assets/videos/vid1.mp4',
         caption: 'Building modern reactive Flutter UI with Spring Boot #coding',
         musicTitle: 'Seven7 Team Anthem - Seven7 Beats',
-        likes: '1.2M',
-        comments: '45.2K',
-        saves: '120K',
+        likeCount: 1200000,
+        commentCount: 45200,
+        saveCount: 120000,
         isFollowing: false,
         isMe: true,
       ),
     ];
 
-    if (feedType.toUpperCase() == 'FOLLOWING') {
+    if (feedType.toLowerCase() == 'following') {
       return allVideos.where((v) => v.isFollowing).toList();
     }
     return allVideos;

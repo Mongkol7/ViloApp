@@ -1,13 +1,14 @@
 package com.vilo.backend.entity;
 
 import jakarta.persistence.*;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
-
-import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
-@Table(name = "videos")
+@Table(name = "videos", indexes = {
+    @Index(name = "idx_creator_created", columnList = "creator_id, created_at")
+})
 public class Video {
 
     @Id
@@ -18,40 +19,79 @@ public class Video {
     @JoinColumn(name = "creator_id", nullable = false)
     private User creator;
 
-    @Column(name = "video_url", nullable = false)
+    @Column(length = 255)
+    private String title;
+
+    @Column(length = 2000)
+    private String description;
+
+    @Column(nullable = false, length = 500)
+    private String caption;
+
+    @Column(name = "video_url", nullable = false, length = 1000)
     private String videoUrl;
 
-    @Column(name = "thumbnail_url")
+    @Column(name = "thumbnail_url", length = 1000)
     private String thumbnailUrl;
-
-    @Column(name = "caption", length = 500)
-    private String caption;
 
     @Column(name = "music_title")
     private String musicTitle;
 
-    @Column(name = "views_count")
-    private Long viewsCount = 0L;
+    @Column(name = "view_count", nullable = false)
+    private Long viewCount = 0L;
 
-    @Column(name = "likes_count")
-    private Long likesCount = 0L;
+    @Column(name = "like_count", nullable = false)
+    private Long likeCount = 0L;
 
-    @Column(name = "comments_count")
-    private Long commentsCount = 0L;
+    @Column(name = "comment_count", nullable = false)
+    private Long commentCount = 0L;
 
-    @Column(name = "saves_count")
-    private Long savesCount = 0L;
+    @Column(name = "save_count", nullable = false)
+    private Long saveCount = 0L;
 
-    @CreationTimestamp
-    @Column(name = "created_at", updatable = false)
-    private Instant createdAt;
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
 
-    @UpdateTimestamp
-    @Column(name = "updated_at")
-    private Instant updatedAt;
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
 
-    public Video() {
+    @OneToMany(mappedBy = "video", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<VideoTag> tags = new ArrayList<>();
+
+    @PrePersist
+    protected void onCreate() {
+        if (this.createdAt == null) {
+            this.createdAt = LocalDateTime.now();
+        }
+        if (this.updatedAt == null) {
+            this.updatedAt = LocalDateTime.now();
+        }
+        if (this.viewCount == null) this.viewCount = 0L;
+        if (this.likeCount == null) this.likeCount = 0L;
+        if (this.commentCount == null) this.commentCount = 0L;
+        if (this.saveCount == null) this.saveCount = 0L;
+
+        if ((this.caption == null || this.caption.isBlank()) && (this.title != null || this.description != null)) {
+            this.caption = (this.title != null ? this.title : "") + 
+                    (this.description != null && !this.description.isBlank() ? " " + this.description : "");
+        }
+        if (this.title == null && this.caption != null) {
+            this.title = this.caption.length() > 100 ? this.caption.substring(0, 100) : this.caption;
+        }
+        if (this.description == null && this.caption != null) {
+            this.description = this.caption;
+        }
+        if (this.musicTitle == null) {
+            this.musicTitle = "Original Sound";
+        }
     }
+
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public Video() {}
 
     public Video(User creator, String videoUrl, String thumbnailUrl, String caption,
                  String musicTitle, Long likesCount, Long commentsCount, Long savesCount) {
@@ -59,106 +99,87 @@ public class Video {
         this.videoUrl = videoUrl;
         this.thumbnailUrl = thumbnailUrl;
         this.caption = caption;
-        this.musicTitle = musicTitle;
-        this.likesCount = likesCount != null ? likesCount : 0L;
-        this.commentsCount = commentsCount != null ? commentsCount : 0L;
-        this.savesCount = savesCount != null ? savesCount : 0L;
-        this.viewsCount = (this.likesCount * 3) + 1000L;
+        this.title = caption != null && caption.length() > 100 ? caption.substring(0, 100) : caption;
+        this.description = caption;
+        this.musicTitle = musicTitle != null ? musicTitle : "Original Sound";
+        this.likeCount = likesCount != null ? likesCount : 0L;
+        this.commentCount = commentsCount != null ? commentsCount : 0L;
+        this.saveCount = savesCount != null ? savesCount : 0L;
+        this.viewCount = (this.likeCount * 3) + 1000L;
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public User getCreator() {
-        return creator;
-    }
-
-    public void setCreator(User creator) {
+    public Video(User creator, String title, String description, String caption, String videoUrl, String thumbnailUrl) {
         this.creator = creator;
-    }
-
-    public String getVideoUrl() {
-        return videoUrl;
-    }
-
-    public void setVideoUrl(String videoUrl) {
+        this.title = title;
+        this.description = description;
+        this.caption = caption != null && !caption.isBlank() ? caption : (title != null ? title : "");
         this.videoUrl = videoUrl;
-    }
-
-    public String getThumbnailUrl() {
-        return thumbnailUrl;
-    }
-
-    public void setThumbnailUrl(String thumbnailUrl) {
         this.thumbnailUrl = thumbnailUrl;
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
 
-    public String getCaption() {
-        return caption;
+    // Getters and Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+
+    public User getCreator() { return creator; }
+    public void setCreator(User creator) { this.creator = creator; }
+
+    public Long getCreatorId() {
+        return creator != null ? creator.getId() : null;
     }
 
-    public void setCaption(String caption) {
-        this.caption = caption;
-    }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
 
-    public String getMusicTitle() {
-        return musicTitle;
-    }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
 
-    public void setMusicTitle(String musicTitle) {
-        this.musicTitle = musicTitle;
-    }
+    public String getCaption() { return caption; }
+    public void setCaption(String caption) { this.caption = caption; }
 
-    public Long getViewsCount() {
-        return viewsCount;
-    }
+    public String getVideoUrl() { return videoUrl; }
+    public void setVideoUrl(String videoUrl) { this.videoUrl = videoUrl; }
 
-    public void setViewsCount(Long viewsCount) {
-        this.viewsCount = viewsCount;
-    }
+    public String getThumbnailUrl() { return thumbnailUrl; }
+    public void setThumbnailUrl(String thumbnailUrl) { this.thumbnailUrl = thumbnailUrl; }
 
-    public Long getLikesCount() {
-        return likesCount;
-    }
+    public String getMusicTitle() { return musicTitle; }
+    public void setMusicTitle(String musicTitle) { this.musicTitle = musicTitle; }
 
-    public void setLikesCount(Long likesCount) {
-        this.likesCount = likesCount;
-    }
+    public Long getViewCount() { return viewCount; }
+    public void setViewCount(Long viewCount) { this.viewCount = viewCount; }
 
-    public Long getCommentsCount() {
-        return commentsCount;
-    }
+    public Long getViewsCount() { return viewCount; }
+    public void setViewsCount(Long viewsCount) { this.viewCount = viewsCount; }
 
-    public void setCommentsCount(Long commentsCount) {
-        this.commentsCount = commentsCount;
-    }
+    public Long getLikeCount() { return likeCount; }
+    public void setLikeCount(Long likeCount) { this.likeCount = likeCount; }
 
-    public Long getSavesCount() {
-        return savesCount;
-    }
+    public Long getLikesCount() { return likeCount; }
+    public void setLikesCount(Long likesCount) { this.likeCount = likesCount; }
 
-    public void setSavesCount(Long savesCount) {
-        this.savesCount = savesCount;
-    }
+    public Long getCommentCount() { return commentCount; }
+    public void setCommentCount(Long commentCount) { this.commentCount = commentCount; }
 
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
+    public Long getCommentsCount() { return commentCount; }
+    public void setCommentsCount(Long commentsCount) { this.commentCount = commentsCount; }
 
-    public void setCreatedAt(Instant createdAt) {
-        this.createdAt = createdAt;
-    }
+    public Long getSaveCount() { return saveCount; }
+    public void setSaveCount(Long saveCount) { this.saveCount = saveCount; }
 
-    public Instant getUpdatedAt() {
-        return updatedAt;
-    }
+    public Long getSavesCount() { return saveCount; }
+    public void setSavesCount(Long savesCount) { this.saveCount = savesCount; }
 
-    public void setUpdatedAt(Instant updatedAt) {
-        this.updatedAt = updatedAt;
-    }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public List<VideoTag> getTags() { return tags; }
+    public void setTags(List<VideoTag> tags) { this.tags = tags; }
 }

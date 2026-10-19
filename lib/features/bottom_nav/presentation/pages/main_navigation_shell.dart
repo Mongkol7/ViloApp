@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../feed/data/models/video_model.dart';
 import '../../../feed/presentation/pages/home_feed_page.dart';
+import '../../../feed/presentation/widgets/create_action_sheet.dart';
+import '../../../feed/presentation/widgets/upload_video_sheet.dart';
 import '../../../inbox_activity/presentation/pages/inbox_screen.dart';
 import '../../../profile/presentation/pages/people_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
@@ -51,10 +54,21 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     });
   }
 
-  void _onAddPressed() {
+  void _onAddPressed() async {
     setState(() {
-      _isAddActive = !_isAddActive;
+      _isAddActive = true;
     });
+
+    final createdVideo = await CreateActionSheet.show(context);
+
+    if (mounted) {
+      setState(() {
+        _isAddActive = false;
+        if (createdVideo != null && _currentIndex != 0) {
+          _currentIndex = 0;
+        }
+      });
+    }
   }
 
   bool _handleScrollNotification(ScrollNotification notification) {

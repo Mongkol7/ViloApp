@@ -74,8 +74,8 @@ List<Widget> buildProfileTabSlivers(
               delegate: SliverChildBuilderDelegate(
                 (context, i) {
                   final video = userVideos[i];
-                  final thumb = video.thumbnailUrl.isNotEmpty
-                      ? video.thumbnailUrl
+                  final thumb = (video.thumbnailUrl != null && video.thumbnailUrl!.isNotEmpty)
+                      ? video.thumbnailUrl!
                       : 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500';
                   return VideoGridItem(
                     thumbnailUrl: thumb,

@@ -2,7 +2,9 @@ package com.vilo.backend.config;
 
 import com.vilo.backend.entity.Role;
 import com.vilo.backend.entity.User;
+import com.vilo.backend.entity.Video;
 import com.vilo.backend.repository.UserRepository;
+import com.vilo.backend.repository.VideoRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
@@ -22,14 +24,14 @@ public class DataInitializer implements CommandLineRunner {
     private final com.vilo.backend.repository.SoundRepository soundRepository;
     private final com.vilo.backend.repository.HashtagRepository hashtagRepository;
     private final com.vilo.backend.repository.SearchHistoryRepository searchHistoryRepository;
-    private final com.vilo.backend.repository.VideoRepository videoRepository;
+    private final VideoRepository videoRepository;
     private final PasswordEncoder passwordEncoder;
 
     public DataInitializer(UserRepository userRepository,
                            com.vilo.backend.repository.SoundRepository soundRepository,
                            com.vilo.backend.repository.HashtagRepository hashtagRepository,
                            com.vilo.backend.repository.SearchHistoryRepository searchHistoryRepository,
-                           com.vilo.backend.repository.VideoRepository videoRepository,
+                           VideoRepository videoRepository,
                            PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.soundRepository = soundRepository;

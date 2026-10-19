@@ -1,0 +1,996 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import '../../../auth/data/datasources/auth_remote_data_source.dart';
+import '../../../auth/data/datasources/token_storage.dart';
+import '../../data/datasources/feed_remote_data_source.dart';
+import '../../data/models/video_model.dart';
+import '../controllers/video_feed_manager.dart';
+
+class UploadVideoSheet extends StatefulWidget {
+  final PlatformFile? initialFile;
+  final PlatformFile? initialThumbnail;
+
+  const UploadVideoSheet({
+    super.key,
+    this.initialFile,
+    this.initialThumbnail,
+  });
+
+  static Future<VideoModel?> show(BuildContext context, {PlatformFile? initialFile, PlatformFile? initialThumbnail}) {
+    return showModalBottomSheet<VideoModel>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black87,
+      builder: (ctx) => UploadVideoSheet(initialFile: initialFile, initialThumbnail: initialThumbnail),
+    );
+  }
+
+  @override
+  State<UploadVideoSheet> createState() => _UploadVideoSheetState();
+}
+
+class _UploadVideoSheetState extends State<UploadVideoSheet> {
+  final FeedRemoteDataSource _feedDataSource = FeedRemoteDataSource();
+  final AuthRemoteDataSource _authDataSource = AuthRemoteDataSource();
+  final TokenStorage _tokenStorage = TokenStorage.instance;
+
+  PlatformFile? _selectedFile;
+  PlatformFile? _selectedThumbnail;
+
+  final TextEditingController _captionController = TextEditingController();
+  final TextEditingController _tagsController = TextEditingController();
+
+  bool _isUploading = false;
+  bool _isLoggingIn = false;
+  String? _errorMessage;
+
+  String? _loggedInUsername;
+  String? _loggedInDisplayName;
+  bool _hasToken = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialFile != null) {
+      _selectedFile = widget.initialFile;
+    }
+    if (widget.initialThumbnail != null) {
+      _selectedThumbnail = widget.initialThumbnail;
+    }
+    _checkAuthStatus();
+  }
+
+  @override
+  void didUpdateWidget(UploadVideoSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialFile != oldWidget.initialFile && widget.initialFile != null) {
+      setState(() {
+        _selectedFile = widget.initialFile;
+      });
+    }
+    if (widget.initialThumbnail != oldWidget.initialThumbnail && widget.initialThumbnail != null) {
+      setState(() {
+        _selectedThumbnail = widget.initialThumbnail;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _captionController.dispose();
+    _tagsController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _checkAuthStatus() async {
+    final hasToken = await _tokenStorage.hasValidToken();
+    final username = await _tokenStorage.getUsername();
+    final displayName = await _tokenStorage.getDisplayName();
+
+    if (mounted) {
+      setState(() {
+        _hasToken = hasToken;
+        _loggedInUsername = username;
+        _loggedInDisplayName = displayName;
+      });
+    }
+  }
+
+  Future<void> _quickLogin() async {
+    setState(() {
+      _isLoggingIn = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final user = await _authDataSource.login(
+        usernameOrEmail: 'bunheng',
+        password: 'password123',
+      );
+      if (mounted) {
+        setState(() {
+          _hasToken = true;
+          _loggedInUsername = user.username;
+          _loggedInDisplayName = user.displayName;
+          _isLoggingIn = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoggingIn = false;
+          _errorMessage = 'Login failed: $e';
+        });
+      }
+    }
+  }
+
+  bool get _isSelectedFileImage =>
+      _selectedFile != null &&
+      RegExp(r'\.(jpg|jpeg|png|webp|gif)$', caseSensitive: false).hasMatch(_selectedFile!.name);
+
+  Future<void> _pickVideo() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['mp4', 'mov', 'mkv', 'webm', 'jpg', 'jpeg', 'png', 'webp', 'gif'],
+        allowMultiple: false,
+        withData: true,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          _selectedFile = result.files.first;
+          _errorMessage = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Could not select file: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _pickThumbnail() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+        allowMultiple: false,
+        withData: true,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          _selectedThumbnail = result.files.first;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Could not select thumbnail: $e';
+        });
+      }
+    }
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  Future<void> _handleUpload() async {
+    if (_selectedFile == null) {
+      setState(() {
+        _errorMessage = 'Please select a video or photo file.';
+      });
+      return;
+    }
+
+    final caption = _captionController.text.trim();
+    if (caption.isEmpty) {
+      setState(() {
+        _errorMessage = 'Please enter a caption for your video.';
+      });
+      return;
+    }
+
+    // Parse tags
+    final tagsText = _tagsController.text.trim();
+    final List<String> tags = tagsText.isNotEmpty
+        ? tagsText
+            .split(RegExp(r'[, ]+'))
+            .map((t) => t.replaceAll('#', '').trim())
+            .where((t) => t.isNotEmpty)
+            .toList()
+        : [];
+
+    setState(() {
+      _isUploading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      // Auto login as demo user if token is missing
+      if (!_hasToken) {
+        await _quickLogin();
+      }
+
+      final isImage = _isSelectedFileImage;
+
+      List<int>? videoBytes = _selectedFile!.bytes;
+      if ((videoBytes == null || videoBytes.isEmpty) && _selectedFile!.path != null) {
+        final localFile = File(_selectedFile!.path!);
+        if (localFile.existsSync()) {
+          videoBytes = await localFile.readAsBytes();
+        }
+      }
+
+      List<int>? thumbnailBytes = isImage ? null : _selectedThumbnail?.bytes;
+      if (!isImage && (thumbnailBytes == null || thumbnailBytes.isEmpty) && _selectedThumbnail?.path != null) {
+        final localThumb = File(_selectedThumbnail!.path!);
+        if (localThumb.existsSync()) {
+          thumbnailBytes = await localThumb.readAsBytes();
+        }
+      }
+
+      final newVideo = await _feedDataSource.uploadVideo(
+        caption: caption,
+        videoPath: _selectedFile!.path,
+        videoBytes: videoBytes,
+        videoFilename: _selectedFile!.name,
+        thumbnailPath: isImage ? null : _selectedThumbnail?.path,
+        thumbnailBytes: thumbnailBytes,
+        thumbnailFilename: isImage ? 'thumbnail.jpg' : (_selectedThumbnail?.name ?? 'thumbnail.jpg'),
+        tags: tags,
+      );
+
+      // Prepend to active feed and trigger live sync
+      VideoFeedManager.instance.prependVideo(newVideo);
+
+      if (mounted) {
+        Navigator.of(context).pop(newVideo);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF1E1E24),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    isImage ? 'Photo posted! Now appearing in feed.' : 'Video posted! Now playing at top of feed.',
+                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+          _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Material(
+      color: const Color(0xFF141416),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      clipBehavior: Clip.antiAlias,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 14,
+            bottom: bottomInset + 16,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Header: Drag handle bar + "Upload Video" title + close (X) button
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.video_call_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Upload Video',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Post to Vilo Community & For You feed',
+                            style: TextStyle(
+                              color: Color(0xFF8E8E93),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('upload_video_sheet_close_btn'),
+                      icon: const Icon(Icons.close_rounded, color: Colors.white),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+
+                // Auth Status Pill / Quick Login Banner
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: _hasToken
+                        ? const Color(0xFF1B241E)
+                        : const Color(0xFF261D1D),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: _hasToken
+                          ? Colors.greenAccent.withValues(alpha: 0.4)
+                          : Colors.orangeAccent.withValues(alpha: 0.4),
+                      width: 1.0,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _hasToken
+                            ? Icons.verified_user_rounded
+                            : Icons.account_circle_outlined,
+                        color: _hasToken ? Colors.greenAccent : Colors.orangeAccent,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _hasToken
+                              ? 'Logged in as ${_loggedInDisplayName != null && _loggedInDisplayName!.isNotEmpty ? '$_loggedInDisplayName (@$_loggedInUsername)' : '@${_loggedInUsername ?? 'user'}'}'
+                              : 'Sign in required to publish videos',
+                          style: TextStyle(
+                            color: _hasToken ? Colors.greenAccent : Colors.orangeAccent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      if (!_hasToken)
+                        TextButton(
+                          onPressed: _isLoggingIn ? null : _quickLogin,
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            backgroundColor: Colors.white.withValues(alpha: 0.12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: _isLoggingIn
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                )
+                              : const Text(
+                                  'Sign In (@bunheng)',
+                                  style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+
+                // System Video / Photo Picker Section
+                const Text(
+                  'VIDEO OR PHOTO',
+                  style: TextStyle(
+                    color: Color(0xFF8E8E93),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                if (_selectedFile == null) ...[
+                  // Unselected State: Files / Downloads Picker Card
+                  InkWell(
+                    key: const Key('upload_pick_video_button'),
+                    onTap: _isUploading ? null : _pickVideo,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E24),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: const Color(0xFF323238),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.folder_open_rounded,
+                              color: Colors.white,
+                              size: 30,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Choose Video or Photo',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Pick an .mp4, .mov, .jpg, or .png from your device',
+                            style: TextStyle(
+                              color: Color(0xFF8E8E93),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  // Selected State: Preview Tile
+                  Container(
+                    key: const Key('upload_selected_video_tile'),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E24),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        width: 1.0,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        if (_isSelectedFileImage)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              color: const Color(0xFF2B2B36),
+                              child: _selectedFile!.bytes != null
+                                  ? Image.memory(
+                                      _selectedFile!.bytes!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(
+                                        Icons.image_outlined,
+                                        color: Colors.white70,
+                                        size: 24,
+                                      ),
+                                    )
+                                  : (_selectedFile!.path != null &&
+                                          File(_selectedFile!.path!).existsSync())
+                                      ? Image.file(
+                                          File(_selectedFile!.path!),
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) => const Icon(
+                                            Icons.image_outlined,
+                                            color: Colors.white70,
+                                            size: 24,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.image_rounded,
+                                          color: Colors.white70,
+                                          size: 24,
+                                        ),
+                            ),
+                          )
+                        else
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.movie_creation_rounded,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _selectedFile!.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _formatFileSize(_selectedFile!.size),
+                                style: const TextStyle(
+                                  color: Color(0xFF8E8E93),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          key: const Key('upload_change_video_button'),
+                          icon: const Icon(Icons.sync_rounded, color: Colors.white70, size: 20),
+                          tooltip: _isSelectedFileImage ? 'Change photo' : 'Change video',
+                          onPressed: _isUploading ? null : _pickVideo,
+                        ),
+                        IconButton(
+                          key: const Key('upload_remove_video_button'),
+                          icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 20),
+                          tooltip: 'Remove',
+                          onPressed: _isUploading
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _selectedFile = null;
+                                  });
+                                },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                if (!_isSelectedFileImage) ...[
+                  const SizedBox(height: 18),
+
+                  // Thumbnail Image Picker Section (Optional)
+                  const Text(
+                    'THUMBNAIL (OPTIONAL)',
+                    style: TextStyle(
+                      color: Color(0xFF8E8E93),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  if (_selectedThumbnail == null) ...[
+                    // Unselected Thumbnail Card
+                    InkWell(
+                      key: const Key('upload_pick_thumbnail_button'),
+                      onTap: _isUploading ? null : _pickThumbnail,
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1E24),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: const Color(0xFF323238),
+                            width: 1.0,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.08),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.add_photo_alternate_rounded,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Choose Thumbnail Image',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Pick a .jpg, .png, or .webp cover image',
+                                    style: TextStyle(
+                                      color: Color(0xFF8E8E93),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              color: Color(0xFF8E8E93),
+                              size: 20,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    // Selected Thumbnail Preview Tile
+                    Container(
+                      key: const Key('upload_selected_thumbnail_tile'),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E24),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          width: 1.0,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              color: const Color(0xFF2B2B36),
+                              child: _selectedThumbnail!.bytes != null
+                                  ? Image.memory(
+                                      _selectedThumbnail!.bytes!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(
+                                        Icons.image_outlined,
+                                        color: Colors.white70,
+                                        size: 22,
+                                      ),
+                                    )
+                                  : (_selectedThumbnail!.path != null &&
+                                          File(_selectedThumbnail!.path!).existsSync())
+                                      ? Image.file(
+                                          File(_selectedThumbnail!.path!),
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) => const Icon(
+                                            Icons.image_outlined,
+                                            color: Colors.white70,
+                                            size: 22,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.image_rounded,
+                                          color: Colors.white70,
+                                          size: 22,
+                                        ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _selectedThumbnail!.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _formatFileSize(_selectedThumbnail!.size),
+                                  style: const TextStyle(
+                                    color: Color(0xFF8E8E93),
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            key: const Key('upload_change_thumbnail_button'),
+                            icon: const Icon(Icons.sync_rounded, color: Colors.white70, size: 20),
+                            tooltip: 'Change thumbnail',
+                            onPressed: _isUploading ? null : _pickThumbnail,
+                          ),
+                          IconButton(
+                            key: const Key('upload_remove_thumbnail_button'),
+                            icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 20),
+                            tooltip: 'Remove thumbnail',
+                            onPressed: _isUploading
+                                ? null
+                                : () {
+                                    setState(() {
+                                      _selectedThumbnail = null;
+                                    });
+                                  },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+
+                const SizedBox(height: 18),
+
+                // Caption Input Form Field
+                const Text(
+                  'CAPTION',
+                  style: TextStyle(
+                    color: Color(0xFF8E8E93),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  key: const Key('upload_caption_field'),
+                  controller: _captionController,
+                  maxLines: 3,
+                  maxLength: 250,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Write a caption...',
+                    hintStyle: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
+                    filled: true,
+                    fillColor: const Color(0xFF1E1E24),
+                    counterStyle: const TextStyle(color: Color(0xFF8E8E93), fontSize: 11),
+                    contentPadding: const EdgeInsets.all(14),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFF323238), width: 1.0),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Colors.white, width: 1.5),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 4),
+
+                // Tags Input & Quick Chips
+                const Text(
+                  'TAGS',
+                  style: TextStyle(
+                    color: Color(0xFF8E8E93),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: ['#vilo', '#trending', '#fyp', '#viral', '#coding', '#sunset']
+                      .map(
+                        (tag) => InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () {
+                            final current = _tagsController.text.trim();
+                            final tagWord = tag.replaceAll('#', '');
+                            if (!current.contains(tagWord) && !current.contains(tag)) {
+                              if (current.isEmpty) {
+                                _tagsController.text = tag;
+                              } else {
+                                _tagsController.text = '$current, $tag';
+                              }
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E1E24),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFF323238), width: 1.0),
+                            ),
+                            child: Text(
+                              tag,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  key: const Key('upload_tags_field'),
+                  controller: _tagsController,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: '#vilo, #trending',
+                    hintStyle: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13),
+                    filled: true,
+                    fillColor: const Color(0xFF1E1E24),
+                    prefixIcon: const Icon(Icons.tag_rounded, color: Colors.white70, size: 20),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFF323238), width: 1.0),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Colors.white, width: 1.5),
+                    ),
+                  ),
+                ),
+
+                if (_errorMessage != null) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2C1A1D),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _errorMessage!,
+                            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 24),
+
+                // Submit Button
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    key: const Key('upload_post_video_button'),
+                    onPressed: _isUploading ? null : _handleUpload,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      disabledBackgroundColor: Colors.white38,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: _isUploading
+                        ? Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.2,
+                                  color: Colors.black,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                _isSelectedFileImage ? 'Uploading Photo...' : 'Uploading Video...',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ],
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.arrow_upward_rounded, size: 20, color: Colors.black),
+                              const SizedBox(width: 8),
+                              Text(
+                                _isSelectedFileImage ? 'Post Photo' : 'Post Video',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.2,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
