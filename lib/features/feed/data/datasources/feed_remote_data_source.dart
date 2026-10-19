@@ -62,6 +62,50 @@ class FeedRemoteDataSource {
     _userVideosCache.remove(clean);
   }
 
+  /// Synchronize like, save, or comment changes across all in-memory caches instantly
+  void updateCachedVideo({
+    required int videoId,
+    bool? isLiked,
+    int? likeCount,
+    bool? isSaved,
+    int? saveCount,
+    int? commentCount,
+  }) {
+    for (final key in _feedCache.keys) {
+      final list = _feedCache[key];
+      if (list != null) {
+        for (int i = 0; i < list.length; i++) {
+          if (list[i].id == videoId) {
+            list[i] = list[i].copyWith(
+              isLiked: isLiked,
+              likeCount: likeCount,
+              isSaved: isSaved,
+              saveCount: saveCount,
+              commentCount: commentCount,
+            );
+          }
+        }
+      }
+    }
+
+    for (final key in _userVideosCache.keys) {
+      final list = _userVideosCache[key];
+      if (list != null) {
+        for (int i = 0; i < list.length; i++) {
+          if (list[i].id == videoId) {
+            list[i] = list[i].copyWith(
+              isLiked: isLiked,
+              likeCount: likeCount,
+              isSaved: isSaved,
+              saveCount: saveCount,
+              commentCount: commentCount,
+            );
+          }
+        }
+      }
+    }
+  }
+
   /// Unified getFeed supporting pagination, cache, and both feedType and type parameters
   Future<List<VideoModel>> getFeed({
     int page = 0,
@@ -261,6 +305,59 @@ class FeedRemoteDataSource {
     };
   }
 
+  /// Fetch all real saved/bookmarked videos for the current user
+  Future<List<VideoModel>> getSavedVideos() async {
+    try {
+      final response = await _client.get('/videos/saved', requireAuth: true);
+      List<dynamic>? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map && response['data'] is List) {
+        list = response['data'] as List;
+      } else if (response is Map && response['videos'] is List) {
+        list = response['videos'] as List;
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => VideoModel.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get saved videos error: $e');
+    }
+    return [];
+  }
+
+  /// Fetch all real liked videos for the current user or a specific user
+  Future<List<VideoModel>> getLikedVideos({dynamic userId}) async {
+    try {
+      final endpoint = userId != null
+          ? '/videos/user/${userId.toString().replaceAll('@', '').trim()}/liked'
+          : '/videos/liked';
+      final response = await _client.get(endpoint, requireAuth: userId == null);
+      List<dynamic>? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map && response['data'] is List) {
+        list = response['data'] as List;
+      } else if (response is Map && response['videos'] is List) {
+        list = response['videos'] as List;
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => VideoModel.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get liked videos error: $e');
+    }
+    return [];
+  }
+
   /// Increment view count asynchronously
   Future<int> incrementView(int videoId) async {
     try {
@@ -338,6 +435,9 @@ class FeedRemoteDataSource {
     String? videoPath,
     List<int>? videoBytes,
     String videoFilename = 'upload.mp4',
+    List<String>? imagePaths,
+    List<List<int>>? imageBytesList,
+    List<String>? imageFilenames,
     String? thumbnailPath,
     List<int>? thumbnailBytes,
     String thumbnailFilename = 'thumbnail.jpg',
@@ -375,8 +475,40 @@ class FeedRemoteDataSource {
       request.fields['tags'] = tagsList.join(',');
     }
 
-    // Video payload (either multipart file or direct videoPath reference)
-    if (videoPath != null && videoPath.trim().isNotEmpty) {
+    // Media payload: multiple photos or single video/photo
+    if (imagePaths != null && imagePaths.isNotEmpty) {
+      for (int i = 0; i < imagePaths.length; i++) {
+        final path = imagePaths[i].trim();
+        final name = (imageFilenames != null && i < imageFilenames.length)
+            ? imageFilenames[i]
+            : path.split(Platform.pathSeparator).last;
+        final file = File(path);
+        if (file.existsSync()) {
+          try {
+            request.files.add(
+              await http.MultipartFile.fromPath('photos', path, filename: name),
+            );
+          } catch (_) {
+            final bytes = await file.readAsBytes();
+            request.files.add(
+              http.MultipartFile.fromBytes('photos', bytes, filename: name),
+            );
+          }
+        } else if (imageBytesList != null && i < imageBytesList.length && imageBytesList[i].isNotEmpty) {
+          request.files.add(
+            http.MultipartFile.fromBytes('photos', imageBytesList[i], filename: name),
+          );
+        }
+      }
+    } else if (imageBytesList != null && imageBytesList.isNotEmpty) {
+      for (int i = 0; i < imageBytesList.length; i++) {
+        final bytes = imageBytesList[i];
+        final name = (imageFilenames != null && i < imageFilenames.length) ? imageFilenames[i] : 'photo_$i.jpg';
+        request.files.add(
+          http.MultipartFile.fromBytes('photos', bytes, filename: name),
+        );
+      }
+    } else if (videoPath != null && videoPath.trim().isNotEmpty) {
       final trimmedPath = videoPath.trim();
       final fileOnDisk = File(trimmedPath);
 
@@ -433,7 +565,7 @@ class FeedRemoteDataSource {
         ),
       );
     } else {
-      throw ApiResponseException('A video path or video file must be provided', 400);
+      throw ApiResponseException('A video path or video/photo file(s) must be provided', 400);
     }
 
     // Thumbnail payload (optional)

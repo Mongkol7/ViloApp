@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../../../auth/data/models/user_model.dart';
+import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../../feed/data/models/video_model.dart';
 import '../../presentation/mock/profile_mock_data.dart';
 
@@ -15,8 +16,28 @@ class FollowChangeEvent {
   });
 }
 
+class VideoInteractionEvent {
+  final int videoId;
+  final bool? isLiked;
+  final int? likeCount;
+  final bool? isSaved;
+  final int? saveCount;
+  final int? commentCount;
+  final VideoModel? video;
+
+  const VideoInteractionEvent({
+    required this.videoId,
+    this.isLiked,
+    this.likeCount,
+    this.isSaved,
+    this.saveCount,
+    this.commentCount,
+    this.video,
+  });
+}
+
 /// Global profile and follow sync service that broadcasts real-time follow/unfollow
-/// state changes across ProfileScreen, PublicProfileScreen, and FollowersFollowingScreen.
+/// and video interaction changes across ProfileScreen, PublicProfileScreen, and VideoFeedPage.
 class ProfileSyncService {
   ProfileSyncService._();
   static final ProfileSyncService instance = ProfileSyncService._();
@@ -27,8 +48,23 @@ class ProfileSyncService {
   /// Emits whenever a new video or photo is uploaded by the current user
   final ValueNotifier<VideoModel?> videoUploadedEvents = ValueNotifier<VideoModel?>(null);
 
+  /// Emits whenever like, save, or comment count changes on any video in the app
+  final ValueNotifier<VideoInteractionEvent?> videoInteractionEvents = ValueNotifier<VideoInteractionEvent?>(null);
+
   void notifyVideoUploaded(VideoModel video) {
     videoUploadedEvents.value = video;
+  }
+
+  void notifyVideoInteraction(VideoInteractionEvent event) {
+    videoInteractionEvents.value = event;
+    FeedRemoteDataSource.instance.updateCachedVideo(
+      videoId: event.videoId,
+      isLiked: event.isLiked,
+      likeCount: event.likeCount,
+      isSaved: event.isSaved,
+      saveCount: event.saveCount,
+      commentCount: event.commentCount,
+    );
   }
 
   /// Cached user profile for immediate optimistic updates across screens
@@ -38,8 +74,8 @@ class ProfileSyncService {
   List<UserModel>? cachedFollowers;
   List<UserModel>? cachedFollowing;
 
-  int mockFollowersCount = 4;
-  int mockFollowingCount = 3;
+  int mockFollowersCount = 0;
+  int mockFollowingCount = 0;
 
   /// Returns the current active user's avatar URL
   String get currentUserAvatar {

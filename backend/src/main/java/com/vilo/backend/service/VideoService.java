@@ -99,7 +99,7 @@ public class VideoService {
 
         User targetUser = null;
         try {
-            Long id = Long.parseLong(identifier);
+            Long id = Long.valueOf(identifier);
             targetUser = userRepository.findById(id).orElse(null);
         } catch (NumberFormatException ignored) {}
 
@@ -125,6 +125,86 @@ public class VideoService {
                     return resp;
                 })
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<VideoResponse> getSavedVideos(User currentUser) {
+        if (currentUser == null || currentUser.getId() == null) {
+            return Collections.emptyList();
+        }
+        final User reloadedUser = userRepository.findById(currentUser.getId()).orElse(currentUser);
+        List<VideoSave> saves = videoSaveRepository.findByUserIdOrderByCreatedAtDesc(reloadedUser.getId());
+        if (saves.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Long> videoIds = saves.stream().map(s -> s.getVideoId()).toList();
+        Map<Long, Video> videoMap = videoRepository.findAllById(videoIds).stream()
+                .collect(Collectors.toMap(v -> v.getId(), v -> v));
+
+        return videoIds.stream()
+                .map(videoMap::get)
+                .filter(Objects::nonNull)
+                .map(v -> {
+                    VideoResponse resp = VideoResponse.fromEntity(v, reloadedUser);
+                    resp.setSaved(true);
+                    resp.setLiked(isLikedBy(v.getId(), reloadedUser.getId()));
+                    return resp;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<VideoResponse> getLikedVideos(Long userId, User currentUser) {
+        if (userId == null) {
+            return Collections.emptyList();
+        }
+        final User reloadedUser = (currentUser != null && currentUser.getId() != null)
+                ? userRepository.findById(currentUser.getId()).orElse(currentUser)
+                : null;
+        List<VideoLike> likes = videoLikeRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        if (likes.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Long> videoIds = likes.stream().map(l -> l.getVideoId()).toList();
+        Map<Long, Video> videoMap = videoRepository.findAllById(videoIds).stream()
+                .collect(Collectors.toMap(v -> v.getId(), v -> v));
+
+        Long currentUserId = reloadedUser != null ? reloadedUser.getId() : null;
+
+        return videoIds.stream()
+                .map(videoMap::get)
+                .filter(Objects::nonNull)
+                .map(v -> {
+                    VideoResponse resp = VideoResponse.fromEntity(v, reloadedUser);
+                    if (currentUserId != null) {
+                        resp.setLiked(isLikedBy(v.getId(), currentUserId));
+                        resp.setSaved(isSavedBy(v.getId(), currentUserId));
+                    }
+                    return resp;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<VideoResponse> getUserLikedVideos(String identifier, User currentUser) {
+        User targetUser = null;
+        try {
+            Long id = Long.valueOf(identifier);
+            targetUser = userRepository.findById(id).orElse(null);
+        } catch (NumberFormatException ignored) {}
+
+        if (targetUser == null) {
+            String clean = identifier.startsWith("@") ? identifier.substring(1) : identifier;
+            targetUser = userRepository.findByUsername(clean).orElse(null);
+        }
+
+        if (targetUser == null) {
+            return Collections.emptyList();
+        }
+
+        return getLikedVideos(targetUser.getId(), currentUser);
     }
 
     @Transactional(readOnly = true)
@@ -194,14 +274,38 @@ public class VideoService {
 
     @Transactional
     public Video createVideo(Long creatorId, String title, String description, String caption,
-                            MultipartFile videoFile, String directPath,
+                            MultipartFile videoFile, List<MultipartFile> mediaFiles, String directPath,
                             MultipartFile thumbnailFile, String thumbnailPath, List<String> tags) {
         User creator = userRepository.findById(creatorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Creator not found with id: " + creatorId));
 
         String videoUrl;
         boolean isImage = false;
-        if (videoFile != null && !videoFile.isEmpty()) {
+
+        List<MultipartFile> nonNullMediaFiles = new ArrayList<>();
+        if (mediaFiles != null) {
+            for (MultipartFile f : mediaFiles) {
+                if (f != null && !f.isEmpty()) {
+                    nonNullMediaFiles.add(f);
+                }
+            }
+        }
+
+        if (nonNullMediaFiles.size() > 1) {
+            List<String> storedUrls = new ArrayList<>();
+            for (MultipartFile f : nonNullMediaFiles) {
+                boolean isImg = isImageFile(f.getOriginalFilename(), f.getContentType());
+                String subDir = isImg ? "photos" : "videos";
+                storedUrls.add(fileStorageService.storeFile(f, subDir));
+            }
+            videoUrl = String.join(",", storedUrls);
+            isImage = true;
+        } else if (nonNullMediaFiles.size() == 1) {
+            MultipartFile file = nonNullMediaFiles.get(0);
+            isImage = isImageFile(file.getOriginalFilename(), file.getContentType());
+            String subDir = isImage ? "photos" : "videos";
+            videoUrl = fileStorageService.storeFile(file, subDir);
+        } else if (videoFile != null && !videoFile.isEmpty()) {
             isImage = isImageFile(videoFile.getOriginalFilename(), videoFile.getContentType());
             String subDir = isImage ? "photos" : "videos";
             videoUrl = fileStorageService.storeFile(videoFile, subDir);
@@ -209,7 +313,7 @@ public class VideoService {
             isImage = isImageFile(directPath, null);
             videoUrl = normalizeVideoPath(directPath);
         } else {
-            throw new IllegalArgumentException("Either video/photo file or video/photo path must be provided");
+            throw new IllegalArgumentException("Either video/photo file(s) or video/photo path must be provided");
         }
 
         String thumbnailUrl = null;
@@ -219,7 +323,7 @@ public class VideoService {
         } else if (thumbnailPath != null && !thumbnailPath.isBlank()) {
             thumbnailUrl = normalizeThumbnailPath(thumbnailPath);
         } else if (isImage) {
-            thumbnailUrl = videoUrl;
+            thumbnailUrl = videoUrl.contains(",") ? videoUrl.split(",")[0].trim() : videoUrl;
         }
 
         String effectiveCaption = caption;
@@ -238,6 +342,13 @@ public class VideoService {
         }
 
         return videoRepository.save(video);
+    }
+
+    @Transactional
+    public Video createVideo(Long creatorId, String title, String description, String caption,
+                            MultipartFile videoFile, String directPath,
+                            MultipartFile thumbnailFile, String thumbnailPath, List<String> tags) {
+        return createVideo(creatorId, title, description, caption, videoFile, null, directPath, thumbnailFile, thumbnailPath, tags);
     }
 
     @Transactional

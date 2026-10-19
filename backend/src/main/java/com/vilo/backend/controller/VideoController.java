@@ -98,6 +98,52 @@ public class VideoController {
     }
 
     /**
+     * GET /api/v1/videos/saved
+     * Retrieves all videos saved/bookmarked by the current authenticated user.
+     */
+    @GetMapping("/saved")
+    @Operation(summary = "Get saved videos", description = "Retrieves all videos saved by the authenticated user")
+    public ResponseEntity<ApiResponse<List<VideoResponse>>> getSavedVideos(
+            @AuthenticationPrincipal User currentUser
+    ) {
+        if (currentUser == null) {
+            throw new AccessDeniedException("Full authentication is required to view saved videos");
+        }
+        List<VideoResponse> savedVideos = videoService.getSavedVideos(currentUser);
+        return ResponseEntity.ok(ApiResponse.ok("Saved videos fetched successfully", savedVideos));
+    }
+
+    /**
+     * GET /api/v1/videos/liked
+     * Retrieves all videos liked by the current authenticated user.
+     */
+    @GetMapping("/liked")
+    @Operation(summary = "Get liked videos", description = "Retrieves all videos liked by the authenticated user")
+    public ResponseEntity<ApiResponse<List<VideoResponse>>> getLikedVideos(
+            @AuthenticationPrincipal User currentUser
+    ) {
+        if (currentUser == null) {
+            throw new AccessDeniedException("Full authentication is required to view liked videos");
+        }
+        List<VideoResponse> likedVideos = videoService.getLikedVideos(currentUser.getId(), currentUser);
+        return ResponseEntity.ok(ApiResponse.ok("Liked videos fetched successfully", likedVideos));
+    }
+
+    /**
+     * GET /api/v1/videos/user/{identifier}/liked
+     * Retrieves all public videos liked by a specific user.
+     */
+    @GetMapping("/user/{identifier}/liked")
+    @Operation(summary = "Get user liked videos", description = "Retrieves videos liked by a specific user")
+    public ResponseEntity<ApiResponse<List<VideoResponse>>> getUserLikedVideos(
+            @PathVariable String identifier,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        List<VideoResponse> likedVideos = videoService.getUserLikedVideos(identifier, currentUser);
+        return ResponseEntity.ok(ApiResponse.ok("User liked videos fetched successfully", likedVideos));
+    }
+
+    /**
      * GET /api/v1/videos/{id}
      * Single video details with creator profile and interaction flags.
      */
@@ -118,10 +164,13 @@ public class VideoController {
      * Supports both multipart file upload AND direct videoPath/videoUrl reference.
      */
     @PostMapping(value = "/upload")
-    @Operation(summary = "Upload video or photo post")
+    @Operation(summary = "Upload video or photo post (supports single video or multi-photo carousel)")
     public ResponseEntity<ApiResponse<VideoResponse>> uploadVideo(
             @RequestParam(value = "video", required = false) MultipartFile video,
             @RequestParam(value = "videoFile", required = false) MultipartFile videoFile,
+            @RequestParam(value = "photos", required = false) List<MultipartFile> photos,
+            @RequestParam(value = "videoFiles", required = false) List<MultipartFile> videoFiles,
+            @RequestParam(value = "files", required = false) List<MultipartFile> files,
             @RequestParam(value = "videoPath", required = false) String videoPath,
             @RequestParam(value = "videoUrl", required = false) String videoUrl,
             @RequestParam(value = "thumbnail", required = false) MultipartFile thumbnail,
@@ -140,12 +189,19 @@ public class VideoController {
         MultipartFile effectiveVideoFile = (video != null && !video.isEmpty()) ? video : videoFile;
         MultipartFile effectiveThumbnailFile = (thumbnail != null && !thumbnail.isEmpty()) ? thumbnail : thumbnailFile;
 
+        List<MultipartFile> effectiveMediaFiles = (photos != null && !photos.isEmpty()) ? photos
+                : ((videoFiles != null && !videoFiles.isEmpty()) ? videoFiles : files);
+
         String directPath = videoPath != null && !videoPath.isBlank() 
                 ? videoPath.trim() 
                 : (videoUrl != null && !videoUrl.isBlank() ? videoUrl.trim() : null);
 
-        if ((effectiveVideoFile == null || effectiveVideoFile.isEmpty()) && (directPath == null || directPath.isBlank())) {
-            throw new IllegalArgumentException("Either video/photo file or video/photo path must be provided");
+        boolean hasSingleFile = (effectiveVideoFile != null && !effectiveVideoFile.isEmpty());
+        boolean hasMultipleFiles = (effectiveMediaFiles != null && !effectiveMediaFiles.isEmpty());
+        boolean hasDirectPath = (directPath != null && !directPath.isBlank());
+
+        if (!hasSingleFile && !hasMultipleFiles && !hasDirectPath) {
+            throw new IllegalArgumentException("Either video/photo file(s) or video/photo path must be provided");
         }
 
         String effectiveCaption = (caption != null && !caption.isBlank())
@@ -158,6 +214,7 @@ public class VideoController {
                 description,
                 effectiveCaption,
                 effectiveVideoFile,
+                effectiveMediaFiles,
                 directPath,
                 effectiveThumbnailFile,
                 thumbnailPath,

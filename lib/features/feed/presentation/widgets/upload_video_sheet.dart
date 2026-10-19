@@ -12,22 +12,33 @@ import '../../../profile/data/datasources/profile_sync_service.dart';
 
 class UploadVideoSheet extends StatefulWidget {
   final PlatformFile? initialFile;
+  final List<PlatformFile>? initialFiles;
   final PlatformFile? initialThumbnail;
 
   const UploadVideoSheet({
     super.key,
     this.initialFile,
+    this.initialFiles,
     this.initialThumbnail,
   });
 
-  static Future<VideoModel?> show(BuildContext context, {PlatformFile? initialFile, PlatformFile? initialThumbnail}) {
+  static Future<VideoModel?> show(
+    BuildContext context, {
+    PlatformFile? initialFile,
+    List<PlatformFile>? initialFiles,
+    PlatformFile? initialThumbnail,
+  }) {
     return showModalBottomSheet<VideoModel>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black87,
-      builder: (ctx) => UploadVideoSheet(initialFile: initialFile, initialThumbnail: initialThumbnail),
+      builder: (ctx) => UploadVideoSheet(
+        initialFile: initialFile,
+        initialFiles: initialFiles,
+        initialThumbnail: initialThumbnail,
+      ),
     );
   }
 
@@ -41,6 +52,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   final TokenStorage _tokenStorage = TokenStorage.instance;
 
   PlatformFile? _selectedFile;
+  List<PlatformFile> _selectedFiles = [];
   PlatformFile? _selectedThumbnail;
 
   final TextEditingController _captionController = TextEditingController();
@@ -57,8 +69,12 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   @override
   void initState() {
     super.initState();
-    if (widget.initialFile != null) {
+    if (widget.initialFiles != null && widget.initialFiles!.isNotEmpty) {
+      _selectedFiles = List.from(widget.initialFiles!);
+      _selectedFile = _selectedFiles.first;
+    } else if (widget.initialFile != null) {
       _selectedFile = widget.initialFile;
+      _selectedFiles = [widget.initialFile!];
     }
     if (widget.initialThumbnail != null) {
       _selectedThumbnail = widget.initialThumbnail;
@@ -69,9 +85,15 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   @override
   void didUpdateWidget(UploadVideoSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialFile != oldWidget.initialFile && widget.initialFile != null) {
+    if (widget.initialFiles != null && widget.initialFiles != oldWidget.initialFiles) {
+      setState(() {
+        _selectedFiles = List.from(widget.initialFiles!);
+        _selectedFile = _selectedFiles.isNotEmpty ? _selectedFiles.first : null;
+      });
+    } else if (widget.initialFile != oldWidget.initialFile && widget.initialFile != null) {
       setState(() {
         _selectedFile = widget.initialFile;
+        _selectedFiles = [widget.initialFile!];
       });
     }
     if (widget.initialThumbnail != oldWidget.initialThumbnail && widget.initialThumbnail != null) {
@@ -131,17 +153,157 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
     }
   }
 
-  bool get _isSelectedFileImage =>
-      _selectedFile != null &&
-      RegExp(r'\.(jpg|jpeg|png|webp|gif)$', caseSensitive: false).hasMatch(_selectedFile!.name);
+  bool _isImageFile(PlatformFile file) =>
+      RegExp(r'\.(jpg|jpeg|png|webp|gif)$', caseSensitive: false).hasMatch(file.name);
+
+  bool get _isSelectedFileImage {
+    if (_selectedFiles.isNotEmpty) {
+      return _isImageFile(_selectedFiles.first);
+    }
+    return _selectedFile != null && _isImageFile(_selectedFile!);
+  }
+
+  bool get _isMultiImage => _isSelectedFileImage && _selectedFiles.length > 1;
 
   Future<void> _pickVideo() async {
     try {
       // 1. Try ImagePicker first (native Gallery / Media Library on mobile & web)
       try {
         final picker = ImagePicker();
-        final xFile = await picker.pickMedia();
-        if (xFile != null) {
+        List<XFile> pickedList = [];
+
+        try {
+          pickedList = await picker.pickMultipleMedia();
+        } catch (_) {
+          // Fallback to pickMedia if pickMultipleMedia is unsupported
+          final singleMedia = await picker.pickMedia();
+          if (singleMedia != null) {
+            pickedList = [singleMedia];
+          }
+        }
+
+        if (pickedList.isNotEmpty) {
+          final List<PlatformFile> parsed = [];
+          for (final xFile in pickedList) {
+            int size = 0;
+            Uint8List? bytes;
+            if (xFile.path.isNotEmpty) {
+              final file = File(xFile.path);
+              if (file.existsSync()) {
+                size = file.lengthSync();
+                if (size <= 25 * 1024 * 1024) {
+                  bytes = await file.readAsBytes();
+                }
+              }
+            }
+            if (bytes == null && size == 0) {
+              bytes = await xFile.readAsBytes();
+              size = bytes.length;
+            }
+
+            parsed.add(PlatformFile(
+              name: xFile.name.isNotEmpty ? xFile.name : 'media_upload.mp4',
+              size: size,
+              bytes: bytes,
+              path: xFile.path.isNotEmpty ? xFile.path : null,
+            ));
+          }
+
+          // Invariant: Video uploads are strictly single file at a time!
+          final hasVideo = parsed.any((f) => !_isImageFile(f));
+          if (hasVideo) {
+            final firstVideo = parsed.firstWhere(
+              (f) => !_isImageFile(f),
+              orElse: () => parsed.first,
+            );
+            setState(() {
+              _selectedFiles = [firstVideo];
+              _selectedFile = firstVideo;
+              _errorMessage = parsed.length > 1 ? 'Videos can only be posted one at a time. The first video was selected.' : null;
+            });
+          } else {
+            // All images: take up to 10 photos
+            final limited = parsed.take(10).toList();
+            setState(() {
+              _selectedFiles = limited;
+              _selectedFile = limited.first;
+              _errorMessage = null;
+            });
+          }
+          return;
+        } else {
+          return;
+        }
+      } catch (pickerErr) {
+        debugPrint('[UploadVideoSheet] ImagePicker fell back or unavailable: $pickerErr');
+      }
+
+      // 2. Fallback to FilePicker (desktop or alternate picker)
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['mp4', 'mov', 'mkv', 'webm', 'jpg', 'jpeg', 'png', 'webp', 'gif'],
+        allowMultiple: true,
+        withData: false,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final List<PlatformFile> parsed = [];
+        for (final picked in result.files) {
+          Uint8List? bytes = picked.bytes;
+          if (bytes == null && picked.path != null) {
+            final file = File(picked.path!);
+            if (file.existsSync() && file.lengthSync() <= 25 * 1024 * 1024) {
+              bytes = await file.readAsBytes();
+            }
+          }
+          parsed.add(PlatformFile(
+            name: picked.name,
+            size: picked.size,
+            bytes: bytes,
+            path: picked.path,
+          ));
+        }
+
+        final hasVideo = parsed.any((f) => !_isImageFile(f));
+        if (hasVideo) {
+          final firstVideo = parsed.firstWhere(
+            (f) => !_isImageFile(f),
+            orElse: () => parsed.first,
+          );
+          setState(() {
+            _selectedFiles = [firstVideo];
+            _selectedFile = firstVideo;
+            _errorMessage = parsed.length > 1 ? 'Videos can only be posted one at a time. The first video was selected.' : null;
+          });
+        } else {
+          final limited = parsed.take(10).toList();
+          setState(() {
+            _selectedFiles = limited;
+            _selectedFile = limited.first;
+            _errorMessage = null;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        String msg = 'Could not select file: $e';
+        if (e.toString().contains('MissingPluginException')) {
+          msg = 'File picker plugin requires an app restart. Please rebuild/restart the app or pick from Gallery.';
+        }
+        setState(() {
+          _errorMessage = msg;
+        });
+      }
+    }
+  }
+
+  Future<void> _pickMorePhotos() async {
+    try {
+      final picker = ImagePicker();
+      final xFiles = await picker.pickMultiImage();
+      if (xFiles.isNotEmpty) {
+        for (final xFile in xFiles) {
+          if (_selectedFiles.length >= 10) break;
           int size = 0;
           Uint8List? bytes;
           if (xFile.path.isNotEmpty) {
@@ -157,60 +319,35 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
             bytes = await xFile.readAsBytes();
             size = bytes.length;
           }
-
-          setState(() {
-            _selectedFile = PlatformFile(
-              name: xFile.name.isNotEmpty ? xFile.name : 'media_upload.mp4',
-              size: size,
-              bytes: bytes,
-              path: xFile.path.isNotEmpty ? xFile.path : null,
-            );
-            _errorMessage = null;
-          });
-          return;
-        } else {
-          // User closed the picker dialog
-          return;
-        }
-      } catch (pickerErr) {
-        debugPrint('[UploadVideoSheet] ImagePicker pickMedia fell back or unavailable: $pickerErr');
-      }
-
-      // 2. Fallback to FilePicker (for desktop Windows/macOS/Linux or file explorer)
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['mp4', 'mov', 'mkv', 'webm', 'jpg', 'jpeg', 'png', 'webp', 'gif'],
-        allowMultiple: false,
-        withData: false,
-      );
-
-      if (result != null && result.files.isNotEmpty) {
-        final picked = result.files.first;
-        Uint8List? bytes = picked.bytes;
-        if (bytes == null && picked.path != null) {
-          final file = File(picked.path!);
-          if (file.existsSync() && file.lengthSync() <= 25 * 1024 * 1024) {
-            bytes = await file.readAsBytes();
-          }
+          _selectedFiles.add(PlatformFile(
+            name: xFile.name.isNotEmpty ? xFile.name : 'photo_${_selectedFiles.length + 1}.jpg',
+            size: size,
+            bytes: bytes,
+            path: xFile.path.isNotEmpty ? xFile.path : null,
+          ));
         }
         setState(() {
-          _selectedFile = PlatformFile(
-            name: picked.name,
-            size: picked.size,
-            bytes: bytes,
-            path: picked.path,
-          );
+          _selectedFile = _selectedFiles.first;
           _errorMessage = null;
         });
+        return;
       }
     } catch (e) {
-      if (mounted) {
-        String msg = 'Could not select file: $e';
-        if (e.toString().contains('MissingPluginException')) {
-          msg = 'File picker plugin requires an app restart. Please rebuild/restart the app or pick from Gallery.';
-        }
+      // Fallback to FilePicker
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+        allowMultiple: true,
+        withData: false,
+      );
+      if (result != null && result.files.isNotEmpty) {
         setState(() {
-          _errorMessage = msg;
+          for (final picked in result.files) {
+            if (_selectedFiles.length >= 10) break;
+            _selectedFiles.add(picked);
+          }
+          _selectedFile = _selectedFiles.first;
+          _errorMessage = null;
         });
       }
     }
@@ -283,7 +420,8 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   }
 
   Future<void> _handleUpload() async {
-    if (_selectedFile == null) {
+    final currentFile = _selectedFiles.isNotEmpty ? _selectedFiles.first : _selectedFile;
+    if (currentFile == null) {
       setState(() {
         _errorMessage = 'Please select a video or photo file.';
       });
@@ -328,11 +466,62 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
         return;
       }
 
+      if (_isMultiImage) {
+        // Multi-image carousel upload
+        final List<String> paths = [];
+        final List<List<int>> bytesList = [];
+        final List<String> filenames = [];
+
+        for (final file in _selectedFiles) {
+          filenames.add(file.name);
+          if (file.path != null && file.path!.isNotEmpty) {
+            paths.add(file.path!);
+          } else if (file.bytes != null && file.bytes!.isNotEmpty) {
+            bytesList.add(file.bytes!);
+          }
+        }
+
+        final newVideo = await _feedDataSource.uploadVideo(
+          caption: caption,
+          imagePaths: paths.isNotEmpty ? paths : null,
+          imageBytesList: bytesList.isNotEmpty ? bytesList : null,
+          imageFilenames: filenames,
+          tags: tags,
+        );
+
+        VideoFeedManager.instance.prependVideo(newVideo);
+        ProfileSyncService.instance.notifyVideoUploaded(newVideo);
+
+        if (mounted) {
+          Navigator.of(context).pop(newVideo);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: const Color(0xFF1E1E24),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Photo carousel posted (${_selectedFiles.length} photos)! Now appearing in feed.',
+                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
       final isImage = _isSelectedFileImage;
 
-      List<int>? videoBytes = _selectedFile!.bytes;
-      if ((videoBytes == null || videoBytes.isEmpty) && _selectedFile!.path != null) {
-        final localFile = File(_selectedFile!.path!);
+      List<int>? videoBytes = currentFile.bytes;
+      if ((videoBytes == null || videoBytes.isEmpty) && currentFile.path != null) {
+        final localFile = File(currentFile.path!);
         if (localFile.existsSync() && localFile.lengthSync() <= 25 * 1024 * 1024) {
           videoBytes = await localFile.readAsBytes();
         }
@@ -348,9 +537,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
       final newVideo = await _feedDataSource.uploadVideo(
         caption: caption,
-        videoPath: _selectedFile!.path,
+        videoPath: currentFile.path,
         videoBytes: videoBytes,
-        videoFilename: _selectedFile!.name,
+        videoFilename: currentFile.name,
         thumbnailPath: isImage ? null : _selectedThumbnail?.path,
         thumbnailBytes: thumbnailBytes,
         thumbnailFilename: isImage ? 'thumbnail.jpg' : (_selectedThumbnail?.name ?? 'thumbnail.jpg'),
@@ -553,7 +742,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                 ),
                 const SizedBox(height: 8),
 
-                if (_selectedFile == null) ...[
+                if (_selectedFile == null && _selectedFiles.isEmpty) ...[
                   // Unselected State: Files / Downloads Picker Card
                   InkWell(
                     key: const Key('upload_pick_video_button'),
@@ -605,8 +794,8 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                       ),
                     ),
                   ),
-                ] else ...[
-                  // Selected State: Preview Tile
+                ] else if (_isMultiImage) ...[
+                  // Multi-Image Carousel Selected State
                   Container(
                     key: const Key('upload_selected_video_tile'),
                     padding: const EdgeInsets.all(14),
@@ -614,33 +803,209 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                       color: const Color(0xFF1E1E24),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.2),
+                        color: Colors.blueAccent.withValues(alpha: 0.4),
                         width: 1.0,
                       ),
                     ),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (_isSelectedFileImage)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: Container(
-                              width: 48,
-                              height: 48,
-                              color: const Color(0xFF2B2B36),
-                              child: _selectedFile!.bytes != null
-                                  ? Image.memory(
-                                      _selectedFile!.bytes!,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => const Icon(
-                                        Icons.image_outlined,
-                                        color: Colors.white70,
-                                        size: 24,
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.blueAccent.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.4)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.view_carousel_rounded, color: Colors.blueAccent, size: 14),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Photo Carousel (${_selectedFiles.length}/10)',
+                                    style: const TextStyle(
+                                      color: Colors.blueAccent,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Spacer(),
+                            if (_selectedFiles.length < 10)
+                              TextButton.icon(
+                                key: const Key('upload_add_more_photos_button'),
+                                onPressed: _isUploading ? null : _pickMorePhotos,
+                                icon: const Icon(Icons.add_rounded, size: 16, color: Colors.white70),
+                                label: const Text('Add', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
+                            IconButton(
+                              key: const Key('upload_change_video_button'),
+                              icon: const Icon(Icons.sync_rounded, color: Colors.white70, size: 20),
+                              tooltip: 'Reselect photos',
+                              onPressed: _isUploading ? null : _pickVideo,
+                            ),
+                            IconButton(
+                              key: const Key('upload_remove_video_button'),
+                              icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 20),
+                              tooltip: 'Clear all',
+                              onPressed: _isUploading
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        _selectedFile = null;
+                                        _selectedFiles.clear();
+                                      });
+                                    },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 74,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _selectedFiles.length + (_selectedFiles.length < 10 ? 1 : 0),
+                            separatorBuilder: (_, __) => const SizedBox(width: 8),
+                            itemBuilder: (context, index) {
+                              if (index == _selectedFiles.length) {
+                                return InkWell(
+                                  onTap: _isUploading ? null : _pickMorePhotos,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    width: 64,
+                                    height: 74,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.05),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: Colors.white24),
+                                    ),
+                                    child: const Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.add_rounded, color: Colors.white70, size: 22),
+                                        SizedBox(height: 2),
+                                        Text('Add', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }
+                              final file = _selectedFiles[index];
+                              return Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                      width: 64,
+                                      height: 74,
+                                      color: const Color(0xFF2B2B36),
+                                      child: file.bytes != null && file.bytes!.isNotEmpty
+                                          ? Image.memory(file.bytes!, fit: BoxFit.cover)
+                                          : (file.path != null && File(file.path!).existsSync())
+                                              ? Image.file(File(file.path!), fit: BoxFit.cover)
+                                              : const Icon(Icons.image_rounded, color: Colors.white54),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 4,
+                                    left: 4,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withValues(alpha: 0.7),
+                                        borderRadius: BorderRadius.circular(6),
                                       ),
-                                    )
-                                  : (_selectedFile!.path != null &&
-                                          File(_selectedFile!.path!).existsSync())
-                                      ? Image.file(
-                                          File(_selectedFile!.path!),
+                                      child: Text(
+                                        '${index + 1}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: InkWell(
+                                      key: Key('upload_carousel_remove_$index'),
+                                      onTap: _isUploading
+                                          ? null
+                                          : () {
+                                              setState(() {
+                                                _selectedFiles.removeAt(index);
+                                                if (_selectedFiles.isNotEmpty) {
+                                                  _selectedFile = _selectedFiles.first;
+                                                } else {
+                                                  _selectedFile = null;
+                                                }
+                                              });
+                                            },
+                                      child: Container(
+                                        padding: const EdgeInsets.all(2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withValues(alpha: 0.75),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(Icons.close_rounded, size: 12, color: Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${_selectedFiles.first.name} (+${_selectedFiles.length - 1} more)',
+                          style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 11),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  // Selected State: Single File Preview Tile
+                  Builder(
+                    builder: (context) {
+                      final currentDisplayFile = _selectedFiles.isNotEmpty ? _selectedFiles.first : _selectedFile!;
+                      return Container(
+                        key: const Key('upload_selected_video_tile'),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1E24),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            width: 1.0,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            if (_isSelectedFileImage)
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  width: 48,
+                                  height: 48,
+                                  color: const Color(0xFF2B2B36),
+                                  child: currentDisplayFile.bytes != null
+                                      ? Image.memory(
+                                          currentDisplayFile.bytes!,
                                           fit: BoxFit.cover,
                                           errorBuilder: (_, __, ___) => const Icon(
                                             Icons.image_outlined,
@@ -648,74 +1013,95 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                                             size: 24,
                                           ),
                                         )
-                                      : const Icon(
-                                          Icons.image_rounded,
-                                          color: Colors.white70,
-                                          size: 24,
-                                        ),
-                            ),
-                          )
-                        else
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(
-                              Icons.movie_creation_rounded,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                          ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _selectedFile!.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                      : (currentDisplayFile.path != null &&
+                                              File(currentDisplayFile.path!).existsSync())
+                                          ? Image.file(
+                                              File(currentDisplayFile.path!),
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => const Icon(
+                                                Icons.image_outlined,
+                                                color: Colors.white70,
+                                                size: 24,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.image_rounded,
+                                              color: Colors.white70,
+                                              size: 24,
+                                            ),
+                                ),
+                              )
+                            else
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(
+                                  Icons.movie_creation_rounded,
                                   color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
+                                  size: 24,
                                 ),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _formatFileSize(_selectedFile!.size),
-                                style: const TextStyle(
-                                  color: Color(0xFF8E8E93),
-                                  fontSize: 12,
-                                ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    currentDisplayFile.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _formatFileSize(currentDisplayFile.size),
+                                    style: const TextStyle(
+                                      color: Color(0xFF8E8E93),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (_isSelectedFileImage)
+                              IconButton(
+                                key: const Key('upload_add_more_photos_button'),
+                                icon: const Icon(Icons.add_photo_alternate_rounded, color: Colors.blueAccent, size: 20),
+                                tooltip: 'Add more photos to make carousel',
+                                onPressed: _isUploading ? null : _pickMorePhotos,
+                              ),
+                            IconButton(
+                              key: const Key('upload_change_video_button'),
+                              icon: const Icon(Icons.sync_rounded, color: Colors.white70, size: 20),
+                              tooltip: _isSelectedFileImage ? 'Change photo' : 'Change video',
+                              onPressed: _isUploading ? null : _pickVideo,
+                            ),
+                            IconButton(
+                              key: const Key('upload_remove_video_button'),
+                              icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 20),
+                              tooltip: 'Remove',
+                              onPressed: _isUploading
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        _selectedFile = null;
+                                        _selectedFiles.clear();
+                                      });
+                                    },
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          key: const Key('upload_change_video_button'),
-                          icon: const Icon(Icons.sync_rounded, color: Colors.white70, size: 20),
-                          tooltip: _isSelectedFileImage ? 'Change photo' : 'Change video',
-                          onPressed: _isUploading ? null : _pickVideo,
-                        ),
-                        IconButton(
-                          key: const Key('upload_remove_video_button'),
-                          icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 20),
-                          tooltip: 'Remove',
-                          onPressed: _isUploading
-                              ? null
-                              : () {
-                                  setState(() {
-                                    _selectedFile = null;
-                                  });
-                                },
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 ],
 
@@ -1064,7 +1450,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                               ),
                               const SizedBox(width: 12),
                               Text(
-                                _isSelectedFileImage ? 'Uploading Photo...' : 'Uploading Video...',
+                                _isMultiImage
+                                    ? 'Uploading Carousel...'
+                                    : (_isSelectedFileImage ? 'Uploading Photo...' : 'Uploading Video...'),
                                 style: const TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
@@ -1079,7 +1467,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                               const Icon(Icons.arrow_upward_rounded, size: 20, color: Colors.black),
                               const SizedBox(width: 8),
                               Text(
-                                _isSelectedFileImage ? 'Post Photo' : 'Post Video',
+                                _isMultiImage
+                                    ? 'Post Carousel (${_selectedFiles.length} Photos)'
+                                    : (_isSelectedFileImage ? 'Post Photo' : 'Post Video'),
                                 style: const TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,

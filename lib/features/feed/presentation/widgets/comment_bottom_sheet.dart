@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../../profile/presentation/screens/public_profile_screen.dart';
 import '../../data/datasources/feed_remote_data_source.dart';
 import '../../data/models/comment_model.dart';
@@ -47,7 +49,13 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
 
   Future<void> _loadComments() async {
     if (widget.videoId == null) {
-      _loadFallbackMock();
+      if (mounted) {
+        setState(() {
+          _comments = [];
+          _commentCount = 0;
+          _isLoading = false;
+        });
+      }
       return;
     }
 
@@ -55,129 +63,110 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
       final comments = await _dataSource.getComments(widget.videoId!);
       if (mounted) {
         setState(() {
-          if (comments.isNotEmpty) {
-            _comments = comments;
-            _commentCount = comments.length;
-          } else {
-            _loadFallbackMock();
-          }
+          _comments = comments;
+          _commentCount = comments.length;
           _isLoading = false;
         });
       }
     } catch (_) {
       if (mounted) {
-        _loadFallbackMock();
+        setState(() {
+          _comments = [];
+          _isLoading = false;
+        });
       }
     }
-  }
-
-  void _loadFallbackMock() {
-    if (!mounted) return;
-    setState(() {
-      _comments = [
-        CommentModel(
-          id: 1,
-          videoId: widget.videoId ?? 1,
-          userId: 101,
-          username: 'Ractz',
-          displayName: 'Ractz',
-          avatarUrl: 'https://i.pravatar.cc/150?img=14',
-          content: 'លេងអន់ចឹងលុប game ចោលទៅ ah bot',
-          createdAt: DateTime.now().subtract(const Duration(minutes: 9)),
-        ),
-        CommentModel(
-          id: 2,
-          videoId: widget.videoId ?? 1,
-          userId: 102,
-          username: 'Hengg',
-          displayName: 'Hengg',
-          avatarUrl: 'https://i.pravatar.cc/150?img=11',
-          content: 'Your Product so good😘',
-          createdAt: DateTime.now().subtract(const Duration(minutes: 32)),
-        ),
-        CommentModel(
-          id: 3,
-          videoId: widget.videoId ?? 1,
-          userId: 103,
-          username: 'សំពៀន',
-          displayName: 'សំពៀន',
-          avatarUrl: 'https://i.pravatar.cc/150?img=15',
-          content: 'មុខភ័យសង្ឃឹមជួយ',
-          createdAt: DateTime.now().subtract(const Duration(minutes: 45)),
-        ),
-      ];
-      if (_commentCount == 0) {
-        _commentCount = _comments.length;
-      }
-      _isLoading = false;
-    });
   }
 
   Future<void> _submitComment() async {
     final text = _commentController.text.trim();
     if (text.isEmpty || _isPosting) return;
 
-    setState(() {
-      _isPosting = true;
-    });
+    HapticFeedback.lightImpact();
 
     final targetVideoId = widget.videoId ?? 1;
+    final currentParentId = _replyToParentId;
+    final tempId = DateTime.now().millisecondsSinceEpoch;
 
+    // Current authenticated user details
+    final myUser = ProfileSyncService.instance.cachedMyProfile;
+    final myDisplayName = ProfileSyncService.instance.currentUserDisplayName;
+    final myUsername = ProfileSyncService.instance.currentUsername;
+    final myAvatar = ProfileSyncService.instance.currentUserAvatar;
+
+    final optimisticComment = CommentModel(
+      id: tempId,
+      videoId: targetVideoId,
+      userId: myUser?.id ?? 1,
+      username: myUsername,
+      displayName: myDisplayName,
+      avatarUrl: myAvatar,
+      content: text,
+      parentId: currentParentId,
+      createdAt: DateTime.now(),
+    );
+
+    // 1. IMMEDIATELY update UI: insert comment, clear text, update counters
+    setState(() {
+      _isPosting = true;
+      if (currentParentId != null) {
+        final parentIdx = _comments.indexWhere((c) => c.id == currentParentId);
+        if (parentIdx != -1) {
+          final parent = _comments[parentIdx];
+          final updatedReplies = List<CommentModel>.from(parent.replies)..add(optimisticComment);
+          _comments[parentIdx] = parent.copyWith(replies: updatedReplies);
+        } else {
+          _comments.insert(0, optimisticComment);
+        }
+      } else {
+        _comments.insert(0, optimisticComment);
+      }
+      _commentCount++;
+      _commentController.clear();
+      _replyToParentId = null;
+      _replyToUsername = null;
+    });
+
+    // 2. IMMEDIATELY notify video feed card and global profile service
+    widget.onCommentCountChanged?.call(_commentCount);
+    ProfileSyncService.instance.notifyVideoInteraction(
+      VideoInteractionEvent(
+        videoId: targetVideoId,
+        commentCount: _commentCount,
+      ),
+    );
+
+    // 3. Post to backend in background and sync real server ID
     try {
-      final newComment = await _dataSource.postComment(
+      final realComment = await _dataSource.postComment(
         targetVideoId,
         text,
-        parentId: _replyToParentId,
+        parentId: currentParentId,
       );
 
       if (mounted) {
         setState(() {
-          if (_replyToParentId != null) {
-            // Find parent and append reply
-            final parentIdx = _comments.indexWhere((c) => c.id == _replyToParentId);
+          _isPosting = false;
+          if (currentParentId != null) {
+            final parentIdx = _comments.indexWhere((c) => c.id == currentParentId);
             if (parentIdx != -1) {
               final parent = _comments[parentIdx];
-              final updatedReplies = List<CommentModel>.from(parent.replies)..add(newComment);
-              _comments[parentIdx] = parent.copyWith(replies: updatedReplies);
-            } else {
-              _comments.insert(0, newComment);
+              final replies = parent.replies.map((r) => r.id == tempId ? realComment : r).toList();
+              _comments[parentIdx] = parent.copyWith(replies: replies);
             }
           } else {
-            _comments.insert(0, newComment);
+            final idx = _comments.indexWhere((c) => c.id == tempId);
+            if (idx != -1) {
+              _comments[idx] = realComment;
+            }
           }
-          _commentCount++;
-          _commentController.clear();
-          _replyToParentId = null;
-          _replyToUsername = null;
-          _isPosting = false;
         });
-
-        widget.onCommentCountChanged?.call(_commentCount);
       }
-    } catch (e) {
-      // Local optimistic fallback if offline
+    } catch (_) {
       if (mounted) {
-        final fallbackComment = CommentModel(
-          id: DateTime.now().millisecondsSinceEpoch,
-          videoId: targetVideoId,
-          userId: 999,
-          username: 'me',
-          displayName: 'You',
-          content: text,
-          parentId: _replyToParentId,
-          createdAt: DateTime.now(),
-        );
-
         setState(() {
-          _comments.insert(0, fallbackComment);
-          _commentCount++;
-          _commentController.clear();
-          _replyToParentId = null;
-          _replyToUsername = null;
           _isPosting = false;
         });
-
-        widget.onCommentCountChanged?.call(_commentCount);
       }
     }
   }
@@ -239,16 +228,39 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                 ? const Center(
                     child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                   )
-                : ListView.builder(
-                    itemCount: _comments.length,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemBuilder: (context, index) {
-                      return _CommentCard(
-                        comment: _comments[index],
-                        onReply: () => _onReplyTap(_comments[index]),
-                      );
-                    },
-                  ),
+                : _comments.isEmpty
+                    ? const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.chat_bubble_outline_rounded, color: Colors.white24, size: 48),
+                            SizedBox(height: 12),
+                            Text(
+                              'No comments yet',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Be the first to comment!',
+                              style: TextStyle(color: Colors.white38, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: _comments.length,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemBuilder: (context, index) {
+                          return _CommentCard(
+                            comment: _comments[index],
+                            onReply: () => _onReplyTap(_comments[index]),
+                          );
+                        },
+                      ),
           ),
 
           // Reply Indicator Banner

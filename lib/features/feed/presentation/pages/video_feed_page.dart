@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import '../../../../app/app.dart';
 import '../../data/datasources/feed_remote_data_source.dart';
@@ -69,6 +70,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
       _fetchFeed();
     }
     ProfileSyncService.instance.followEvents.addListener(_onGlobalFollowChanged);
+    ProfileSyncService.instance.videoInteractionEvents.addListener(_onGlobalVideoInteraction);
     VideoFeedManager.instance.latestUploadedVideoNotifier.addListener(_onNewVideoUploaded);
   }
 
@@ -86,9 +88,37 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
   @override
   void dispose() {
     VideoFeedManager.instance.latestUploadedVideoNotifier.removeListener(_onNewVideoUploaded);
+    ProfileSyncService.instance.videoInteractionEvents.removeListener(_onGlobalVideoInteraction);
     ProfileSyncService.instance.followEvents.removeListener(_onGlobalFollowChanged);
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _onGlobalVideoInteraction() {
+    if (!mounted) return;
+    final event = ProfileSyncService.instance.videoInteractionEvents.value;
+    if (event == null) return;
+
+    final index = _videos.indexWhere((v) => v.id == event.videoId);
+    if (index != -1) {
+      final current = _videos[index];
+      final updated = current.copyWith(
+        isLiked: event.isLiked,
+        likeCount: event.likeCount,
+        isSaved: event.isSaved,
+        saveCount: event.saveCount,
+        commentCount: event.commentCount,
+      );
+      if (updated.isLiked != current.isLiked ||
+          updated.likeCount != current.likeCount ||
+          updated.isSaved != current.isSaved ||
+          updated.saveCount != current.saveCount ||
+          updated.commentCount != current.commentCount) {
+        setState(() {
+          _videos[index] = updated;
+        });
+      }
+    }
   }
 
   void _onGlobalFollowChanged() {
@@ -194,51 +224,101 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
   }
 
   void _onLikeToggled(int index) async {
+    HapticFeedback.lightImpact();
     final video = _videos[index];
     final newLiked = !video.isLiked;
     final newLikeCount = newLiked ? video.likeCount + 1 : (video.likeCount > 0 ? video.likeCount - 1 : 0);
 
+    final updated = video.copyWith(
+      isLiked: newLiked,
+      likeCount: newLikeCount,
+    );
+
     setState(() {
-      _videos[index] = video.copyWith(
+      _videos[index] = updated;
+    });
+
+    ProfileSyncService.instance.notifyVideoInteraction(
+      VideoInteractionEvent(
+        videoId: video.id,
         isLiked: newLiked,
         likeCount: newLikeCount,
-      );
-    });
+        video: updated,
+      ),
+    );
 
     try {
       final res = await _dataSource.toggleLike(video.id, currentlyLiked: video.isLiked);
       if (mounted && res['likeCount'] != null) {
-        setState(() {
-          _videos[index] = _videos[index].copyWith(
-            isLiked: res['isLiked'] as bool?,
-            likeCount: res['likeCount'] as int?,
+        final serverLikeCount = res['likeCount'] as int;
+        final serverLiked = res['isLiked'] as bool? ?? newLiked;
+        if (serverLikeCount != _videos[index].likeCount || serverLiked != _videos[index].isLiked) {
+          final confirmed = _videos[index].copyWith(
+            isLiked: serverLiked,
+            likeCount: serverLikeCount,
           );
-        });
+          setState(() {
+            _videos[index] = confirmed;
+          });
+          ProfileSyncService.instance.notifyVideoInteraction(
+            VideoInteractionEvent(
+              videoId: video.id,
+              isLiked: serverLiked,
+              likeCount: serverLikeCount,
+              video: confirmed,
+            ),
+          );
+        }
       }
     } catch (_) {}
   }
 
   void _onSaveToggled(int index) async {
+    HapticFeedback.lightImpact();
     final video = _videos[index];
     final newSaved = !video.isSaved;
     final newSaveCount = newSaved ? video.saveCount + 1 : (video.saveCount > 0 ? video.saveCount - 1 : 0);
 
+    final updated = video.copyWith(
+      isSaved: newSaved,
+      saveCount: newSaveCount,
+    );
+
     setState(() {
-      _videos[index] = video.copyWith(
+      _videos[index] = updated;
+    });
+
+    ProfileSyncService.instance.notifyVideoInteraction(
+      VideoInteractionEvent(
+        videoId: video.id,
         isSaved: newSaved,
         saveCount: newSaveCount,
-      );
-    });
+        video: updated,
+      ),
+    );
 
     try {
       final res = await _dataSource.toggleSave(video.id, currentlySaved: video.isSaved);
       if (mounted && res['saveCount'] != null) {
-        setState(() {
-          _videos[index] = _videos[index].copyWith(
-            isSaved: res['isSaved'] as bool?,
-            saveCount: res['saveCount'] as int?,
+        final serverSaveCount = res['saveCount'] as int;
+        final serverSaved = res['isSaved'] as bool? ?? newSaved;
+        if (serverSaveCount != _videos[index].saveCount || serverSaved != _videos[index].isSaved) {
+          final confirmed = _videos[index].copyWith(
+            isSaved: serverSaved,
+            saveCount: serverSaveCount,
           );
-        });
+          setState(() {
+            _videos[index] = confirmed;
+          });
+          ProfileSyncService.instance.notifyVideoInteraction(
+            VideoInteractionEvent(
+              videoId: video.id,
+              isSaved: serverSaved,
+              saveCount: serverSaveCount,
+              video: confirmed,
+            ),
+          );
+        }
       }
     } catch (_) {}
   }
@@ -317,9 +397,17 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
                   onLikeTap: () => _onLikeToggled(index),
                   onSaveTap: () => _onSaveToggled(index),
                   onCommentCountChanged: (newCount) {
+                    final updated = _videos[index].copyWith(commentCount: newCount);
                     setState(() {
-                      _videos[index] = _videos[index].copyWith(commentCount: newCount);
+                      _videos[index] = updated;
                     });
+                    ProfileSyncService.instance.notifyVideoInteraction(
+                      VideoInteractionEvent(
+                        videoId: updated.id,
+                        commentCount: newCount,
+                        video: updated,
+                      ),
+                    );
                   },
                 );
               },
@@ -372,6 +460,8 @@ class _VideoPostWidget extends StatefulWidget {
 class _VideoPostWidgetState extends State<_VideoPostWidget>
     with RouteAware, WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
   VideoPlayerController? _controller;
+  PageController? _imageCarouselController;
+  int _currentImageIndex = 0;
   bool _manuallyPaused = false;
   bool _hasControllerError = false;
   bool _showHeartAnimation = false;
@@ -384,6 +474,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   void initState() {
     super.initState();
     _isFollowing = widget.video.isFollowing;
+    _imageCarouselController = PageController();
     WidgetsBinding.instance.addObserver(this);
 
     if (!widget.video.isImagePost) {
@@ -507,6 +598,12 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
         _controller!.dispose();
         _controller = null;
       }
+      if (oldWidget.video.id != widget.video.id) {
+        _currentImageIndex = 0;
+        if (_imageCarouselController != null && _imageCarouselController!.hasClients) {
+          _imageCarouselController!.jumpToPage(0);
+        }
+      }
       return;
     }
 
@@ -565,6 +662,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   void dispose() {
     routeObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
+    _imageCarouselController?.dispose();
     if (_controller != null) {
       _controller!.removeListener(_videoListener);
       _controller!.dispose();
@@ -645,9 +743,70 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                 ? GestureDetector(
                     onDoubleTap: _handleDoubleTap,
                     behavior: HitTestBehavior.opaque,
-                    child: Center(
-                      child: _buildImagePost(video.videoUrl),
-                    ),
+                    child: widget.video.isMultiImagePost
+                        ? Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              PageView.builder(
+                                controller: _imageCarouselController,
+                                physics: const BouncingScrollPhysics(),
+                                itemCount: widget.video.resolvedMediaUrls.length,
+                                onPageChanged: (index) {
+                                  setState(() {
+                                    _currentImageIndex = index;
+                                  });
+                                },
+                                itemBuilder: (context, index) {
+                                  return Center(
+                                    child: _buildImagePost(widget.video.resolvedMediaUrls[index]),
+                                  );
+                                },
+                              ),
+                              // Round dots pagination indicator
+                              Positioned(
+                                bottom: 125,
+                                left: 0,
+                                right: 0,
+                                child: Center(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(alpha: 0.5),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: Colors.white.withValues(alpha: 0.15),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: List.generate(
+                                        widget.video.resolvedMediaUrls.length,
+                                        (index) {
+                                          final isSelected = index == _currentImageIndex;
+                                          return AnimatedContainer(
+                                            duration: const Duration(milliseconds: 200),
+                                            margin: const EdgeInsets.symmetric(horizontal: 3.5),
+                                            width: isSelected ? 8 : 6,
+                                            height: isSelected ? 8 : 6,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: isSelected
+                                                  ? Colors.white
+                                                  : Colors.white.withValues(alpha: 0.35),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : Center(
+                            child: _buildImagePost(video.videoUrl),
+                          ),
                   )
                 : (_controller != null &&
                         _controller!.value.isInitialized &&
@@ -976,7 +1135,18 @@ class _InteractionButton extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 16.0),
         child: Column(
           children: [
-            Icon(icon, color: color, size: 32),
+            Icon(
+              icon,
+              color: color,
+              size: 32,
+              shadows: const [
+                Shadow(
+                  color: Colors.black45,
+                  blurRadius: 6,
+                  offset: Offset(0, 1),
+                ),
+              ],
+            ),
             if (showLabel) ...[
               const SizedBox(height: 4),
               Text(
@@ -984,7 +1154,14 @@ class _InteractionButton extends StatelessWidget {
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 12,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
+                  shadows: [
+                    Shadow(
+                      color: Colors.black54,
+                      blurRadius: 4,
+                      offset: Offset(0, 1),
+                    ),
+                  ],
                 ),
               ),
             ]

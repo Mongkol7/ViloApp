@@ -40,9 +40,11 @@ class PublicProfileScreen extends StatefulWidget {
 class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   late bool _isFollowing;
-  int _followersCount = ProfileSyncService.instance.mockFollowersCount;
+  int _followersCount = 0;
   UserModel? _loadedUser;
   List<VideoFeedModel> _userVideos = [];
+  List<VideoFeedModel> _savedVideos = [];
+  List<VideoFeedModel> _likedVideos = [];
   bool _isLoading = false;
 
   @override
@@ -50,6 +52,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
     super.initState();
     _tabController = TabController(length: 5, vsync: this, initialIndex: 1);
     _isFollowing = widget.isFollowing;
+    ProfileSyncService.instance.videoInteractionEvents.addListener(_onVideoInteractionEvent);
 
     // Zero-latency instant load: Check initialVideos or in-memory cache
     final identifier = (widget.username != null && widget.username!.isNotEmpty)
@@ -104,14 +107,31 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
             });
           }
         }).catchError((_) {}),
-        FeedRemoteDataSource.instance.getUserVideos(identifier).then((videos) {
-          if (mounted && videos.isNotEmpty) {
+        FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then((videos) {
+          if (mounted) {
             setState(() {
-              _userVideos = videos;
+              _userVideos = videos.isNotEmpty ? videos : (widget.initialVideos ?? []);
+            });
+          }
+        }).catchError((_) {}),
+        FeedRemoteDataSource.instance.getLikedVideos(userId: identifier).then((liked) {
+          if (mounted) {
+            setState(() {
+              _likedVideos = List.from(liked);
             });
           }
         }).catchError((_) {}),
       ]);
+
+      if (ProfileSyncService.instance.isCurrentUser(username: widget.username, id: widget.userId?.toString() ?? identifier)) {
+        FeedRemoteDataSource.instance.getSavedVideos().then((saved) {
+          if (mounted) {
+            setState(() {
+              _savedVideos = List.from(saved);
+            });
+          }
+        }).catchError((_) {});
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -119,8 +139,49 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
 
   @override
   void dispose() {
+    ProfileSyncService.instance.videoInteractionEvents.removeListener(_onVideoInteractionEvent);
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _onVideoInteractionEvent() {
+    final event = ProfileSyncService.instance.videoInteractionEvents.value;
+    if (event == null || !mounted) return;
+
+    setState(() {
+      final idx = _userVideos.indexWhere((v) => v.id == event.videoId);
+      if (idx != -1) {
+        _userVideos[idx] = _userVideos[idx].copyWith(
+          isLiked: event.isLiked,
+          likeCount: event.likeCount,
+          isSaved: event.isSaved,
+          saveCount: event.saveCount,
+          commentCount: event.commentCount,
+        );
+      }
+
+      final likedIdx = _likedVideos.indexWhere((v) => v.id == event.videoId);
+      if (likedIdx != -1) {
+        _likedVideos[likedIdx] = _likedVideos[likedIdx].copyWith(
+          isLiked: event.isLiked,
+          likeCount: event.likeCount,
+          isSaved: event.isSaved,
+          saveCount: event.saveCount,
+          commentCount: event.commentCount,
+        );
+      }
+
+      final savedIdx = _savedVideos.indexWhere((v) => v.id == event.videoId);
+      if (savedIdx != -1) {
+        _savedVideos[savedIdx] = _savedVideos[savedIdx].copyWith(
+          isLiked: event.isLiked,
+          likeCount: event.likeCount,
+          isSaved: event.isSaved,
+          saveCount: event.saveCount,
+          commentCount: event.commentCount,
+        );
+      }
+    });
   }
 
   void _handleBack() {
@@ -277,7 +338,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
                     children: [
                       _buildStatItem(
                         'Following',
-                        '${_loadedUser?.followingCount ?? ProfileSyncService.instance.mockFollowingCount}',
+                        _formatCount(_loadedUser?.followingCount ?? 0),
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
@@ -311,7 +372,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
                         },
                       ),
                       _buildDivider(),
-                      _buildStatItem('Likes', '154K'),
+                      Builder(builder: (context) {
+                        final totalLikes = _userVideos.fold<int>(0, (sum, v) => sum + v.likeCount);
+                        return _buildStatItem('Likes', _formatCount(totalLikes));
+                      }),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -341,7 +405,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
                                       avatarUrl: avatarUrl,
                                       isVerified: isVerified,
                                       followersCount: _followersCount,
-                                      followingCount: ProfileSyncService.instance.mockFollowingCount,
+                                      followingCount: _loadedUser?.followingCount ?? 0,
                                     );
                                 Navigator.of(context).push<UserModel>(
                                   MaterialPageRoute(
@@ -468,11 +532,41 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
             ), // Shop
             CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(3),
+              slivers: buildProfileTabSlivers(
+                3,
+                savedVideos: _savedVideos,
+                isLoading: _isLoading,
+                onSavedVideoTap: (video, index) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => VideoFeedPage(
+                        isActive: true,
+                        initialVideos: _savedVideos,
+                        initialIndex: index,
+                      ),
+                    ),
+                  );
+                },
+              ),
             ), // Saved
             CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(4),
+              slivers: buildProfileTabSlivers(
+                4,
+                likedVideos: _likedVideos,
+                isLoading: _isLoading,
+                onLikedVideoTap: (video, index) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => VideoFeedPage(
+                        isActive: true,
+                        initialVideos: _likedVideos,
+                        initialIndex: index,
+                      ),
+                    ),
+                  );
+                },
+              ),
             ), // Liked
           ],
         ),

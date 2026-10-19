@@ -32,6 +32,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   UserModel? _user;
   List<VideoFeedModel> _myVideos = [];
+  List<VideoFeedModel> _savedVideos = [];
+  List<VideoFeedModel> _likedVideos = [];
 
   @override
   bool get wantKeepAlive => true;
@@ -50,11 +52,12 @@ class _ProfileScreenState extends State<ProfileScreen>
           bio: ProfileMockData.bio,
           avatarUrl: ProfileMockData.avatarUrl,
           isVerified: true,
-          followersCount: ProfileSyncService.instance.mockFollowersCount,
-          followingCount: ProfileSyncService.instance.mockFollowingCount,
+          followersCount: 0,
+          followingCount: 0,
         );
     ProfileSyncService.instance.followEvents.addListener(_onFollowEvent);
     ProfileSyncService.instance.videoUploadedEvents.addListener(_onVideoUploaded);
+    ProfileSyncService.instance.videoInteractionEvents.addListener(_onVideoInteractionEvent);
 
     // Instant zero-latency seed from cache if available
     final cached = FeedRemoteDataSource.instance.getCachedUserVideos(_user!.id) ??
@@ -92,6 +95,83 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  void _onVideoInteractionEvent() {
+    final event = ProfileSyncService.instance.videoInteractionEvents.value;
+    if (event == null || !mounted) return;
+
+    setState(() {
+      // 1. Update matching video in _myVideos
+      final myIdx = _myVideos.indexWhere((v) => v.id == event.videoId);
+      if (myIdx != -1) {
+        _myVideos[myIdx] = _myVideos[myIdx].copyWith(
+          isLiked: event.isLiked,
+          likeCount: event.likeCount,
+          isSaved: event.isSaved,
+          saveCount: event.saveCount,
+          commentCount: event.commentCount,
+        );
+      }
+
+      // 2. Update in _savedVideos immediately
+      if (event.isSaved != null) {
+        if (event.isSaved == true) {
+          final existingIdx = _savedVideos.indexWhere((v) => v.id == event.videoId);
+          if (existingIdx != -1) {
+            _savedVideos[existingIdx] = _savedVideos[existingIdx].copyWith(
+              isSaved: true,
+              saveCount: event.saveCount,
+              isLiked: event.isLiked,
+              likeCount: event.likeCount,
+              commentCount: event.commentCount,
+            );
+          } else if (event.video != null) {
+            _savedVideos.insert(0, event.video!.copyWith(isSaved: true, saveCount: event.saveCount));
+          }
+        } else {
+          _savedVideos.removeWhere((v) => v.id == event.videoId);
+        }
+      } else {
+        final existingIdx = _savedVideos.indexWhere((v) => v.id == event.videoId);
+        if (existingIdx != -1) {
+          _savedVideos[existingIdx] = _savedVideos[existingIdx].copyWith(
+            isLiked: event.isLiked,
+            likeCount: event.likeCount,
+            commentCount: event.commentCount,
+          );
+        }
+      }
+
+      // 3. Update in _likedVideos immediately
+      if (event.isLiked != null) {
+        if (event.isLiked == true) {
+          final existingIdx = _likedVideos.indexWhere((v) => v.id == event.videoId);
+          if (existingIdx != -1) {
+            _likedVideos[existingIdx] = _likedVideos[existingIdx].copyWith(
+              isLiked: true,
+              likeCount: event.likeCount,
+              isSaved: event.isSaved,
+              saveCount: event.saveCount,
+              commentCount: event.commentCount,
+            );
+          } else if (event.video != null) {
+            _likedVideos.insert(0, event.video!.copyWith(isLiked: true, likeCount: event.likeCount));
+          }
+        } else {
+          _likedVideos.removeWhere((v) => v.id == event.videoId);
+        }
+      } else {
+        final existingIdx = _likedVideos.indexWhere((v) => v.id == event.videoId);
+        if (existingIdx != -1) {
+          _likedVideos[existingIdx] = _likedVideos[existingIdx].copyWith(
+            isSaved: event.isSaved,
+            saveCount: event.saveCount,
+            commentCount: event.commentCount,
+          );
+        }
+      }
+    });
+  }
+
   Future<void> _loadProfile({bool forceRefresh = false}) async {
     // 1. Attempt to fetch current user profile details
     try {
@@ -113,6 +193,26 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     } catch (e) {
       debugPrint('[ProfileScreen] getUserVideos notice: $e');
+    }
+
+    // Fetch real saved videos
+    try {
+      final saved = await FeedRemoteDataSource.instance.getSavedVideos();
+      if (mounted) {
+        setState(() => _savedVideos = List.from(saved));
+      }
+    } catch (e) {
+      debugPrint('[ProfileScreen] getSavedVideos notice: $e');
+    }
+
+    // Fetch real liked videos
+    try {
+      final liked = await FeedRemoteDataSource.instance.getLikedVideos();
+      if (mounted) {
+        setState(() => _likedVideos = List.from(liked));
+      }
+    } catch (e) {
+      debugPrint('[ProfileScreen] getLikedVideos notice: $e');
     }
 
     // 3. Pre-warm following & followers cache in background for zero-latency instant listing
@@ -184,6 +284,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   void dispose() {
     ProfileSyncService.instance.followEvents.removeListener(_onFollowEvent);
     ProfileSyncService.instance.videoUploadedEvents.removeListener(_onVideoUploaded);
+    ProfileSyncService.instance.videoInteractionEvents.removeListener(_onVideoInteractionEvent);
     _tabController.dispose();
     super.dispose();
   }
@@ -222,8 +323,10 @@ class _ProfileScreenState extends State<ProfileScreen>
     final currentDisplayName = _user?.displayName.isNotEmpty == true ? _user!.displayName : currentUsername;
     final currentAvatarUrl = _user?.avatarUrl?.isNotEmpty == true ? _user!.avatarUrl! : ProfileMockData.avatarUrl;
     final currentBio = _user?.bio?.isNotEmpty == true ? _user!.bio! : ProfileMockData.bio;
-    final followersDisplay = _formatCount(_user?.followersCount ?? ProfileSyncService.instance.mockFollowersCount);
-    final followingDisplay = _formatCount(_user?.followingCount ?? ProfileSyncService.instance.mockFollowingCount);
+    final followersDisplay = _formatCount(_user?.followersCount ?? 0);
+    final followingDisplay = _formatCount(_user?.followingCount ?? 0);
+    final totalLikes = _myVideos.fold<int>(0, (sum, v) => sum + v.likeCount);
+    final likesDisplay = _formatCount(totalLikes);
 
     return Scaffold(
       key: _scaffoldKey,
@@ -433,7 +536,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       _buildDivider(),
                       _buildStatItem('Followers', followersDisplay, onTap: () => _openFollowersFollowing(0)),
                       _buildDivider(),
-                      _buildStatItem('Likes', '154K'),
+                      _buildStatItem('Likes', likesDisplay),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -511,11 +614,39 @@ class _ProfileScreenState extends State<ProfileScreen>
             ), // Shop
             CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(3),
+              slivers: buildProfileTabSlivers(
+                3,
+                savedVideos: _savedVideos,
+                onSavedVideoTap: (video, index) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => VideoFeedPage(
+                        isActive: true,
+                        initialVideos: _savedVideos,
+                        initialIndex: index,
+                      ),
+                    ),
+                  );
+                },
+              ),
             ), // Saved
             CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(4),
+              slivers: buildProfileTabSlivers(
+                4,
+                likedVideos: _likedVideos,
+                onLikedVideoTap: (video, index) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => VideoFeedPage(
+                        isActive: true,
+                        initialVideos: _likedVideos,
+                        initialIndex: index,
+                      ),
+                    ),
+                  );
+                },
+              ),
             ), // Liked
           ],
         ),

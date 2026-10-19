@@ -7,6 +7,7 @@ import com.vilo.backend.entity.VideoTag;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -23,6 +24,7 @@ public class VideoResponse {
     private String caption;
     private String videoUrl;
     private String thumbnailUrl;
+    private List<String> mediaUrls = new ArrayList<>();
     private String musicTitle;
     private Long viewCount = 0L;
     private Long likeCount = 0L;
@@ -104,6 +106,20 @@ public class VideoResponse {
         resp.setCaption(video.getCaption());
         resp.setVideoUrl(video.getVideoUrl());
         resp.setThumbnailUrl(video.getThumbnailUrl());
+        if (video.getVideoUrl() != null && !video.getVideoUrl().isBlank()) {
+            if (video.getVideoUrl().contains(",")) {
+                String[] parts = video.getVideoUrl().split(",");
+                List<String> list = new ArrayList<>();
+                for (String p : parts) {
+                    if (p != null && !p.trim().isEmpty()) {
+                        list.add(p.trim());
+                    }
+                }
+                resp.setMediaUrls(list);
+            } else {
+                resp.setMediaUrls(new ArrayList<>(Collections.singletonList(video.getVideoUrl().trim())));
+            }
+        }
         resp.setMusicTitle(video.getMusicTitle() != null ? video.getMusicTitle() : "Original Sound - " + resp.getDisplayName());
         
         long likes = video.getLikeCount() != null ? video.getLikeCount() : 0L;
@@ -181,6 +197,9 @@ public class VideoResponse {
 
     public String getThumbnailUrl() { return thumbnailUrl; }
     public void setThumbnailUrl(String thumbnailUrl) { this.thumbnailUrl = thumbnailUrl; }
+
+    public List<String> getMediaUrls() { return mediaUrls; }
+    public void setMediaUrls(List<String> mediaUrls) { this.mediaUrls = mediaUrls != null ? mediaUrls : new ArrayList<>(); }
 
     public String getMusicTitle() { return musicTitle; }
     public void setMusicTitle(String musicTitle) { this.musicTitle = musicTitle; }

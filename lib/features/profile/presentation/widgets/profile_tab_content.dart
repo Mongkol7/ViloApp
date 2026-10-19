@@ -17,8 +17,12 @@ import 'video_grid_item.dart';
 List<Widget> buildProfileTabSlivers(
   int selectedIndex, {
   List<VideoFeedModel>? userVideos,
+  List<VideoFeedModel>? savedVideos,
+  List<VideoFeedModel>? likedVideos,
   bool isLoading = false,
   void Function(VideoFeedModel video, int index)? onVideoTap,
+  void Function(VideoFeedModel video, int index)? onSavedVideoTap,
+  void Function(VideoFeedModel video, int index)? onLikedVideoTap,
 }) {
   switch (selectedIndex) {
     case 0: // Sounds
@@ -128,77 +132,117 @@ List<Widget> buildProfileTabSlivers(
         ];
       }
 
-      if (!isLoading && userVideos != null && userVideos.isEmpty) {
-        return [
-          const SliverPadding(
-            padding: EdgeInsets.symmetric(vertical: 48),
-            sliver: SliverToBoxAdapter(
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.videocam_outlined, color: Colors.white24, size: 48),
-                    SizedBox(height: 12),
-                    Text(
-                      'No videos posted yet',
-                      style: TextStyle(color: Colors.white60, fontSize: 14),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ];
-      }
-
-      final thumbnails = ProfileMockData.videoThumbnails;
       return [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            PulseSpacing.inlineGap,
-            PulseSpacing.stackGap,
-            PulseSpacing.inlineGap,
-            PulseSpacing.sectionMargin,
-          ),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisSpacing: 4,
-              crossAxisSpacing: 4,
-              childAspectRatio: 0.62,
-            ),
-            delegate: SliverChildBuilderDelegate(
-              (context, i) => VideoGridItem(
-                thumbnailUrl: thumbnails[i % thumbnails.length],
+        const SliverPadding(
+          padding: EdgeInsets.symmetric(vertical: 48),
+          sliver: SliverToBoxAdapter(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.videocam_outlined, color: Colors.white24, size: 48),
+                  SizedBox(height: 12),
+                  Text(
+                    'No videos posted yet',
+                    style: TextStyle(color: Colors.white60, fontSize: 14),
+                  ),
+                ],
               ),
-              childCount: 12,
             ),
           ),
         ),
       ];
 
     case 3: // Saved
-      final savedThumbnails = ProfileMockData.savedThumbnails;
-      return [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            PulseSpacing.inlineGap,
-            PulseSpacing.stackGap,
-            PulseSpacing.inlineGap,
-            PulseSpacing.sectionMargin,
-          ),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisSpacing: 4,
-              crossAxisSpacing: 4,
-              childAspectRatio: 0.62,
+      if (savedVideos != null && savedVideos.isNotEmpty) {
+        return [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              PulseSpacing.inlineGap,
+              PulseSpacing.stackGap,
+              PulseSpacing.inlineGap,
+              PulseSpacing.sectionMargin,
             ),
-            delegate: SliverChildBuilderDelegate(
-              (context, i) => VideoGridItem(
-                thumbnailUrl: savedThumbnails[i % savedThumbnails.length],
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                mainAxisSpacing: 4,
+                crossAxisSpacing: 4,
+                childAspectRatio: 0.62,
               ),
-              childCount: 12,
+              delegate: SliverChildBuilderDelegate(
+                (context, i) {
+                  final video = savedVideos[i];
+                  String thumb;
+                  if (video.thumbnailUrl != null && video.thumbnailUrl!.trim().isNotEmpty) {
+                    thumb = video.thumbnailUrl!.trim();
+                  } else if (video.isImagePost && video.videoUrl.trim().isNotEmpty) {
+                    thumb = video.videoUrl.trim();
+                  } else {
+                    thumb = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500';
+                  }
+
+                  return VideoGridItem(
+                    thumbnailUrl: thumb,
+                    viewsLabel: video.likes,
+                    onTap: onSavedVideoTap != null
+                        ? () => onSavedVideoTap(video, i)
+                        : (onVideoTap != null ? () => onVideoTap(video, i) : null),
+                  );
+                },
+                childCount: savedVideos.length,
+              ),
+            ),
+          ),
+        ];
+      }
+
+      if (isLoading && (savedVideos == null || savedVideos.isEmpty)) {
+        return [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              PulseSpacing.inlineGap,
+              PulseSpacing.stackGap,
+              PulseSpacing.inlineGap,
+              PulseSpacing.sectionMargin,
+            ),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                mainAxisSpacing: 4,
+                crossAxisSpacing: 4,
+                childAspectRatio: 0.62,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, i) => Container(
+                  decoration: BoxDecoration(
+                    color: PulseColors.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(PulseRadius.sm),
+                  ),
+                ),
+                childCount: 6,
+              ),
+            ),
+          ),
+        ];
+      }
+
+      return [
+        const SliverPadding(
+          padding: EdgeInsets.symmetric(vertical: 48),
+          sliver: SliverToBoxAdapter(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.bookmark_border_rounded, color: Colors.white24, size: 48),
+                  SizedBox(height: 12),
+                  Text(
+                    'No saved videos yet',
+                    style: TextStyle(color: Colors.white60, fontSize: 14),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -206,27 +250,95 @@ List<Widget> buildProfileTabSlivers(
 
     case 4: // Liked
     default:
-      final likedThumbnails = ProfileMockData.likedThumbnails;
-      return [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            PulseSpacing.inlineGap,
-            PulseSpacing.stackGap,
-            PulseSpacing.inlineGap,
-            PulseSpacing.sectionMargin,
-          ),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisSpacing: 4,
-              crossAxisSpacing: 4,
-              childAspectRatio: 0.62,
+      if (likedVideos != null && likedVideos.isNotEmpty) {
+        return [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              PulseSpacing.inlineGap,
+              PulseSpacing.stackGap,
+              PulseSpacing.inlineGap,
+              PulseSpacing.sectionMargin,
             ),
-            delegate: SliverChildBuilderDelegate(
-              (context, i) => VideoGridItem(
-                thumbnailUrl: likedThumbnails[i % likedThumbnails.length],
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                mainAxisSpacing: 4,
+                crossAxisSpacing: 4,
+                childAspectRatio: 0.62,
               ),
-              childCount: 12,
+              delegate: SliverChildBuilderDelegate(
+                (context, i) {
+                  final video = likedVideos[i];
+                  String thumb;
+                  if (video.thumbnailUrl != null && video.thumbnailUrl!.trim().isNotEmpty) {
+                    thumb = video.thumbnailUrl!.trim();
+                  } else if (video.isImagePost && video.videoUrl.trim().isNotEmpty) {
+                    thumb = video.videoUrl.trim();
+                  } else {
+                    thumb = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500';
+                  }
+
+                  return VideoGridItem(
+                    thumbnailUrl: thumb,
+                    viewsLabel: video.likes,
+                    onTap: onLikedVideoTap != null
+                        ? () => onLikedVideoTap(video, i)
+                        : (onVideoTap != null ? () => onVideoTap(video, i) : null),
+                  );
+                },
+                childCount: likedVideos.length,
+              ),
+            ),
+          ),
+        ];
+      }
+
+      if (isLoading && (likedVideos == null || likedVideos.isEmpty)) {
+        return [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              PulseSpacing.inlineGap,
+              PulseSpacing.stackGap,
+              PulseSpacing.inlineGap,
+              PulseSpacing.sectionMargin,
+            ),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                mainAxisSpacing: 4,
+                crossAxisSpacing: 4,
+                childAspectRatio: 0.62,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, i) => Container(
+                  decoration: BoxDecoration(
+                    color: PulseColors.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(PulseRadius.sm),
+                  ),
+                ),
+                childCount: 6,
+              ),
+            ),
+          ),
+        ];
+      }
+
+      return [
+        const SliverPadding(
+          padding: EdgeInsets.symmetric(vertical: 48),
+          sliver: SliverToBoxAdapter(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.favorite_border_rounded, color: Colors.white24, size: 48),
+                  SizedBox(height: 12),
+                  Text(
+                    'No liked videos yet',
+                    style: TextStyle(color: Colors.white60, fontSize: 14),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

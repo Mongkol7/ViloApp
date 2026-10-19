@@ -409,4 +409,75 @@ void main() {
     expect(find.byKey(const Key('upload_pick_thumbnail_button')), findsNothing);
     expect(find.text('Post Photo'), findsOneWidget);
   });
+
+  test('VideoModel multi-image carousel parses comma-separated URLs and sets isMultiImagePost', () {
+    final carouselModel = VideoModel.fromJson({
+      'id': 20,
+      'creatorId': 1,
+      'caption': 'Cambodia journey carousel',
+      'videoUrl': '/uploads/photos/angkor1.jpg,/uploads/photos/angkor2.jpg,/uploads/photos/angkor3.jpg',
+      'mediaUrls': [
+        '/uploads/photos/angkor1.jpg',
+        '/uploads/photos/angkor2.jpg',
+        '/uploads/photos/angkor3.jpg',
+      ],
+    });
+
+    expect(carouselModel.isImagePost, isTrue);
+    expect(carouselModel.isMultiImagePost, isTrue);
+    expect(carouselModel.resolvedMediaUrls.length, equals(3));
+    expect(carouselModel.resolvedMediaUrls[0], contains('angkor1.jpg'));
+    expect(carouselModel.resolvedMediaUrls[1], contains('angkor2.jpg'));
+    expect(carouselModel.resolvedMediaUrls[2], contains('angkor3.jpg'));
+    expect(carouselModel.thumbnailUrl, contains('angkor1.jpg'));
+  });
+
+  testWidgets('UploadVideoSheet displays multi-image carousel preview strip and updates CTA button', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final files = [
+      PlatformFile(name: 'photo1.jpg', size: 1024 * 100, path: 'photo1.jpg', bytes: Uint8List.fromList(_transparentImage)),
+      PlatformFile(name: 'photo2.jpg', size: 1024 * 120, path: 'photo2.jpg', bytes: Uint8List.fromList(_transparentImage)),
+      PlatformFile(name: 'photo3.jpg', size: 1024 * 150, path: 'photo3.jpg', bytes: Uint8List.fromList(_transparentImage)),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: Scaffold(
+          body: UploadVideoSheet(
+            key: const ValueKey('sheet_with_carousel'),
+            initialFiles: files,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // 1. Verify Carousel header badge is displayed
+    expect(find.text('Photo Carousel (3/10)'), findsOneWidget);
+
+    // 2. Verify CTA button states Post Carousel with count
+    expect(find.text('Post Carousel (3 Photos)'), findsOneWidget);
+
+    // 3. Verify thumbnail items render (badges 1, 2, 3)
+    expect(find.text('1'), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+
+    // 4. Tap delete icon on one photo to test reactive update
+    await tester.tap(find.byKey(const Key('upload_carousel_remove_0')));
+    await tester.pump();
+
+    // Now 2 photos remain
+    expect(find.text('Photo Carousel (2/10)'), findsOneWidget);
+    expect(find.text('Post Carousel (2 Photos)'), findsOneWidget);
+  });
 }

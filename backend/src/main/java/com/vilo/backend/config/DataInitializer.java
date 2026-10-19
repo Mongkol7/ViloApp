@@ -332,15 +332,16 @@ public class DataInitializer implements CommandLineRunner {
         log.info("Platform creator videos verified and seeded successfully!");
     }
 
+    @SuppressWarnings("unused")
     private void seedVideoIfMissing(String username, String videoUrl, String thumbnailUrl,
                                      String caption, String musicTitle,
                                      Long likes, Long comments, Long saves) {
         userRepository.findByUsername(username).ifPresent(creator -> {
-            List<com.vilo.backend.entity.Video> existing = videoRepository.findByCreatorOrderByCreatedAtDesc(creator);
+            List<Video> existing = videoRepository.findByCreatorOrderByCreatedAtDesc(creator);
             boolean alreadyHasThisVideo = existing.stream().anyMatch(v -> v.getVideoUrl().equals(videoUrl));
             if (!alreadyHasThisVideo) {
-                videoRepository.save(new com.vilo.backend.entity.Video(
-                        creator, videoUrl, thumbnailUrl, caption, musicTitle, likes, comments, saves
+                videoRepository.save(new Video(
+                        creator, videoUrl, thumbnailUrl, caption, musicTitle, 0L, 0L, 0L
                 ));
             }
         });
