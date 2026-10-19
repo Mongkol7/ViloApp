@@ -105,7 +105,7 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: orders.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 16),
+            separatorBuilder: (context, index) => const SizedBox(height: 16),
             itemBuilder: (context, index) {
               final order = orders[index];
               final statusColor = _getStatusColor(order.status);
@@ -166,7 +166,7 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
                                   width: 48,
                                   height: 48,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => Container(
+                                  errorBuilder: (context, error, stackTrace) => Container(
                                     width: 48,
                                     height: 48,
                                     color: Colors.white12,

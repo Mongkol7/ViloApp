@@ -284,8 +284,122 @@ public class DataInitializer implements CommandLineRunner {
                     .videoIds(Set.of(1L))
                     .build();
 
-            productRepository.saveAll(List.of(p1, p2, p3, p4, p5, p6, p7, p8));
-            log.info("E-Commerce seed catalog created with 6 categories and 8 premium products!");
+            // Top Sellers matching Screenshot
+            Product ts1 = Product.builder()
+                    .title("Electric Smart Rice Cooker & Steamer")
+                    .description("Smart fuzzy logic multi-cooker with non-stick ceramic inner pot.")
+                    .price(new BigDecimal("1.01"))
+                    .originalPrice(new BigDecimal("101.00"))
+                    .stock(50)
+                    .rating(4.9)
+                    .reviewCount(890)
+                    .salesCount(12000)
+                    .category(accessories)
+                    .seller(seller)
+                    .images(List.of("https://images.unsplash.com/photo-1544233726-9f1d2b27be8b?w=800&auto=format&fit=crop&q=80"))
+                    .build();
+
+            Product ts2 = Product.builder()
+                    .title("Ultra Slim Aluminum Power Bank 20000mAh")
+                    .description("Fast charging 65W PD portable power bank with dual USB-C ports.")
+                    .price(new BigDecimal("0.01"))
+                    .originalPrice(new BigDecimal("49.99"))
+                    .stock(300)
+                    .rating(4.8)
+                    .reviewCount(540)
+                    .salesCount(9500)
+                    .category(tech)
+                    .seller(seller)
+                    .images(List.of("https://images.unsplash.com/photo-1609592424109-dd9892f1b177?w=800&auto=format&fit=crop&q=80"))
+                    .build();
+
+            Product ts3 = Product.builder()
+                    .title("Mechanical Compact Keyboard White Minimalist")
+                    .description("Hot-swappable linear switches, doubleshot keycaps, and RGB backlighting.")
+                    .price(new BigDecimal("0.01"))
+                    .originalPrice(new BigDecimal("69.99"))
+                    .stock(120)
+                    .rating(4.9)
+                    .reviewCount(670)
+                    .salesCount(7800)
+                    .category(gaming)
+                    .seller(seller)
+                    .images(List.of("https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=800&auto=format&fit=crop&q=80"))
+                    .build();
+
+            Product ts4 = Product.builder()
+                    .title("Titanium Flagship Smartphone Pro Max Bundle")
+                    .description("Flagship mobile device with periscope zoom lens and original retail packaging.")
+                    .price(new BigDecimal("0.01"))
+                    .originalPrice(new BigDecimal("999.00"))
+                    .stock(40)
+                    .rating(5.0)
+                    .reviewCount(1120)
+                    .salesCount(5400)
+                    .category(tech)
+                    .seller(seller)
+                    .images(List.of("https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=800&auto=format&fit=crop&q=80"))
+                    .build();
+
+            // Storefront Feed Products matching Screenshot
+            Product f1 = Product.builder()
+                    .title("High-Performance Flagship Titanium Phone")
+                    .description("Super Retina XDR OLED display, A18 Pro chip, and aerospace-grade titanium frame.")
+                    .price(new BigDecimal("124.50"))
+                    .originalPrice(new BigDecimal("299.00"))
+                    .stock(75)
+                    .rating(4.8)
+                    .reviewCount(420)
+                    .salesCount(1400)
+                    .category(tech)
+                    .seller(seller)
+                    .images(List.of("https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?w=800&auto=format&fit=crop&q=80"))
+                    .build();
+
+            Product f2 = Product.builder()
+                    .title("Ultra Rugged Smartwatch Titanium GPS Monitoring")
+                    .description("Dual-frequency GPS, 100m water resistance, ECG sensor, and ultra-bright 3000 nit display.")
+                    .price(new BigDecimal("89.90"))
+                    .originalPrice(new BigDecimal("149.00"))
+                    .stock(180)
+                    .rating(4.9)
+                    .reviewCount(960)
+                    .salesCount(4200)
+                    .category(tech)
+                    .seller(seller)
+                    .images(List.of("https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80"))
+                    .build();
+
+            Product f3 = Product.builder()
+                    .title("Midnight Hydration Serum with Pure Hyaluronic Acid")
+                    .description("Deep multi-depth hydration barrier repair serum with botanical extracts and niacinamide.")
+                    .price(new BigDecimal("42.00"))
+                    .originalPrice(new BigDecimal("85.00"))
+                    .stock(500)
+                    .rating(4.7)
+                    .reviewCount(3400)
+                    .salesCount(12000)
+                    .category(beauty)
+                    .seller(seller)
+                    .images(List.of("https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=800&auto=format&fit=crop&q=80"))
+                    .build();
+
+            Product f4 = Product.builder()
+                    .title("V-Series Wireless Headphones Active Noise Cancelling")
+                    .description("Flagship over-ear headphones with custom acoustic drivers, 45-hour battery, and ANC.")
+                    .price(new BigDecimal("215.00"))
+                    .originalPrice(new BigDecimal("369.00"))
+                    .stock(90)
+                    .rating(5.0)
+                    .reviewCount(310)
+                    .salesCount(850)
+                    .category(tech)
+                    .seller(seller)
+                    .images(List.of("https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&auto=format&fit=crop&q=80"))
+                    .build();
+
+            productRepository.saveAll(List.of(p1, p2, p3, p4, p5, p6, p7, p8, ts1, ts2, ts3, ts4, f1, f2, f3, f4));
+            log.info("E-Commerce seed catalog created with 6 categories and 16 products matching mobile storefront!");
         }
     }
 }

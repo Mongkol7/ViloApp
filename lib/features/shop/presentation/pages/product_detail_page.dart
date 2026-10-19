@@ -129,7 +129,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                           return Image.network(
                             images[idx],
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
+                            errorBuilder: (context, error, stackTrace) => Container(
                               color: const Color(0xFF1C1C1E),
                               child: const Icon(Icons.image_not_supported, color: Colors.white24, size: 60),
                             ),
