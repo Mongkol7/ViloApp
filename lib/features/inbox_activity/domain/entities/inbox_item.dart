@@ -72,6 +72,32 @@ class DirectMessageThread {
       messages: messages ?? this.messages,
     );
   }
+
+  factory DirectMessageThread.fromJson(Map<String, dynamic> json) {
+    return DirectMessageThread(
+      id: json['id'] as String,
+      username: json['username'] as String,
+      avatarUrl: json['avatarUrl'] as String? ?? '',
+      lastMessage: json['lastMessage'] as String? ?? '',
+      timeAgo: json['timeAgo'] as String? ?? '',
+      isVerified: json['isVerified'] as bool? ?? false,
+      followersCount: json['followersCount'] as String? ?? '',
+      messages: (json['messages'] as List<dynamic>? ?? const [])
+          .map((message) => ChatMessage.fromJson(message as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'username': username,
+        'avatarUrl': avatarUrl,
+        'lastMessage': lastMessage,
+        'timeAgo': timeAgo,
+        'isVerified': isVerified,
+        'followersCount': followersCount,
+        'messages': messages.map((message) => message.toJson()).toList(),
+      };
 }
 
 class ChatMessage {
@@ -106,5 +132,24 @@ class ChatMessage {
     }
     return const [];
   }
-}
 
+  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
+        id: json['id'] as String,
+        text: json['text'] as String? ?? '',
+        isMe: json['isMe'] as bool? ?? false,
+        timestamp: json['timestamp'] as String? ?? '',
+        status: json['status'] as String?,
+        imageUrl: json['imageUrl'] as String?,
+        imageUrls: (json['imageUrls'] as List<dynamic>?)?.cast<String>(),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'text': text,
+        'isMe': isMe,
+        'timestamp': timestamp,
+        'status': status,
+        'imageUrl': imageUrl,
+        'imageUrls': imageUrls,
+      };
+}

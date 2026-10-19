@@ -177,7 +177,7 @@ class CartController extends ChangeNotifier {
       description: product.description,
       price: product.price,
       originalPrice: product.originalPrice,
-      stock: 50,
+      stock: product.stock > 0 ? product.stock : 50,
       rating: product.rating,
       reviewCount: 100,
       salesCount: product.soldCount,

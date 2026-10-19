@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:viloapp/features/bottom_nav/presentation/pages/main_navigation_shell.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:viloapp/features/bottom_nav/presentation/widgets/vilo_floating_bottom_bar.dart';
 import 'package:viloapp/features/shop/models/product.dart';
 import 'package:viloapp/features/shop/presentation/pages/add_product_screen.dart';
 import 'package:viloapp/features/shop/services/shop_service.dart';
@@ -15,7 +19,7 @@ void main() {
   });
 
   group('AddProductScreen Widget & Form Validation Tests', () {
-    testWidgets('renders all required form controls, chips, and preset images', (tester) async {
+    testWidgets('renders all required form controls, chips, and image URL input field', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: AddProductScreen(),
@@ -32,6 +36,7 @@ void main() {
       expect(find.text('Stock Quantity *'), findsOneWidget);
       expect(find.text('Seller Name *'), findsOneWidget);
       expect(find.text('Product Image *'), findsOneWidget);
+      expect(find.byKey(const Key('add_product_image_url_field')), findsOneWidget);
       expect(find.text('Product Description *'), findsOneWidget);
       expect(find.text('Publish Product to Sell'), findsOneWidget);
 
@@ -53,7 +58,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Tap publish without filling title or price
+      // Tap publish without filling title or price or image URL
       final publishBtn = find.byKey(const Key('add_product_publish_btn'));
       await tester.ensureVisible(publishBtn);
       await tester.tap(publishBtn);
@@ -61,6 +66,7 @@ void main() {
 
       expect(find.text('Product title is required'), findsOneWidget);
       expect(find.text('Price required'), findsOneWidget);
+      expect(find.text('Product image URL is required'), findsOneWidget);
       expect(find.text('Description is required'), findsOneWidget);
 
       // Verify no product was added
@@ -73,6 +79,48 @@ void main() {
       addTearDown(() => tester.view.resetPhysicalSize());
 
       Product? returnedProduct;
+      const productResponse = {
+        'id': 7001,
+        'title': 'Obsidian Wireless Earbuds Pro',
+        'description': 'High resolution spatial audio',
+        'price': 89.5,
+        'stock': 10,
+        'rating': 0,
+        'reviewCount': 0,
+        'salesCount': 0,
+        'category': {'id': 2, 'name': 'Tech & Gadgets'},
+        'seller': {'displayName': '@ViloCreator'},
+        'images': ['assets/images/v_watch_ultra.jpg'],
+      };
+      final shopService = ShopService(
+        baseUrl: 'http://localhost:3000/api/v1/products',
+        tokenProvider: () async => 'test-token',
+        client: MockClient((request) async {
+          if (request.method == 'POST') {
+            expect(request.headers['Authorization'], 'Bearer test-token');
+            final postedProduct = jsonDecode(request.body) as Map<String, dynamic>;
+            expect(postedProduct['categoryName'], 'Tech & Gadgets');
+            expect(postedProduct['stock'], 10);
+            return http.Response(
+              jsonEncode({'success': true, 'data': productResponse}),
+              201,
+            );
+          }
+          if (request.url.path.endsWith('/7001')) {
+            return http.Response(
+              jsonEncode({'success': true, 'data': productResponse}),
+              200,
+            );
+          }
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'data': {'content': [productResponse]},
+            }),
+            200,
+          );
+        }),
+      );
 
       await tester.pumpWidget(
         MaterialApp(
@@ -82,7 +130,9 @@ void main() {
                 onPressed: () async {
                   returnedProduct = await Navigator.push<Product>(
                     context,
-                    MaterialPageRoute(builder: (_) => const AddProductScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => AddProductScreen(shopService: shopService),
+                    ),
                   );
                 },
                 child: const Text('Open Sell Page'),
@@ -115,6 +165,14 @@ void main() {
         '89.50',
       );
 
+      // Image URL
+      final imageField = find.byKey(const Key('add_product_image_url_field'));
+      await tester.ensureVisible(imageField);
+      await tester.enterText(
+        imageField,
+        'assets/images/v_watch_ultra.jpg',
+      );
+
       // Description
       final descField = find.byKey(const Key('add_product_desc_field'));
       await tester.ensureVisible(descField);
@@ -135,14 +193,16 @@ void main() {
       expect(returnedProduct!.price, 89.50);
       expect(returnedProduct!.category, 'Tech & Gadgets');
       expect(returnedProduct!.seller, '@ViloCreator');
-      expect(returnedProduct!.badge, 'NEW');
+      expect(returnedProduct!.id, '7001');
+      expect(returnedProduct!.stock, 10);
+      expect(returnedProduct!.imageUrl, 'assets/images/v_watch_ultra.jpg');
 
       // Verify added to ShopService catalog
-      final products = await ShopService.instance.getProducts();
+      final products = await shopService.getProducts();
       expect(products.any((p) => p.name == 'Obsidian Wireless Earbuds Pro'), true);
 
       // Verify lookup by id
-      final lookedUp = await ShopService.instance.getProductById(returnedProduct!.id);
+      final lookedUp = await shopService.getProductById(returnedProduct!.id);
       expect(lookedUp, isNotNull);
       expect(lookedUp!.name, 'Obsidian Wireless Earbuds Pro');
     });

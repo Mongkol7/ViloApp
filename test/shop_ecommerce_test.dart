@@ -42,6 +42,7 @@ void main() {
       expect(product.discountPercentage, 32);
       expect(product.primaryImage, 'https://example.com/shoe1.png');
       expect(product.videoIds, [1, 2]);
+      expect(product.stock, 150);
     });
 
     test('CartItemModel and CartModel calculations', () {

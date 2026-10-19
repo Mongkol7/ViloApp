@@ -335,6 +335,10 @@ void main() {
     });
 
     testWidgets('Tapping bottom bar Send Message dispatches inquiries with images, keeps cart items intact, does not create orders, and redirects to first company ChatDetailScreen', (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
       await CartController.instance.clearCart();
       ShopRemoteDataSource.instance.clearLocalOrders();
 
@@ -380,10 +384,7 @@ void main() {
       expect(find.text('2'), findsOneWidget);
 
       // Tap bottom bar Send Message
-      final bottomSendButton = find.descendant(
-        of: find.byType(GestureDetector),
-        matching: find.text('Send Message'),
-      ).last;
+      final bottomSendButton = find.byKey(const Key('cart_bottom_global_send_btn'));
       await tester.tap(bottomSendButton);
       await tester.pumpAndSettle();
 
@@ -414,6 +415,10 @@ void main() {
     });
 
     testWidgets('Global Send Message deterministically redirects to first product added to cart and clears all cart items', (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
       await CartController.instance.clearCart();
       ShopRemoteDataSource.instance.clearLocalOrders();
 
@@ -458,10 +463,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap bottom bar Send Message
-      final bottomSendButton = find.descendant(
-        of: find.byType(GestureDetector),
-        matching: find.text('Send Message'),
-      ).last;
+      final bottomSendButton = find.byKey(const Key('cart_bottom_global_send_btn'));
       await tester.tap(bottomSendButton);
       await tester.pumpAndSettle();
 

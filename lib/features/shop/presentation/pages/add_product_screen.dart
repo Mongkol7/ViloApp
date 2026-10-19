@@ -9,7 +9,9 @@ import '../../services/shop_service.dart';
 /// Features rich dark-mode aesthetics, required field validations, category chip selection,
 /// visual image presets with custom URL override, and instant catalog synchronization.
 class AddProductScreen extends StatefulWidget {
-  const AddProductScreen({super.key});
+  final ShopService? shopService;
+
+  const AddProductScreen({super.key, this.shopService});
 
   @override
   State<AddProductScreen> createState() => _AddProductScreenState();
@@ -24,7 +26,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final TextEditingController _stockController = TextEditingController(text: '10');
   final TextEditingController _descController = TextEditingController();
   final TextEditingController _sellerController = TextEditingController(text: '@ViloCreator');
-  final TextEditingController _customImageController = TextEditingController();
+  final TextEditingController _imageUrlController = TextEditingController();
 
   static const List<Map<String, String>> _categories = [
     {'id': 'cat-tech', 'name': 'Tech & Gadgets'},
@@ -35,20 +37,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
     {'id': 'cat-life', 'name': 'Lifestyle'},
   ];
 
-  static const List<String> _presetImages = [
-    'assets/images/v_watch_ultra.jpg',
-    'assets/images/canvas_tote.jpg',
-    'assets/images/v_series_headphones.jpg',
-    'assets/images/obsidian_hoodie.jpg',
-    'assets/images/pocket_fill_light.jpg',
-    'assets/images/midnight_hydration_serum.jpg',
-    'assets/images/mini_rice_cooker.jpg',
-    'assets/images/iphone_17_pro_max_case.jpg',
-  ];
-
   late String _selectedCategoryId;
   late String _selectedCategoryName;
-  late String _selectedImage;
   bool _isSubmitting = false;
 
   @override
@@ -56,7 +46,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     super.initState();
     _selectedCategoryId = _categories.first['id']!;
     _selectedCategoryName = _categories.first['name']!;
-    _selectedImage = _presetImages.first;
   }
 
   @override
@@ -67,11 +56,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
     _stockController.dispose();
     _descController.dispose();
     _sellerController.dispose();
-    _customImageController.dispose();
+    _imageUrlController.dispose();
     super.dispose();
   }
 
-  void _submitForm() {
+  Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) {
       HapticFeedback.heavyImpact();
       return;
@@ -91,8 +80,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     if (seller.isEmpty) seller = '@ViloCreator';
     if (!seller.startsWith('@')) seller = '@$seller';
 
-    final customImg = _customImageController.text.trim();
-    final imageToUse = customImg.isNotEmpty ? customImg : _selectedImage;
+    final imageUrl = _imageUrlController.text.trim();
 
     final newProduct = Product(
       id: 'prod_seller_${DateTime.now().millisecondsSinceEpoch}',
@@ -102,42 +90,55 @@ class _AddProductScreenState extends State<AddProductScreen> {
       price: price,
       originalPrice: origPrice,
       description: desc,
-      imageUrl: imageToUse,
+      imageUrl: imageUrl,
       seller: seller,
       rating: 5.0,
       soldCount: 0,
+      stock: stock,
       badge: 'NEW',
     );
 
-    // Register with in-memory ShopService catalog
-    ShopService.instance.addProduct(newProduct);
+    try {
+      final publishedProduct = await (widget.shopService ?? ShopService.instance)
+          .addProduct(newProduct);
+      if (!mounted) return;
 
-    HapticFeedback.mediumImpact();
+      HapticFeedback.mediumImpact();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: const Color(0xFF1E1E22),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: Colors.white12),
-        ),
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                '🎉 Product "$title" published for sale!',
-                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF1E1E22),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: Colors.white12),
+          ),
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '🎉 Product "$title" published for sale!',
+                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
-
-    Navigator.pop(context, newProduct);
+      );
+      Navigator.pop(context, publishedProduct);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF7F1D1D),
+          content: Text('Could not publish product: $error'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   @override
@@ -394,77 +395,45 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
               const SizedBox(height: 18),
 
-              // ── Product Image Selector * ─────────────────────────────
+              // ── Product Image * ─────────────────────────────────────
               _buildSectionLabel('Product Image *'),
-              SizedBox(
-                height: 80,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: _presetImages.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (context, index) {
-                    final img = _presetImages[index];
-                    final isSelected = _selectedImage == img && _customImageController.text.trim().isEmpty;
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedImage = img;
-                          _customImageController.clear();
-                        });
-                      },
-                      child: Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: isSelected ? const Color(0xFF2F80ED) : Colors.white12,
-                            width: isSelected ? 2.5 : 1.0,
-                          ),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              Image.asset(
-                                img,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
-                                  color: Colors.white10,
-                                  child: const Icon(Icons.image, color: Colors.white38),
-                                ),
-                              ),
-                              if (isSelected)
-                                Container(
-                                  color: const Color(0xFF2F80ED).withValues(alpha: 0.35),
-                                  alignment: Alignment.center,
-                                  child: const Icon(Icons.check_circle_rounded, color: Colors.white, size: 24),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
+              TextFormField(
+                key: const Key('add_product_image_url_field'),
+                controller: _imageUrlController,
+                style: const TextStyle(color: Colors.white, fontSize: 13.5),
+                decoration: _inputDecoration(
+                  hintText: 'https://example.com/product_photo.jpg or asset path',
+                  fillColor: inputFillColor,
+                  borderColor: borderColor,
+                  prefixIcon: const Icon(Icons.link_rounded, color: Color(0xFF2F80ED), size: 20),
+                  suffixIcon: _imageUrlController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, color: Colors.white38, size: 18),
+                          onPressed: () {
+                            setState(() {
+                              _imageUrlController.clear();
+                            });
+                          },
+                        )
+                      : null,
                 ),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Product image URL is required';
+                  final trimmed = v.trim();
+                  if (!trimmed.startsWith('http://') &&
+                      !trimmed.startsWith('https://') &&
+                      !trimmed.startsWith('assets/')) {
+                    return 'Must start with http://, https://, or assets/';
+                  }
+                  return null;
+                },
+                onChanged: (_) => setState(() {}),
               ),
 
               const SizedBox(height: 10),
 
-              // Custom Image URL fallback
-              TextFormField(
-                controller: _customImageController,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-                decoration: _inputDecoration(
-                  hintText: 'Or enter custom image URL (optional)',
-                  fillColor: inputFillColor,
-                  borderColor: borderColor,
-                  prefixIcon: const Icon(Icons.link_rounded, color: Colors.white38, size: 18),
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
+              // Live Image Preview Container
+              _buildImagePreviewContainer(),
 
               const SizedBox(height: 18),
 
@@ -554,6 +523,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     required Color fillColor,
     required Color borderColor,
     Widget? prefixIcon,
+    Widget? suffixIcon,
   }) {
     return InputDecoration(
       hintText: hintText,
@@ -561,6 +531,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       filled: true,
       fillColor: fillColor,
       prefixIcon: prefixIcon,
+      suffixIcon: suffixIcon,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -577,6 +548,99 @@ class _AddProductScreenState extends State<AddProductScreen> {
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+      ),
+    );
+  }
+
+  Widget _buildImagePreviewContainer() {
+    final url = _imageUrlController.text.trim();
+    return Container(
+      width: double.infinity,
+      height: 160,
+      decoration: BoxDecoration(
+        color: const Color(0xFF141416),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: url.isNotEmpty ? const Color(0xFF2F80ED).withValues(alpha: 0.4) : Colors.white12,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: url.isEmpty
+          ? const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.add_photo_alternate_outlined, color: Colors.white24, size: 36),
+                SizedBox(height: 8),
+                Text(
+                  'Enter product image link / URL above to see preview',
+                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                ),
+              ],
+            )
+          : Stack(
+              fit: StackFit.expand,
+              children: [
+                url.startsWith('assets/')
+                    ? Image.asset(
+                        url,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _buildImageErrorWidget(),
+                      )
+                    : Image.network(
+                        url,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (ctx, child, progress) {
+                          if (progress == null) return child;
+                          return const Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFF2F80ED),
+                              strokeWidth: 2,
+                            ),
+                          );
+                        },
+                        errorBuilder: (_, __, ___) => _buildImageErrorWidget(),
+                      ),
+                Positioned(
+                  bottom: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.75),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.remove_red_eye_outlined, color: Colors.white70, size: 13),
+                        SizedBox(width: 4),
+                        Text(
+                          'Live Preview',
+                          style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildImageErrorWidget() {
+    return Container(
+      color: const Color(0xFF1C1C1E),
+      padding: const EdgeInsets.all(12),
+      child: const Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.broken_image_outlined, color: Color(0xFFEF4444), size: 32),
+          SizedBox(height: 6),
+          Text(
+            'Could not load image from link',
+            style: TextStyle(color: Color(0xFFEF4444), fontSize: 12, fontWeight: FontWeight.w500),
+          ),
+        ],
       ),
     );
   }

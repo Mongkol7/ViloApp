@@ -531,6 +531,7 @@ class CartPage extends StatelessWidget {
           const Spacer(),
           // Dark glassmorphic "Send Message" action button (Matching original design)
           GestureDetector(
+            key: const Key('cart_bottom_global_send_btn'),
             onTap: () => _handleGlobalSendMessage(context, ctrl),
             child: Container(
               height: 44,

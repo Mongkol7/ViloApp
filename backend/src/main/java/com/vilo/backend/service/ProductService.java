@@ -1,9 +1,12 @@
 package com.vilo.backend.service;
 
 import com.vilo.backend.dto.CategoryResponse;
+import com.vilo.backend.dto.CreateProductRequest;
 import com.vilo.backend.dto.ProductResponse;
 import com.vilo.backend.entity.Category;
 import com.vilo.backend.entity.Product;
+import com.vilo.backend.entity.User;
+import com.vilo.backend.exception.BadRequestException;
 import com.vilo.backend.exception.ResourceNotFoundException;
 import com.vilo.backend.repository.CategoryRepository;
 import com.vilo.backend.repository.ProductRepository;
@@ -14,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.stream.Collectors;
 
 @Service
@@ -38,6 +42,44 @@ public class ProductService {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + id));
         return ProductResponse.fromEntity(product);
+    }
+
+    @Transactional
+    public ProductResponse createProduct(User seller, CreateProductRequest request) {
+        String categoryName = request.getCategoryName().trim();
+        Category category = categoryRepository.findByNameIgnoreCase(categoryName)
+                .orElseGet(() -> createCategory(categoryName));
+        List<String> images = new ArrayList<>();
+        if (request.getImageUrl() != null && !request.getImageUrl().isBlank()) {
+            images.add(request.getImageUrl().trim());
+        }
+
+        Product product = Product.builder()
+                .title(request.getTitle().trim())
+                .description(request.getDescription() == null ? "" : request.getDescription().trim())
+                .price(request.getPrice())
+                .originalPrice(request.getOriginalPrice())
+                .stock(request.getStock())
+                .rating(0.0)
+                .reviewCount(0)
+                .salesCount(0)
+                .category(category)
+                .seller(seller)
+                .images(images)
+                .build();
+        return ProductResponse.fromEntity(productRepository.save(product));
+    }
+
+    private Category createCategory(String name) {
+        String slug = name.toLowerCase().replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("(^-|-$)", "");
+        if (slug.isBlank()) {
+            throw new BadRequestException("Category name must contain letters or numbers");
+        }
+        if (categoryRepository.existsBySlug(slug)) {
+            slug = slug + "-" + System.nanoTime();
+        }
+        return categoryRepository.save(Category.builder().name(name).slug(slug).build());
     }
 
     public List<CategoryResponse> getCategories() {

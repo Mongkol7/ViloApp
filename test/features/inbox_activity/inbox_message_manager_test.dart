@@ -1,11 +1,47 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:viloapp/features/inbox_activity/data/datasources/inbox_message_manager.dart';
 import 'package:viloapp/features/inbox_activity/domain/entities/inbox_item.dart';
 import 'package:viloapp/features/inbox_activity/presentation/pages/chat_detail_screen.dart';
 import 'package:viloapp/features/inbox_activity/presentation/pages/inbox_screen.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('sent messages and drafts persist separately for each account', () async {
+    SharedPreferences.setMockInitialValues({});
+    final manager = InboxMessageManager.instance;
+    const userId = 907001;
+    await manager.loadForUser(userId);
+
+    const draft = 'Please hold the blue one for me';
+    await manager.saveDraft('t0', draft);
+    await manager.addMessageToThread(
+      't0',
+      const ChatMessage(
+        id: 'persisted-message',
+        text: 'Is this still available?',
+        isMe: true,
+        timestamp: 'Just now',
+      ),
+    );
+
+    await manager.reloadForUser(userId);
+    expect(manager.getDraft('t0'), draft);
+    expect(
+      manager.getThread('t0')!.messages.any((message) => message.id == 'persisted-message'),
+      isTrue,
+    );
+
+    await manager.loadForUser(907002);
+    expect(manager.getDraft('t0'), isNull);
+    expect(
+      manager.getThread('t0')!.messages.any((message) => message.id == 'persisted-message'),
+      isFalse,
+    );
+  });
+
   group('InboxMessageManager Unit & State Tests', () {
     setUp(() {
       InboxMessageManager.instance.resetToDefault();
@@ -168,4 +204,3 @@ void main() {
     });
   });
 }
-

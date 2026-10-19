@@ -2,26 +2,31 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../../auth/data/datasources/token_storage.dart';
 import '../models/product.dart';
 
 class ShopService {
   static final ShopService instance = ShopService();
 
+  final ValueNotifier<Product?> publishedProductNotifier = ValueNotifier(null);
   final http.Client _client;
+  final Future<String?> Function() _tokenProvider;
   String baseUrl;
 
   ShopService({
     http.Client? client,
     String? baseUrl,
+    Future<String?> Function()? tokenProvider,
   })  : _client = client ?? http.Client(),
+        _tokenProvider = tokenProvider ?? TokenStorage.instance.getAccessToken,
         baseUrl = baseUrl ?? _defaultBaseUrl;
 
   static String get _defaultBaseUrl {
     // If running in Android emulator, use 10.0.2.2. Otherwise, use localhost.
     if (!kIsWeb && Platform.isAndroid) {
-      return 'http://10.0.2.2:8080/api/products';
+      return 'http://10.0.2.2:3000/api/v1/products';
     }
-    return 'http://localhost:8080/api/products';
+    return 'http://localhost:3000/api/v1/products';
   }
 
   /// Fetches products from the backend with robust error handling and fallback mock data.
@@ -29,9 +34,8 @@ class ShopService {
     try {
       final uri = Uri.parse(baseUrl).replace(
         queryParameters: {
-          if (category != null && category.isNotEmpty && category.toLowerCase() != 'all')
-            'category': category,
           if (query != null && query.isNotEmpty) 'query': query,
+          'size': '100',
         },
       );
 
@@ -47,11 +51,17 @@ class ShopService {
         final List<dynamic> rawList = _extractProductList(decoded);
 
         if (rawList.isNotEmpty) {
-          final products = rawList
+          final remoteProducts = rawList
               .map((item) => Product.fromJson(item as Map<String, dynamic>))
               .toList();
 
-          return _filterLocallyIfNeeded(products, category: category, query: query);
+          final existingIds = remoteProducts.map((p) => p.id).toSet();
+          final userProducts = Product.userAddedProducts
+              .where((p) => !existingIds.contains(p.id))
+              .toList();
+          final mergedProducts = [...userProducts, ...remoteProducts];
+
+          return _filterLocallyIfNeeded(mergedProducts, category: category, query: query);
         }
       }
       debugPrint('[ShopService] Non-200 or empty response (${response.statusCode}). Using fallback catalog.');
@@ -140,8 +150,66 @@ class ShopService {
     }
   }
 
-  /// Adds a product listed by a creator/merchant to the active local catalog
-  void addProduct(Product product) {
+  /// Publishes a product to the authenticated server catalog.
+  Future<Product> addProduct(Product product) async {
+    final token = await _tokenProvider();
+    if (token == null || token.isEmpty) {
+      throw StateError('Log in before publishing a product.');
+    }
+
+    final response = await _client
+        .post(
+          Uri.parse(baseUrl),
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'title': product.name,
+            'description': product.description,
+            'price': product.price,
+            'originalPrice': product.originalPrice,
+            'stock': product.stock,
+            'categoryName': product.category ?? product.categoryId,
+            'imageUrl': product.imageUrl,
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      String message =
+          'Product could not be published (${response.statusCode}).';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic> && decoded['message'] is String) {
+          message = decoded['message'] as String;
+        }
+      } catch (_) {
+        debugPrint('[ShopService] Could not decode publish error response.');
+      }
+      throw http.ClientException(message, Uri.parse(baseUrl));
+    }
+
+    final dynamic decoded = jsonDecode(response.body);
+    final dynamic data =
+        decoded is Map<String, dynamic> && decoded.containsKey('data')
+            ? decoded['data']
+            : decoded;
+    if (data is! Map<String, dynamic>) {
+      throw const FormatException(
+        'The server returned an invalid product response.',
+      );
+    }
+
+    final publishedProduct = Product.fromJson(data);
+    Product.addCreatorProduct(publishedProduct);
+    publishedProductNotifier.value = publishedProduct;
+    return publishedProduct;
+  }
+
+  /// Keeps a product available in the local offline catalog.
+  void cacheProduct(Product product) {
     Product.addCreatorProduct(product);
   }
 
@@ -154,9 +222,14 @@ class ShopService {
     var filtered = products;
 
     if (category != null && category.isNotEmpty && category.toLowerCase() != 'all') {
+      final selCat = category.toLowerCase().trim();
       filtered = filtered.where((p) {
-        final pCat = (p.category ?? p.categoryId).toLowerCase();
-        return pCat.contains(category.toLowerCase());
+        final pCat = (p.category ?? p.categoryId).toLowerCase().trim();
+        final pCatId = p.categoryId.toLowerCase().trim();
+        return pCat == selCat ||
+            pCat.contains(selCat) ||
+            selCat.contains(pCat) ||
+            pCatId == selCat;
       }).toList();
     }
 

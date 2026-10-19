@@ -19,6 +19,23 @@ class InboxScreen extends StatefulWidget {
 }
 
 class _InboxScreenState extends State<InboxScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _loadMessages();
+  }
+
+  Future<void> _loadMessages() async {
+    try {
+      await InboxMessageManager.instance.loadForCurrentUser();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not restore messages: $error')),
+      );
+    }
+  }
+
   Future<void> _handleCreateOrViewStory() async {
     final currentStory = ThoughtStoryManager.instance.currentStory;
     if (currentStory != null) {

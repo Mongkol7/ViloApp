@@ -20,13 +20,25 @@ class _ShopFeedScreenState extends State<ShopFeedScreen> {
   late Future<List<Product>> _productsFuture;
   late Future<List<Product>> _topSellersFuture;
 
-  final List<String> _categoryTabs = [
-    'All',
-    'Crazy Prices',
-    'Beauty',
-    'Mall',
-    'Toys',
-  ];
+  List<String> get _categoryTabs {
+    const baseTabs = [
+      'All',
+      'Tech & Gadgets',
+      'Fashion & Apparel',
+      'Beauty & Care',
+      'Studio Equipment',
+      'Accessories',
+      'Lifestyle',
+      'Crazy Prices',
+      'Mall',
+      'Toys',
+    ];
+    final dynamicCategories = Product.userAddedProducts
+        .map((p) => p.category ?? p.categoryId)
+        .where((c) => c.isNotEmpty && !baseTabs.contains(c))
+        .toSet();
+    return [...baseTabs, ...dynamicCategories];
+  }
 
   int _selectedCategoryIndex = 0;
   String _currentQuery = '';
@@ -34,11 +46,32 @@ class _ShopFeedScreenState extends State<ShopFeedScreen> {
   @override
   void initState() {
     super.initState();
+    _shopService.publishedProductNotifier.addListener(_onProductPublished);
     _loadData();
   }
 
+  void _onProductPublished() {
+    final newProduct = _shopService.publishedProductNotifier.value;
+    if (newProduct != null) {
+      final pCat = (newProduct.category ?? newProduct.categoryId).toLowerCase().trim();
+      final tabs = _categoryTabs;
+      final matchedIndex = tabs.indexWhere((tab) {
+        final t = tab.toLowerCase().trim();
+        return t == pCat || t.contains(pCat) || pCat.contains(t);
+      });
+      if (matchedIndex != -1) {
+        _selectedCategoryIndex = matchedIndex;
+      }
+    }
+    if (mounted) _loadData();
+  }
+
   void _loadData() {
-    final selectedCategory = _categoryTabs[_selectedCategoryIndex];
+    final tabs = _categoryTabs;
+    if (_selectedCategoryIndex >= tabs.length) {
+      _selectedCategoryIndex = 0;
+    }
+    final selectedCategory = tabs[_selectedCategoryIndex];
     setState(() {
       _productsFuture = _shopService.getProducts(
         category: selectedCategory == 'All' ? null : selectedCategory,
@@ -50,6 +83,7 @@ class _ShopFeedScreenState extends State<ShopFeedScreen> {
 
   @override
   void dispose() {
+    _shopService.publishedProductNotifier.removeListener(_onProductPublished);
     _searchController.dispose();
     super.dispose();
   }

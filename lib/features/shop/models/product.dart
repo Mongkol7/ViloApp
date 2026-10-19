@@ -7,6 +7,7 @@ class Product {
   final double? originalPrice;
   final double rating;
   final int soldCount;
+  final int stock;
   final String? badge;
   final String? seller;
   final String description;
@@ -21,6 +22,7 @@ class Product {
     this.originalPrice,
     this.rating = 4.8,
     this.soldCount = 0,
+    this.stock = 0,
     this.badge,
     this.seller,
     required this.description,
@@ -100,6 +102,7 @@ class Product {
       soldCount: (json['soldCount'] as num?)?.toInt() ??
           (json['salesCount'] as num?)?.toInt() ??
           0,
+      stock: (json['stock'] as num?)?.toInt() ?? 0,
       badge: badgeText,
       seller: sellerName,
       description: json['description'] as String? ?? '',
@@ -117,6 +120,7 @@ class Product {
       'originalPrice': originalPrice,
       'rating': rating,
       'soldCount': soldCount,
+      'stock': stock,
       'badge': badge,
       'seller': seller,
       'description': description,
@@ -133,6 +137,7 @@ class Product {
     double? originalPrice,
     double? rating,
     int? soldCount,
+    int? stock,
     String? badge,
     String? seller,
     String? description,
@@ -147,6 +152,7 @@ class Product {
       originalPrice: originalPrice ?? this.originalPrice,
       rating: rating ?? this.rating,
       soldCount: soldCount ?? this.soldCount,
+      stock: stock ?? this.stock,
       badge: badge ?? this.badge,
       seller: seller ?? this.seller,
       description: description ?? this.description,

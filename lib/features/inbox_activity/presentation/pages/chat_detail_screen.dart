@@ -18,11 +18,49 @@ class ChatDetailScreen extends StatefulWidget {
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final TextEditingController _messageController = TextEditingController();
   late List<ChatMessage> _messages;
+  bool _isRestoringConversation = true;
 
   @override
   void initState() {
     super.initState();
     _messages = List.from(widget.thread.messages);
+    _restoreConversation();
+  }
+
+  Future<void> _restoreConversation() async {
+    final manager = InboxMessageManager.instance;
+    try {
+      await manager.loadForCurrentUser();
+    } catch (error) {
+      if (mounted) {
+        setState(() => _isRestoringConversation = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not restore messages: $error')),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    final thread = manager.getThread(widget.thread.id);
+    final draft = manager.getDraft(widget.thread.id);
+    setState(() {
+      if (thread != null) _messages = List.from(thread.messages);
+      if (_messageController.text.isEmpty && draft != null) {
+        _messageController.text = draft;
+      }
+      _isRestoringConversation = false;
+    });
+  }
+
+  Future<void> _saveDraft(String draft) async {
+    try {
+      await InboxMessageManager.instance.saveDraft(widget.thread.id, draft);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save message draft: $error')),
+      );
+    }
   }
 
   @override
@@ -31,7 +69,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     super.dispose();
   }
 
-  void _sendMessage() {
+  Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
@@ -48,10 +86,22 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       _messageController.clear();
     });
 
-    InboxMessageManager.instance.addMessageToThread(widget.thread.id, newMsg);
+    try {
+      await InboxMessageManager.instance.addMessageToThread(
+        widget.thread.id,
+        newMsg,
+      );
+      await InboxMessageManager.instance.saveDraft(widget.thread.id, '');
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Message sent, but could not be saved: $error')),
+        );
+      }
+    }
   }
 
-  void _sendImageMessage(String imageAssetPath, {String? caption}) {
+  Future<void> _sendImageMessage(String imageAssetPath, {String? caption}) async {
     final newMsg = ChatMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       text: caption ?? '',
@@ -64,9 +114,22 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
     setState(() {
       _messages.add(newMsg);
+      _messageController.clear();
     });
 
-    InboxMessageManager.instance.addMessageToThread(widget.thread.id, newMsg);
+    try {
+      await InboxMessageManager.instance.addMessageToThread(
+        widget.thread.id,
+        newMsg,
+      );
+      await InboxMessageManager.instance.saveDraft(widget.thread.id, '');
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Message sent, but could not be saved: $error')),
+        );
+      }
+    }
   }
 
   void _openMediaAttachmentSheet() {
@@ -325,6 +388,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     ),
                     child: TextField(
                       controller: _messageController,
+                      onChanged: _saveDraft,
+                      enabled: !_isRestoringConversation,
                       style: const TextStyle(
                         fontFamily: 'Inter',
                         color: Colors.white,
