@@ -613,9 +613,14 @@ class _SearchScreenState extends State<SearchScreen> {
     final effectiveDisplayName = isMe
         ? ProfileSyncService.instance.currentUserDisplayName
         : (account.displayName.isNotEmpty ? account.displayName : cleanUsername);
+    const fallbackAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
     final effectiveAvatarUrl = isMe
-        ? ProfileSyncService.instance.currentUserAvatar
-        : account.avatarUrl;
+        ? (ProfileSyncService.instance.currentUserAvatar.isNotEmpty
+            ? ProfileSyncService.instance.currentUserAvatar
+            : fallbackAvatar)
+        : (account.avatarUrl.isNotEmpty && account.avatarUrl.startsWith('http')
+            ? account.avatarUrl
+            : fallbackAvatar);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -650,14 +655,19 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
               ),
               child: ClipOval(
-                child: Image.network(
-                  effectiveAvatarUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: AppColors.surface,
-                    child: const Icon(Icons.person, color: AppColors.outline),
-                  ),
-                ),
+                child: (effectiveAvatarUrl.isNotEmpty && effectiveAvatarUrl.startsWith('http'))
+                    ? Image.network(
+                        effectiveAvatarUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: AppColors.surface,
+                          child: const Icon(Icons.person, color: AppColors.outline),
+                        ),
+                      )
+                    : Container(
+                        color: AppColors.surface,
+                        child: const Icon(Icons.person, color: AppColors.outline),
+                      ),
               ),
             ),
           ),

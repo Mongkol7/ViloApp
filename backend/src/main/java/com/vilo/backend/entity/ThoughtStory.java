@@ -47,6 +47,15 @@ public class ThoughtStory {
     @Column(name = "background_gradient", length = 100)
     private String backgroundGradient;
 
+    @Column(name = "media_url", length = 1000)
+    private String mediaUrl;
+
+    @Column(name = "media_type", length = 20)
+    private String mediaType = "TEXT";
+
+    @Column(name = "privacy", length = 20)
+    private String privacy = "PUBLIC";
+
     @Column(name = "view_count", nullable = false)
     private Integer viewCount = 0;
 
@@ -60,12 +69,16 @@ public class ThoughtStory {
     public ThoughtStory() {
     }
 
-    public ThoughtStory(Long id, User user, String message, String musicTrackId, String musicTitle,
-                        String musicArtist, String musicAlbumArt, String musicPreviewUrl, Integer musicDuration,
-                        String backgroundGradient, Integer viewCount, Instant expiresAt, Instant createdAt) {
+    public ThoughtStory(Long id, User user, String message, String mediaUrl, String mediaType, String privacy,
+                        String musicTrackId, String musicTitle, String musicArtist, String musicAlbumArt,
+                        String musicPreviewUrl, Integer musicDuration, String backgroundGradient,
+                        Integer viewCount, Instant expiresAt, Instant createdAt) {
         this.id = id;
         this.user = user;
-        this.message = message;
+        this.message = message != null ? message : "";
+        this.mediaUrl = mediaUrl;
+        this.mediaType = mediaType != null ? mediaType : "TEXT";
+        this.privacy = privacy != null ? privacy : "PUBLIC";
         this.musicTrackId = musicTrackId;
         this.musicTitle = musicTitle;
         this.musicArtist = musicArtist;
@@ -162,6 +175,30 @@ public class ThoughtStory {
         this.backgroundGradient = backgroundGradient;
     }
 
+    public String getMediaUrl() {
+        return mediaUrl;
+    }
+
+    public void setMediaUrl(String mediaUrl) {
+        this.mediaUrl = mediaUrl;
+    }
+
+    public String getMediaType() {
+        return mediaType;
+    }
+
+    public void setMediaType(String mediaType) {
+        this.mediaType = mediaType;
+    }
+
+    public String getPrivacy() {
+        return privacy;
+    }
+
+    public void setPrivacy(String privacy) {
+        this.privacy = privacy;
+    }
+
     public Integer getViewCount() {
         return viewCount;
     }
@@ -190,6 +227,9 @@ public class ThoughtStory {
         private Long id;
         private User user;
         private String message;
+        private String mediaUrl;
+        private String mediaType = "TEXT";
+        private String privacy = "PUBLIC";
         private String musicTrackId;
         private String musicTitle;
         private String musicArtist;
@@ -213,6 +253,21 @@ public class ThoughtStory {
 
         public Builder message(String message) {
             this.message = message;
+            return this;
+        }
+
+        public Builder mediaUrl(String mediaUrl) {
+            this.mediaUrl = mediaUrl;
+            return this;
+        }
+
+        public Builder mediaType(String mediaType) {
+            this.mediaType = mediaType;
+            return this;
+        }
+
+        public Builder privacy(String privacy) {
+            this.privacy = privacy;
             return this;
         }
 
@@ -267,7 +322,7 @@ public class ThoughtStory {
         }
 
         public ThoughtStory build() {
-            return new ThoughtStory(id, user, message, musicTrackId, musicTitle, musicArtist,
+            return new ThoughtStory(id, user, message, mediaUrl, mediaType, privacy, musicTrackId, musicTitle, musicArtist,
                     musicAlbumArt, musicPreviewUrl, musicDuration, backgroundGradient, viewCount, expiresAt, createdAt);
         }
     }

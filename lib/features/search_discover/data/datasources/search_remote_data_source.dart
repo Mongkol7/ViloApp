@@ -26,6 +26,11 @@ class SearchRemoteDataSource {
 
       if (response != null && response['success'] == true && response['data'] != null) {
         final parsed = _parseSearchSummary(response['data'], isSearch: true);
+        final List<SearchAccount> remoteAccounts = (parsed['accounts'] as List?)?.cast<SearchAccount>() ?? [];
+        if (remoteAccounts.isEmpty) {
+          final local = _fallbackLocalSearch(query, type);
+          parsed['accounts'] = local['accounts'];
+        }
         final List<TrendingVideo> remoteVideos = (parsed['trendingVideos'] as List?)?.cast<TrendingVideo>() ?? [];
         if (remoteVideos.isEmpty) {
           final local = _fallbackLocalSearch(query, type);

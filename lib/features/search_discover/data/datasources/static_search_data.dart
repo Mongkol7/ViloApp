@@ -114,6 +114,35 @@ class StaticSearchData {
 
   static const List<SearchAccount> accounts = [
     SearchAccount(
+      id: '23',
+      username: '@sak',
+      displayName: 'Sak',
+      followersCount: '520K followers',
+      avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80',
+      isFollowed: false,
+      followsYou: false,
+      isVerified: true,
+    ),
+    SearchAccount(
+      id: '22',
+      username: '@liza',
+      displayName: 'Liza',
+      followersCount: '610K followers',
+      avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80',
+      isFollowed: false,
+      followsYou: false,
+      isVerified: true,
+    ),
+    SearchAccount(
+      id: '99',
+      username: '@s1',
+      displayName: 's1',
+      followersCount: '120 followers',
+      avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80',
+      isFollowed: false,
+      isVerified: false,
+    ),
+    SearchAccount(
       id: '1',
       username: '@mongkol',
       displayName: 'Thoeung Sereymongkol',

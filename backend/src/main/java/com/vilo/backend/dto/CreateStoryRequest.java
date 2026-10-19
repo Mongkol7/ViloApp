@@ -5,9 +5,12 @@ import jakarta.validation.constraints.Size;
 
 public class CreateStoryRequest {
 
-    @NotBlank(message = "Story message cannot be empty")
     @Size(max = 500, message = "Story message cannot exceed 500 characters")
     private String message;
+
+    private String mediaUrl;
+    private String mediaType = "TEXT"; // "TEXT", "IMAGE", "VIDEO"
+    private String privacy = "PUBLIC"; // "PUBLIC", "FOLLOWERS", "FRIENDS"
 
     private String musicTrackId;
     private String musicTitle;
@@ -21,10 +24,14 @@ public class CreateStoryRequest {
     public CreateStoryRequest() {
     }
 
-    public CreateStoryRequest(String message, String musicTrackId, String musicTitle, String musicArtist,
+    public CreateStoryRequest(String message, String mediaUrl, String mediaType, String privacy,
+                              String musicTrackId, String musicTitle, String musicArtist,
                               String musicAlbumArt, String musicPreviewUrl, Integer musicDuration,
                               String backgroundGradient, Integer expiresInHours) {
         this.message = message;
+        this.mediaUrl = mediaUrl;
+        this.mediaType = mediaType != null ? mediaType : "TEXT";
+        this.privacy = privacy != null ? privacy : "PUBLIC";
         this.musicTrackId = musicTrackId;
         this.musicTitle = musicTitle;
         this.musicArtist = musicArtist;
@@ -103,6 +110,30 @@ public class CreateStoryRequest {
         this.backgroundGradient = backgroundGradient;
     }
 
+    public String getMediaUrl() {
+        return mediaUrl;
+    }
+
+    public void setMediaUrl(String mediaUrl) {
+        this.mediaUrl = mediaUrl;
+    }
+
+    public String getMediaType() {
+        return mediaType;
+    }
+
+    public void setMediaType(String mediaType) {
+        this.mediaType = mediaType;
+    }
+
+    public String getPrivacy() {
+        return privacy;
+    }
+
+    public void setPrivacy(String privacy) {
+        this.privacy = privacy;
+    }
+
     public Integer getExpiresInHours() {
         return expiresInHours;
     }
@@ -113,6 +144,9 @@ public class CreateStoryRequest {
 
     public static class Builder {
         private String message;
+        private String mediaUrl;
+        private String mediaType = "TEXT";
+        private String privacy = "PUBLIC";
         private String musicTrackId;
         private String musicTitle;
         private String musicArtist;
@@ -124,6 +158,21 @@ public class CreateStoryRequest {
 
         public Builder message(String message) {
             this.message = message;
+            return this;
+        }
+
+        public Builder mediaUrl(String mediaUrl) {
+            this.mediaUrl = mediaUrl;
+            return this;
+        }
+
+        public Builder mediaType(String mediaType) {
+            this.mediaType = mediaType;
+            return this;
+        }
+
+        public Builder privacy(String privacy) {
+            this.privacy = privacy;
             return this;
         }
 
@@ -168,7 +217,7 @@ public class CreateStoryRequest {
         }
 
         public CreateStoryRequest build() {
-            return new CreateStoryRequest(message, musicTrackId, musicTitle, musicArtist, musicAlbumArt,
+            return new CreateStoryRequest(message, mediaUrl, mediaType, privacy, musicTrackId, musicTitle, musicArtist, musicAlbumArt,
                     musicPreviewUrl, musicDuration, backgroundGradient, expiresInHours);
         }
     }

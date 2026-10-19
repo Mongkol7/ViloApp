@@ -81,8 +81,8 @@ class _RegisterScreenState extends State<RegisterScreen>
 
     if (_nameCtrl.text.trim().isEmpty) {
       nameErr = 'Full name is required';
-    } else if (_nameCtrl.text.trim().length < 3) {
-      nameErr = 'Name must be at least 3 characters';
+    } else if (_nameCtrl.text.trim().length < 2) {
+      nameErr = 'Name must be at least 2 characters';
     }
     if (_emailCtrl.text.trim().isEmpty) {
       emailErr = 'Email is required';
@@ -120,9 +120,9 @@ class _RegisterScreenState extends State<RegisterScreen>
       final authSource = AuthRemoteDataSource();
       final fullName = _nameCtrl.text.trim();
       var username = fullName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '_');
-      if (username.length < 3) {
+      if (username.length < 2) {
         final emailPrefix = _emailCtrl.text.trim().split('@').first.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '_');
-        username = emailPrefix.length >= 3 ? emailPrefix : '${username}_user';
+        username = emailPrefix.length >= 2 ? emailPrefix : '${username}_user';
       }
       if (username.length > 50) {
         username = username.substring(0, 50);

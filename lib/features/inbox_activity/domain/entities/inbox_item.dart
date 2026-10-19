@@ -4,9 +4,15 @@ class StoryItem {
   final String imageUrl;
   final bool isCreate;
   final String? message;
+  final String? mediaUrl;
+  final String mediaType; // 'TEXT', 'IMAGE', 'VIDEO'
+  final String privacy; // 'PUBLIC', 'FOLLOWERS', 'FRIENDS'
   final String? musicTitle;
   final String? musicArtist;
   final String? timestamp;
+  final int viewCount;
+  final bool isMyStory;
+  final String? authorUsername;
 
   const StoryItem({
     required this.id,
@@ -14,9 +20,15 @@ class StoryItem {
     required this.imageUrl,
     this.isCreate = false,
     this.message,
+    this.mediaUrl,
+    this.mediaType = 'TEXT',
+    this.privacy = 'PUBLIC',
     this.musicTitle,
     this.musicArtist,
     this.timestamp,
+    this.viewCount = 0,
+    this.isMyStory = false,
+    this.authorUsername,
   });
 }
 
@@ -24,9 +36,17 @@ class NotificationItem {
   final String id;
   final String title;
   final String subtitle;
-  final String iconType; // 'followers', 'activity', 'system'
+  final String iconType; // 'followers', 'activity', 'system', 'message', 'story_view'
   final int? badgeCount;
   final bool hasDot;
+  final String type; // 'MESSAGE', 'STORY_VIEW', 'FOLLOW', 'LIKE', 'COMMENT', 'SYSTEM'
+  final String? entityId;
+  final String? entityType;
+  final int? actorId;
+  final String? actorUsername;
+  final String? actorDisplayName;
+  final String? actorAvatarUrl;
+  final String? timeAgo;
 
   const NotificationItem({
     required this.id,
@@ -35,6 +55,14 @@ class NotificationItem {
     required this.iconType,
     this.badgeCount,
     this.hasDot = false,
+    this.type = 'SYSTEM',
+    this.entityId,
+    this.entityType,
+    this.actorId,
+    this.actorUsername,
+    this.actorDisplayName,
+    this.actorAvatarUrl,
+    this.timeAgo,
   });
 }
 

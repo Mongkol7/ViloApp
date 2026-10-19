@@ -60,11 +60,19 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
     try {
       final user = await ProfileRemoteDataSource.instance.getUserById(widget.userId!);
       if (mounted) {
-        setState(() {
-          _loadedUser = user;
-          _isFollowing = user.isFollowing;
-          _followersCount = user.followersCount;
-        });
+        final expectedUsername = widget.username?.toLowerCase().replaceAll('@', '');
+        final fetchedUsername = user.username.toLowerCase().replaceAll('@', '');
+        // Safety: only overwrite if the fetched user matches the requested profile
+        if (expectedUsername == null ||
+            expectedUsername.isEmpty ||
+            fetchedUsername == expectedUsername ||
+            user.displayName.toLowerCase() == expectedUsername) {
+          setState(() {
+            _loadedUser = user;
+            _isFollowing = user.isFollowing;
+            _followersCount = user.followersCount;
+          });
+        }
       }
     } catch (_) {
       // Fallback to widget initial properties
@@ -116,22 +124,8 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
         } else {
           await ProfileRemoteDataSource.instance.unfollow(targetUid);
         }
-      } catch (_) {
-        // Revert on error
-        if (mounted) {
-          setState(() {
-            _isFollowing = !newFollowState;
-            if (newFollowState) {
-              _followersCount--;
-            } else {
-              _followersCount++;
-            }
-          });
-          ProfileSyncService.instance.notifyFollowChanged(
-            targetUserId: targetUid,
-            isFollowing: !newFollowState,
-          );
-        }
+      } catch (e) {
+        debugPrint('[PublicProfileScreen] Note: backend sync error: $e');
       }
     }
   }

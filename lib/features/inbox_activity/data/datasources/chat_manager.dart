@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../../../auth/data/datasources/token_storage.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../domain/entities/inbox_item.dart';
 import 'chat_remote_data_source.dart';
 import 'chat_stomp_service.dart';
@@ -25,8 +26,12 @@ class ChatManager {
   List<DirectMessageThread> get threads => _threadsNotifier.value;
 
   File? _getLocalFile() {
+    final uid = TokenStorage.instance.currentUserIdSync ?? 1;
+    return _getLocalFileForUser(uid);
+  }
+
+  File? _getLocalFileForUser(int uid) {
     try {
-      final uid = TokenStorage.instance.currentUserIdSync ?? 1;
       if (Platform.isAndroid) {
         final dir = Directory('/data/user/0/com.example.viloapp/files');
         if (!dir.existsSync()) dir.createSync(recursive: true);
@@ -303,6 +308,9 @@ class ChatManager {
     }
 
     final lower = username.toLowerCase();
+    if (lower == 'sak') return 23;
+    if (lower == 'liza') return 22;
+    if (lower == 's1' || lower.contains('s1')) return 99;
     if (lower.contains('fashion')) return 100;
     if (lower.contains('kimliza') || lower.contains('liza')) return 4;
     if (lower.contains('bunheng') || lower.contains('heng')) return 2;
@@ -387,10 +395,72 @@ class ChatManager {
       }).catchError((err) {
         debugPrint('[ChatManager] Backend DB save note: $err');
       });
+      _mirrorMessageToRecipientLocalCache(userId, trimmed);
     }
 
     // CRITICAL: NO AUTO-REPLY IS EXECUTED HERE.
     // The message is pure peer-to-peer real chat and saved to DB.
+  }
+
+  void _mirrorMessageToRecipientLocalCache(int recipientId, String text) {
+    try {
+      final senderUid = TokenStorage.instance.currentUserIdSync;
+      final senderUsername = TokenStorage.instance.currentDisplayNameSync ??
+          TokenStorage.instance.currentUsernameSync ?? 'User';
+      final senderAvatar = ProfileSyncService.instance.currentUserAvatar;
+
+      final recipientFile = _getLocalFileForUser(recipientId);
+      if (recipientFile == null) return;
+
+      List<dynamic> rawList = [];
+      if (recipientFile.existsSync()) {
+        try {
+          rawList = jsonDecode(recipientFile.readAsStringSync()) as List<dynamic>;
+        } catch (_) {}
+      }
+
+      final incomingMsg = {
+        'id': DateTime.now().millisecondsSinceEpoch.toString(),
+        'text': text,
+        'isMe': false,
+        'timestamp': 'Just now',
+        'status': 'Delivered',
+      };
+
+      final senderIdStr = senderUid != null ? senderUid.toString() : '21';
+      int idx = rawList.indexWhere((item) =>
+          item['id']?.toString() == senderIdStr ||
+          (senderUid != null && item['userId'] == senderUid) ||
+          item['username']?.toString().toLowerCase() == senderUsername.toLowerCase());
+
+      if (idx != -1) {
+        final existing = Map<String, dynamic>.from(rawList[idx] as Map);
+        final msgs = List<dynamic>.from(existing['messages'] as List? ?? [])..add(incomingMsg);
+        existing['lastMessage'] = text;
+        existing['timeAgo'] = 'Just now';
+        existing['messages'] = msgs;
+        rawList.removeAt(idx);
+        rawList.insert(0, existing);
+      } else {
+        rawList.insert(0, {
+          'id': senderIdStr,
+          'userId': senderUid,
+          'username': senderUsername,
+          'avatarUrl': senderAvatar,
+          'lastMessage': text,
+          'timeAgo': 'Just now',
+          'isVerified': true,
+          'followersCount': '520K followers',
+          'isFollowing': false,
+          'followsYou': true,
+          'messages': [incomingMsg],
+        });
+      }
+
+      recipientFile.writeAsStringSync(jsonEncode(rawList));
+    } catch (e) {
+      debugPrint('[ChatManager] Error mirroring message locally: $e');
+    }
   }
 
   void _updateMessageWithDbId(String threadId, String oldId, String newId) {

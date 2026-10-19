@@ -17,9 +17,13 @@ import '../widgets/animated_mini_music_wave.dart';
 import 'chat_detail_screen.dart';
 import 'share_thought_screen.dart';
 import 'story_viewer_screen.dart';
+import 'upload_story_screen.dart';
 import 'activity_screen.dart';
 import 'new_followers_screen.dart';
 import 'system_notifications_screen.dart';
+import '../../../profile/presentation/screens/public_profile_screen.dart';
+import '../../../feed/presentation/pages/video_feed_page.dart';
+import '../widgets/story_viewers_bottom_sheet.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -87,11 +91,40 @@ class _InboxScreenState extends State<InboxScreen> {
 
     for (final s in _stories) {
       if (s.isCreate) continue;
+      if (s.isMyStory) {
+        if (myStory == null) {
+          final myBackendStory = SharedThoughtStory(
+            id: s.id,
+            message: s.message ?? '',
+            mediaUrl: s.mediaUrl,
+            mediaType: s.mediaType,
+            privacy: s.privacy,
+            timestamp: s.timestamp ?? 'Just now',
+            viewCount: s.viewCount,
+            authorUsername: s.authorUsername,
+            authorName: s.title,
+          );
+          ThoughtStoryManager.instance.setStory(myBackendStory);
+          items.insert(
+            0,
+            StoryViewerItem(
+              story: myBackendStory,
+              isOwner: true,
+              authorName: 'Your Story',
+              authorAvatarUrl: s.imageUrl,
+            ),
+          );
+        }
+        continue;
+      }
       items.add(
         StoryViewerItem(
           story: SharedThoughtStory(
             id: s.id,
             message: s.message ?? "Living the moment ✨",
+            mediaUrl: s.mediaUrl,
+            mediaType: s.mediaType,
+            privacy: s.privacy,
             musicTrack: s.musicTitle != null
                 ? MusicTrack(
                     id: 'm_${s.id}',
@@ -102,8 +135,10 @@ class _InboxScreenState extends State<InboxScreen> {
                   )
                 : null,
             timestamp: s.timestamp ?? '2h ago',
-            viewCount: 1250,
+            viewCount: s.viewCount,
             backgroundColor: const Color(0xFF141416),
+            authorUsername: s.authorUsername,
+            authorName: s.title,
           ),
           isOwner: false,
           authorName: s.title,
@@ -132,7 +167,6 @@ class _InboxScreenState extends State<InboxScreen> {
 
   Future<void> _openNotificationHub(NotificationItem item) async {
     setState(() {
-      _notifications = List.from(_notifications);
       final idx = _notifications.indexWhere((n) => n.id == item.id);
       if (idx != -1) {
         _notifications[idx] = NotificationItem(
@@ -140,6 +174,14 @@ class _InboxScreenState extends State<InboxScreen> {
           title: item.title,
           subtitle: item.subtitle,
           iconType: item.iconType,
+          type: item.type,
+          entityId: item.entityId,
+          entityType: item.entityType,
+          actorId: item.actorId,
+          actorUsername: item.actorUsername,
+          actorDisplayName: item.actorDisplayName,
+          actorAvatarUrl: item.actorAvatarUrl,
+          timeAgo: item.timeAgo,
           badgeCount: null,
           hasDot: false,
         );
@@ -148,21 +190,171 @@ class _InboxScreenState extends State<InboxScreen> {
 
     NotificationRemoteDataSource.instance.markAsRead(item.id);
 
-    Widget screen;
-    if (item.iconType == 'followers') {
-      screen = const NewFollowersScreen();
-    } else if (item.iconType == 'activity') {
-      screen = const ActivityScreen();
-    } else {
-      screen = const SystemNotificationsScreen();
+    final titleLower = item.title.toLowerCase();
+    final subLower = item.subtitle.toLowerCase();
+    final typeUpper = item.type.toUpperCase();
+
+    // 1. Direct Message notification -> Open chat with sender
+    final isMessage = typeUpper == 'MESSAGE' ||
+        item.iconType == 'message' ||
+        titleLower.contains('message') ||
+        subLower.contains('hi sak') ||
+        subLower.contains('me liza');
+
+    if (isMessage) {
+      String targetUsername = item.actorUsername ?? '';
+      if (targetUsername.isEmpty) {
+        if (titleLower.contains('from ')) {
+          final idx = titleLower.indexOf('from ');
+          targetUsername = item.title.substring(idx + 5).trim();
+        } else if (subLower.contains('me ')) {
+          final idx = subLower.indexOf('me ');
+          targetUsername = item.subtitle.substring(idx + 3).trim();
+        } else {
+          targetUsername = 'User';
+        }
+      }
+
+      final targetUid = item.actorId ?? (targetUsername.toLowerCase() == 'liza' ? 2 : (targetUsername.toLowerCase() == 'sak' ? 1 : 0));
+      final thread = ChatManager.instance.getOrCreateThread(
+        userId: targetUid,
+        username: targetUsername,
+        avatarUrl: item.actorAvatarUrl ?? (targetUsername.toLowerCase() == 'liza'
+            ? 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80'
+            : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80'),
+      );
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatDetailScreen(thread: thread),
+        ),
+      );
+      if (mounted) setState(() {});
+      return;
     }
 
+    // 2. Story View notification -> Open Story Viewer with viewers sheet or StoryViewersBottomSheet
+    final isStoryView = typeUpper == 'STORY_VIEW' ||
+        item.iconType == 'story_view' ||
+        titleLower.contains('story view') ||
+        subLower.contains('viewed your') ||
+        subLower.contains('24h thought');
+
+    if (isStoryView) {
+      final currentStory = ThoughtStoryManager.instance.currentStory;
+      final items = _buildStoryViewerList();
+      if (items.isNotEmpty && items.first.isOwner) {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => StoryViewerScreen(
+              stories: items,
+              initialIndex: 0,
+              story: currentStory,
+              openViewersOnStart: true,
+            ),
+          ),
+        );
+      } else {
+        await StoryViewersBottomSheet.show(
+          context,
+          storyId: item.entityId,
+          viewCount: 1,
+        );
+      }
+      if (mounted) setState(() {});
+      return;
+    }
+
+    // 3. Follow notification -> Open PublicProfileScreen for specific follower, or NewFollowersScreen if general hub
+    final isFollow = typeUpper == 'FOLLOW' ||
+        item.iconType == 'followers' ||
+        titleLower.contains('follower') ||
+        subLower.contains('started following');
+
+    if (isFollow) {
+      String targetUsername = item.actorUsername ?? '';
+      if (targetUsername.isEmpty && subLower.contains(' started following')) {
+        targetUsername = item.subtitle.split(' started following').first.trim();
+      }
+
+      if (targetUsername.isNotEmpty && !targetUsername.contains('others')) {
+        final targetUid = item.actorId ?? (targetUsername.toLowerCase() == 'liza' ? 2 : (targetUsername.toLowerCase() == 'sak' ? 1 : null));
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PublicProfileScreen(
+              userId: targetUid,
+              username: targetUsername,
+            ),
+          ),
+        );
+        if (mounted) setState(() {});
+        return;
+      }
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const NewFollowersScreen()),
+      );
+      if (mounted) setState(() {});
+      return;
+    }
+
+    // 4. Video Like, Comment, Mention -> VideoFeedPage
+    if (typeUpper == 'COMMENT' || typeUpper == 'MENTION' || titleLower.contains('comment') || titleLower.contains('mention')) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => VideoFeedPage(
+            isActive: true,
+            isStandalone: true,
+            initialPage: 0,
+            openCommentsOnStart: true,
+            initialCommentReplyUser: item.actorUsername,
+            initialCommentText: item.subtitle,
+          ),
+        ),
+      );
+      if (mounted) setState(() {});
+      return;
+    }
+
+    // 5. Activity hub screen
+    if (item.iconType == 'activity' || titleLower == 'activity') {
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const ActivityScreen()),
+      );
+      if (mounted) setState(() {});
+      return;
+    }
+
+    // 6. Default: System Notifications
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => screen),
+      MaterialPageRoute(builder: (_) => const SystemNotificationsScreen()),
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _openUploadStory() async {
+    final result = await Navigator.of(context).push<SharedThoughtStory>(
+      MaterialPageRoute(
+        builder: (_) => const UploadStoryScreen(),
+      ),
     );
 
-    if (mounted) {
-      setState(() {});
+    if (result != null && mounted) {
+      ThoughtStoryManager.instance.setStory(result);
+      _loadAllData();
+    }
+  }
+
+  Future<void> _openNoteStory() async {
+    final result = await Navigator.of(context).push<SharedThoughtStory>(
+      MaterialPageRoute(
+        builder: (_) => const ShareThoughtScreen(),
+      ),
+    );
+
+    if (result != null && mounted) {
+      ThoughtStoryManager.instance.setStory(result);
+      _loadAllData();
     }
   }
 
@@ -185,17 +377,7 @@ class _InboxScreenState extends State<InboxScreen> {
         _loadAllData();
       }
     } else {
-      // If not shared yet, open ShareThoughtScreen
-      final result = await Navigator.of(context).push<SharedThoughtStory>(
-        MaterialPageRoute(
-          builder: (_) => const ShareThoughtScreen(),
-        ),
-      );
-
-      if (result != null && mounted) {
-        ThoughtStoryManager.instance.setStory(result);
-        _loadAllData();
-      }
+      _openUploadStory();
     }
   }
 
@@ -438,16 +620,17 @@ class _InboxScreenState extends State<InboxScreen> {
           final messageText = isStoryActive ? myStory.message : 'Share a thought...';
           final hasMusic = isStoryActive && myStory.musicTrack != null;
 
-          // "Create / Active Story" Bubble with Floating Thought Box & Music Wave
-          return GestureDetector(
-            onTap: _handleCreateOrViewStory,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Floating Thought Message Box (with animated music wave if attached)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                  constraints: const BoxConstraints(maxWidth: 95),
+          // Separate handlers: Note box opens note story; + badge opens photo/video upload; avatar views active story
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 1. Floating Thought Message Box (tap opens Note story with note and song)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _openNoteStory,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  constraints: const BoxConstraints(maxWidth: 105),
                   decoration: BoxDecoration(
                     color: isStoryActive ? const Color(0xFF222228) : Colors.white,
                     borderRadius: BorderRadius.circular(10),
@@ -485,100 +668,125 @@ class _InboxScreenState extends State<InboxScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 4),
+              ),
+              const SizedBox(height: 4),
 
-            // Cloud Avatar with Story Ring (if active) or Plus Badge
-            SizedBox(
-              width: 58,
-              height: 58,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    width: 58,
-                    height: 58,
-                    padding: isStoryActive ? const EdgeInsets.all(2.5) : EdgeInsets.zero,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: isStoryActive
-                          ? const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Color(0xFFFE2C55),
-                                Color(0xFFFF9F43),
-                                Color(0xFF9B51E0),
-                                Color(0xFF2F80ED),
-                              ],
-                            )
-                          : const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFF56CCF2), Color(0xFF2F80ED)],
+              // 2. Avatar with Story Ring (if active) and Plus Badge
+              SizedBox(
+                width: 64,
+                height: 64,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Avatar Circle (tap views active story if active, or opens upload if not)
+                    Align(
+                      alignment: Alignment.center,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: isStoryActive ? _handleCreateOrViewStory : _openUploadStory,
+                        child: Container(
+                          width: 56,
+                          height: 56,
+                          padding: isStoryActive ? const EdgeInsets.all(2.5) : EdgeInsets.zero,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: isStoryActive
+                                ? const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFFFE2C55),
+                                      Color(0xFFFF9F43),
+                                      Color(0xFF9B51E0),
+                                      Color(0xFF2F80ED),
+                                    ],
+                                  )
+                                : const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [Color(0xFF56CCF2), Color(0xFF2F80ED)],
+                                  ),
+                            border: isStoryActive
+                                ? null
+                                : Border.all(
+                                    color: const Color(0xFF2F80ED),
+                                    width: 2.0,
+                                  ),
+                          ),
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [Color(0xFF56CCF2), Color(0xFF2F80ED)],
+                              ),
                             ),
-                      border: isStoryActive
-                          ? null
-                          : Border.all(
-                              color: const Color(0xFF2F80ED),
-                              width: 2.0,
+                            child: const Center(
+                              child: Icon(
+                                Icons.cloud_rounded,
+                                color: Colors.white,
+                                size: 26,
+                              ),
                             ),
-                    ),
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF56CCF2), Color(0xFF2F80ED)],
+                          ),
                         ),
                       ),
-                      child: const Center(
-                        child: Icon(
-                          Icons.cloud_rounded,
-                          color: Colors.white,
-                          size: 28,
-                        ),
-                      ),
                     ),
-                  ),
-                  if (!isStoryActive)
+                    // Plus Badge: Clicking + opens Photo/Video Upload Story with reliable hit test
                     Positioned(
-                      right: -2,
-                      bottom: -2,
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2F80ED),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.black, width: 2.0),
-                        ),
-                        child: const Icon(
-                          Icons.add,
-                          color: Colors.white,
-                          size: 13,
+                      right: 0,
+                      bottom: 0,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _openUploadStory,
+                        child: Container(
+                          width: 30,
+                          height: 30,
+                          alignment: Alignment.center,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.transparent,
+                          ),
+                          child: Container(
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2F80ED),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.black, width: 2.0),
+                            ),
+                            child: const Icon(
+                              Icons.add,
+                              color: Colors.white,
+                              size: 14,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              isStoryActive ? 'Your story' : story.title,
-              style: const TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Colors.white,
+              const SizedBox(height: 5),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: isStoryActive ? _handleCreateOrViewStory : _openUploadStory,
+                child: Text(
+                  isStoryActive ? 'Your story' : story.title,
+                  style: const TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                  ),
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          );
+        },
       );
-    },
-  );
-}
+    }
 
     return GestureDetector(
       onTap: () => _openOtherUserStory(story),
@@ -633,8 +841,133 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   Widget _buildNotificationTile(NotificationItem item) {
+    final titleLower = item.title.toLowerCase();
+    final subLower = item.subtitle.toLowerCase();
+    final typeUpper = item.type.toUpperCase();
+
+    final isMessage = typeUpper == 'MESSAGE' ||
+        item.iconType == 'message' ||
+        titleLower.contains('message') ||
+        subLower.contains('hi sak') ||
+        subLower.contains('me liza');
+
+    final isStoryView = typeUpper == 'STORY_VIEW' ||
+        item.iconType == 'story_view' ||
+        titleLower.contains('story view') ||
+        subLower.contains('viewed your') ||
+        subLower.contains('24h thought');
+
+    final isFollow = typeUpper == 'FOLLOW' ||
+        item.iconType == 'followers' ||
+        titleLower.contains('follower') ||
+        subLower.contains('started following');
+
+    final isComment = typeUpper == 'COMMENT' || titleLower.contains('comment') || subLower.contains('comment');
+    final isLike = typeUpper == 'LIKE' || (!isMessage && !isStoryView && !isFollow && !isComment && (item.iconType == 'activity' || titleLower.contains('liked')));
+
     Widget leadingIcon;
-    if (item.iconType == 'activity') {
+    if (item.actorAvatarUrl != null && item.actorAvatarUrl!.isNotEmpty && (isMessage || isStoryView || isFollow)) {
+      Widget miniBadge;
+      if (isMessage) {
+        miniBadge = Container(
+          padding: const EdgeInsets.all(3),
+          decoration: const BoxDecoration(color: Color(0xFF2F80ED), shape: BoxShape.circle),
+          child: const Icon(Icons.chat_bubble_rounded, color: Colors.white, size: 10),
+        );
+      } else if (isStoryView) {
+        miniBadge = Container(
+          padding: const EdgeInsets.all(3),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(colors: [Color(0xFFFE2C55), Color(0xFF2F80ED)]),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.visibility_rounded, color: Colors.white, size: 10),
+        );
+      } else {
+        miniBadge = Container(
+          padding: const EdgeInsets.all(3),
+          decoration: const BoxDecoration(color: Color(0xFFFE2C55), shape: BoxShape.circle),
+          child: const Icon(Icons.person_add_rounded, color: Colors.white, size: 10),
+        );
+      }
+
+      leadingIcon = Stack(
+        clipBehavior: Clip.none,
+        children: [
+          CircleAvatar(
+            radius: 26,
+            backgroundColor: const Color(0xFF2C2C32),
+            child: ClipOval(
+              child: Image.network(
+                item.actorAvatarUrl!,
+                width: 52,
+                height: 52,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => const Icon(Icons.person, color: Colors.white38, size: 26),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: miniBadge,
+          ),
+        ],
+      );
+    } else if (isMessage) {
+      leadingIcon = Container(
+        width: 52,
+        height: 52,
+        decoration: const BoxDecoration(
+          color: Color(0xFF2F80ED),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(
+          Icons.chat_bubble_rounded,
+          color: Colors.white,
+          size: 24,
+        ),
+      );
+    } else if (isStoryView) {
+      leadingIcon = Container(
+        width: 52,
+        height: 52,
+        padding: const EdgeInsets.all(2.5),
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFFE2C55), Color(0xFFFF9F43), Color(0xFF2F80ED)],
+          ),
+        ),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF161618),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.visibility_rounded,
+            color: Colors.white,
+            size: 22,
+          ),
+        ),
+      );
+    } else if (isFollow) {
+      leadingIcon = Container(
+        width: 52,
+        height: 52,
+        decoration: const BoxDecoration(
+          color: Color(0xFF333336),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(
+          Icons.person_add_rounded,
+          color: Colors.white,
+          size: 26,
+        ),
+      );
+    } else if (isLike) {
       leadingIcon = Container(
         width: 52,
         height: 52,
@@ -648,18 +981,18 @@ class _InboxScreenState extends State<InboxScreen> {
           size: 26,
         ),
       );
-    } else if (item.iconType == 'followers') {
+    } else if (isComment) {
       leadingIcon = Container(
         width: 52,
         height: 52,
         decoration: const BoxDecoration(
-          color: Color(0xFF333336),
+          color: Color(0xFF2F80ED),
           shape: BoxShape.circle,
         ),
         child: const Icon(
-          Icons.person_rounded,
+          Icons.comment_rounded,
           color: Colors.white,
-          size: 28,
+          size: 24,
         ),
       );
     } else {

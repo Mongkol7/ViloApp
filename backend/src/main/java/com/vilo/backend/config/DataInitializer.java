@@ -54,6 +54,17 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
+        // Guarantee Sak and Liza accounts always exist for login, search, follow, and chat
+        User sak = getOrCreateUser("sak", "sak@vilo.app", "password123",
+                "Sak", "Mobile UI Lead & Vilo Creator",
+                "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+        User liza = getOrCreateUser("liza", "liza@vilo.app", "password123",
+                "Liza", "Social Stories & Real-Time Chat Lead",
+                "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
         User mongkol = null;
         User bunheng = null;
         User rithysak = null;
@@ -164,6 +175,11 @@ public class DataInitializer implements CommandLineRunner {
             getOrCreateUser("ryan_explores", "ryan@vilo.app", "password123",
                     "Ryan Walker", "Wild camping & drone aerial shots",
                     "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80",
+                    false, Set.of(Role.ROLE_USER));
+
+            getOrCreateUser("s1", "s1@vilo.app", "password123",
+                    "s1", "Vilo Community Member",
+                    "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80",
                     false, Set.of(Role.ROLE_USER));
 
             // Set up initial follow relationships:

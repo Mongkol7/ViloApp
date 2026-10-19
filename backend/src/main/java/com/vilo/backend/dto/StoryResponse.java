@@ -17,6 +17,9 @@ public class StoryResponse {
     private String musicAlbumArt;
     private String musicPreviewUrl;
     private Integer musicDuration;
+    private String mediaUrl;
+    private String mediaType;
+    private String privacy;
     private String backgroundGradient;
     private Integer viewCount;
     private Instant expiresAt;
@@ -28,7 +31,8 @@ public class StoryResponse {
     }
 
     public StoryResponse(Long id, Long userId, String username, String displayName, String avatarUrl,
-                         Boolean isVerified, String message, String musicTrackId, String musicTitle,
+                         Boolean isVerified, String message, String mediaUrl, String mediaType, String privacy,
+                         String musicTrackId, String musicTitle,
                          String musicArtist, String musicAlbumArt, String musicPreviewUrl,
                          Integer musicDuration, String backgroundGradient, Integer viewCount,
                          Instant expiresAt, Instant createdAt, Boolean isViewedByMe, Boolean isMyStory) {
@@ -39,6 +43,9 @@ public class StoryResponse {
         this.avatarUrl = avatarUrl;
         this.isVerified = isVerified;
         this.message = message;
+        this.mediaUrl = mediaUrl;
+        this.mediaType = mediaType != null ? mediaType : "TEXT";
+        this.privacy = privacy != null ? privacy : "PUBLIC";
         this.musicTrackId = musicTrackId;
         this.musicTitle = musicTitle;
         this.musicArtist = musicArtist;
@@ -201,6 +208,30 @@ public class StoryResponse {
         this.isViewedByMe = isViewedByMe;
     }
 
+    public String getMediaUrl() {
+        return mediaUrl;
+    }
+
+    public void setMediaUrl(String mediaUrl) {
+        this.mediaUrl = mediaUrl;
+    }
+
+    public String getMediaType() {
+        return mediaType;
+    }
+
+    public void setMediaType(String mediaType) {
+        this.mediaType = mediaType;
+    }
+
+    public String getPrivacy() {
+        return privacy;
+    }
+
+    public void setPrivacy(String privacy) {
+        this.privacy = privacy;
+    }
+
     public Boolean getIsMyStory() {
         return isMyStory;
     }
@@ -217,6 +248,9 @@ public class StoryResponse {
         private String avatarUrl;
         private Boolean isVerified;
         private String message;
+        private String mediaUrl;
+        private String mediaType = "TEXT";
+        private String privacy = "PUBLIC";
         private String musicTrackId;
         private String musicTitle;
         private String musicArtist;
@@ -262,6 +296,21 @@ public class StoryResponse {
 
         public Builder message(String message) {
             this.message = message;
+            return this;
+        }
+
+        public Builder mediaUrl(String mediaUrl) {
+            this.mediaUrl = mediaUrl;
+            return this;
+        }
+
+        public Builder mediaType(String mediaType) {
+            this.mediaType = mediaType;
+            return this;
+        }
+
+        public Builder privacy(String privacy) {
+            this.privacy = privacy;
             return this;
         }
 
@@ -327,6 +376,7 @@ public class StoryResponse {
 
         public StoryResponse build() {
             return new StoryResponse(id, userId, username, displayName, avatarUrl, isVerified, message,
+                    mediaUrl, mediaType, privacy,
                     musicTrackId, musicTitle, musicArtist, musicAlbumArt, musicPreviewUrl, musicDuration,
                     backgroundGradient, viewCount, expiresAt, createdAt, isViewedByMe, isMyStory);
         }

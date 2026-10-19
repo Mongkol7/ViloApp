@@ -72,16 +72,23 @@ public class AuthService {
 
     @Transactional
     public AuthResponse login(LoginRequest request) {
+        String identifier = request.getUsernameOrEmail().trim().toLowerCase();
+        if ("sak".equals(identifier) && !userRepository.existsByUsername("sak") && userRepository.existsByUsername("rithysak")) {
+            identifier = "rithysak";
+        } else if ("liza".equals(identifier) && !userRepository.existsByUsername("liza") && userRepository.existsByUsername("kimliza")) {
+            identifier = "kimliza";
+        }
+
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
-                        request.getUsernameOrEmail().trim().toLowerCase(),
+                        identifier,
                         request.getPassword()
                 )
         );
 
         User user = userRepository.findByUsernameOrEmail(
-                request.getUsernameOrEmail().trim().toLowerCase(),
-                request.getUsernameOrEmail().trim().toLowerCase()
+                identifier,
+                identifier
         ).orElseThrow(() -> new BadRequestException("User not found"));
 
         return createAuthResponse(user);

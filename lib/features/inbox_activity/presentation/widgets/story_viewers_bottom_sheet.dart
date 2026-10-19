@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../data/datasources/static_story_viewers_data.dart';
 import '../../data/datasources/story_remote_data_source.dart';
 import '../../domain/entities/shared_thought_story.dart';
+import '../../../profile/presentation/screens/public_profile_screen.dart';
 
 class StoryViewersBottomSheet extends StatefulWidget {
   final int viewCount;
@@ -10,11 +10,11 @@ class StoryViewersBottomSheet extends StatefulWidget {
 
   const StoryViewersBottomSheet({
     super.key,
-    this.viewCount = 418,
+    this.viewCount = 0,
     this.storyId,
   });
 
-  static Future<void> show(BuildContext context, {int viewCount = 418, String? storyId}) {
+  static Future<void> show(BuildContext context, {int viewCount = 0, String? storyId}) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -28,23 +28,31 @@ class StoryViewersBottomSheet extends StatefulWidget {
 }
 
 class _StoryViewersBottomSheetState extends State<StoryViewersBottomSheet> {
-  late List<StoryViewer> _viewers;
+  List<StoryViewer> _viewers = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _viewers = List.from(StaticStoryViewersData.viewers);
     _loadLiveViewers();
   }
 
   Future<void> _loadLiveViewers() async {
     if (widget.storyId != null) {
       final liveViewers = await StoryRemoteDataSource.instance.getStoryViewers(widget.storyId!);
-      if (mounted && liveViewers.isNotEmpty) {
+      if (mounted) {
         setState(() {
           _viewers = liveViewers;
+          _isLoading = false;
         });
+        return;
       }
+    }
+    if (mounted) {
+      setState(() {
+        _viewers = [];
+        _isLoading = false;
+      });
     }
   }
 
@@ -63,9 +71,27 @@ class _StoryViewersBottomSheetState extends State<StoryViewersBottomSheet> {
     });
   }
 
+  void _openViewerProfile(StoryViewer viewer) {
+    final parsedId = int.tryParse(viewer.id);
+    final cleanUsername = viewer.username.replaceAll('@', '');
+    final userId = parsedId ?? (cleanUsername == 'liza' ? 22 : (cleanUsername == 'sak' ? 23 : null));
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PublicProfileScreen(
+          userId: userId,
+          username: cleanUsername,
+          displayName: viewer.fullName,
+          avatarUrl: viewer.avatarUrl,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
+    final displayCount = _viewers.isNotEmpty ? _viewers.length : widget.viewCount;
 
     return Container(
       height: screenHeight * 0.75,
@@ -104,14 +130,14 @@ class _StoryViewersBottomSheetState extends State<StoryViewersBottomSheet> {
           ),
           const SizedBox(height: 16),
 
-          // 3. Views Count & Search Icon
+          // 3. Views Count
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '${widget.viewCount} views',
+                  '$displayCount ${displayCount == 1 ? "view" : "views"}',
                   style: const TextStyle(
                     fontFamily: 'Inter',
                     fontSize: 16,
@@ -120,20 +146,26 @@ class _StoryViewersBottomSheetState extends State<StoryViewersBottomSheet> {
                   ),
                 ),
                 Container(
-                  width: 36,
-                  height: 36,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: const Color(0xFF24242A),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: const Color(0xFF34343E),
-                      width: 1.0,
-                    ),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(
-                    Icons.search_rounded,
-                    color: Colors.white,
-                    size: 20,
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.visibility_rounded, color: Color(0xFF56CCF2), size: 14),
+                      SizedBox(width: 4),
+                      Text(
+                        'Live',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF56CCF2),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -141,138 +173,153 @@ class _StoryViewersBottomSheetState extends State<StoryViewersBottomSheet> {
           ),
           const SizedBox(height: 10),
 
-          // 4. Viewers List
+          // 4. Viewers List or Empty State
           Expanded(
-            child: ListView.builder(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              itemCount: _viewers.length,
-              itemBuilder: (context, index) {
-                final viewer = _viewers[index];
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Row(
-                    children: [
-                      // Avatar (with story ring if enabled)
-                      if (viewer.hasStoryRing)
-                        Container(
-                          width: 48,
-                          height: 48,
-                          padding: const EdgeInsets.all(2),
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              colors: [Color(0xFFFE2C55), Color(0xFFFF9F43), Color(0xFF9B51E0)],
-                            ),
-                          ),
-                          child: ClipOval(
-                            child: Image.network(
-                              viewer.avatarUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => Container(
-                                color: AppColors.surface,
-                                child: const Icon(Icons.person, color: Colors.white),
-                              ),
-                            ),
-                          ),
-                        )
-                      else
-                        Container(
-                          width: 46,
-                          height: 46,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.15),
-                              width: 1.0,
-                            ),
-                          ),
-                          child: ClipOval(
-                            child: Image.network(
-                              viewer.avatarUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => Container(
-                                color: AppColors.surface,
-                                child: const Icon(Icons.person, color: Colors.white),
-                              ),
-                            ),
-                          ),
-                        ),
-                      const SizedBox(width: 14),
-
-                      // Username & Full Name
-                      Expanded(
+            child: _isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF2F80ED)),
+                  )
+                : _viewers.isEmpty
+                    ? Center(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              viewer.username,
-                              style: const TextStyle(
+                            Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.05),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.remove_red_eye_outlined,
+                                color: Color(0xFF8E8E93),
+                                size: 32,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            const Text(
+                              'No viewers yet',
+                              style: TextStyle(
                                 fontFamily: 'Inter',
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
                                 color: Colors.white,
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              viewer.fullName,
-                              style: const TextStyle(
+                            const SizedBox(height: 6),
+                            const Text(
+                              'When friends or followers view this story,\nthey will show up here.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
                                 fontFamily: 'Inter',
                                 fontSize: 13,
-                                fontWeight: FontWeight.w400,
                                 color: Color(0xFF8E8E93),
+                                height: 1.4,
                               ),
                             ),
                           ],
                         ),
-                      ),
+                      )
+                    : ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        itemCount: _viewers.length,
+                        itemBuilder: (context, index) {
+                          final viewer = _viewers[index];
+                          return InkWell(
+                            onTap: () => _openViewerProfile(viewer),
+                            borderRadius: BorderRadius.circular(14),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              child: Row(
+                                children: [
+                                  // Avatar
+                                  Container(
+                                    width: 48,
+                                    height: 48,
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: LinearGradient(
+                                        colors: [Color(0xFF2F80ED), Color(0xFF56CCF2)],
+                                      ),
+                                    ),
+                                    child: ClipOval(
+                                      child: Image.network(
+                                        viewer.avatarUrl,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) => Container(
+                                          color: AppColors.surface,
+                                          child: const Icon(Icons.person, color: Colors.white),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 14),
 
-                      // Action Button (Add / Follow / Following)
-                      GestureDetector(
-                        onTap: () => _toggleAction(index),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7.5),
-                          decoration: BoxDecoration(
-                            color: viewer.actionType == 'following'
-                                ? const Color(0xFF26262B)
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(18),
-                            border: viewer.actionType == 'following'
-                                ? Border.all(color: const Color(0xFF383840), width: 1.0)
-                                : null,
-                          ),
-                          child: Text(
-                            viewer.actionType == 'add'
-                                ? 'Add'
-                                : viewer.actionType == 'following'
-                                    ? 'Following'
-                                    : 'Follow',
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: viewer.actionType == 'following'
-                                  ? Colors.white
-                                  : const Color(0xFF141416),
+                                  // Username & Full Name
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          viewer.username,
+                                          style: const TextStyle(
+                                            fontFamily: 'Inter',
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '${viewer.fullName} • ${viewer.timeAgo}',
+                                          style: const TextStyle(
+                                            fontFamily: 'Inter',
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w400,
+                                            color: Color(0xFF8E8E93),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // Action Button (Follow / Following)
+                                  GestureDetector(
+                                    onTap: () => _toggleAction(index),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                                      decoration: BoxDecoration(
+                                        color: viewer.actionType == 'following'
+                                            ? const Color(0xFF26262B)
+                                            : const Color(0xFF2F80ED),
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: viewer.actionType == 'following'
+                                            ? Border.all(color: const Color(0xFF383840), width: 1.0)
+                                            : null,
+                                      ),
+                                      child: Text(
+                                        viewer.actionType == 'following' ? 'Following' : 'Follow',
+                                        style: TextStyle(
+                                          fontFamily: 'Inter',
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: viewer.actionType == 'following'
+                                              ? Colors.white
+                                              : Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ),
+                          );
+                        },
                       ),
-                      const SizedBox(width: 8),
-
-                      // More options horizontal dots
-                      const Icon(
-                        Icons.more_horiz_rounded,
-                        color: Color(0xFF8E8E93),
-                        size: 22,
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
           ),
         ],
       ),

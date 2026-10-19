@@ -50,14 +50,39 @@ public class StoryService {
         User managedUser = userRepository.findById(currentUser.getId()).orElse(currentUser);
         Set<User> following = managedUser.getFollowing();
 
-        List<ThoughtStory> stories;
+        List<ThoughtStory> rawStories;
         if (following != null && !following.isEmpty()) {
-            stories = storyRepository.findActiveForUsersAndSelf(following, managedUser, now);
+            rawStories = storyRepository.findActiveForUsersAndSelf(following, managedUser, now);
         } else {
-            stories = storyRepository.findAllActive(now);
+            rawStories = storyRepository.findAllActive(now);
         }
 
-        return stories.stream()
+        // Privacy filtering:
+        // PUBLIC: everyone can view
+        // FOLLOWERS: currentUser must follow the author (or is author)
+        // FRIENDS: currentUser and author are mutual friends (or is author)
+        java.util.Set<Long> followingIds = managedUser.getFollowing() != null
+                ? managedUser.getFollowing().stream().map(User::getId).collect(java.util.stream.Collectors.toSet())
+                : java.util.Collections.emptySet();
+        java.util.Set<Long> followerIds = managedUser.getFollowers() != null
+                ? managedUser.getFollowers().stream().map(User::getId).collect(java.util.stream.Collectors.toSet())
+                : java.util.Collections.emptySet();
+
+        return rawStories.stream()
+                .filter(s -> {
+                    if (s.getUser().getId().equals(managedUser.getId())) {
+                        return true; // Owner can always view own stories
+                    }
+                    String priv = s.getPrivacy() != null ? s.getPrivacy().toUpperCase() : "PUBLIC";
+                    if ("FRIENDS".equals(priv)) {
+                        // Mutual friends: both follow each other
+                        return followingIds.contains(s.getUser().getId()) && followerIds.contains(s.getUser().getId());
+                    } else if ("FOLLOWERS".equals(priv)) {
+                        // Current user must follow the author
+                        return followingIds.contains(s.getUser().getId());
+                    }
+                    return true; // PUBLIC
+                })
                 .map(s -> mapToResponse(s, managedUser))
                 .toList();
     }
@@ -70,9 +95,22 @@ public class StoryService {
 
         Instant expiresAt = Instant.now().plus(Duration.ofHours(durationHours));
 
+        String mediaType = request.getMediaType() != null && !request.getMediaType().isBlank()
+                ? request.getMediaType().toUpperCase()
+                : (request.getMediaUrl() != null && !request.getMediaUrl().isBlank() ? "IMAGE" : "TEXT");
+
+        String privacy = request.getPrivacy() != null && !request.getPrivacy().isBlank()
+                ? request.getPrivacy().toUpperCase()
+                : "PUBLIC";
+
+        String message = request.getMessage() != null ? request.getMessage().trim() : "";
+
         ThoughtStory story = ThoughtStory.builder()
                 .user(currentUser)
-                .message(request.getMessage().trim())
+                .message(message)
+                .mediaUrl(request.getMediaUrl())
+                .mediaType(mediaType)
+                .privacy(privacy)
                 .musicTrackId(request.getMusicTrackId())
                 .musicTitle(request.getMusicTitle())
                 .musicArtist(request.getMusicArtist())
@@ -97,28 +135,31 @@ public class StoryService {
             throw new BadRequestException("This story has already expired");
         }
 
-        boolean alreadyViewed = storyViewRepository.existsByStoryAndViewer(story, currentUser);
-        if (!alreadyViewed) {
-            StoryView view = StoryView.builder()
-                    .story(story)
-                    .viewer(currentUser)
-                    .build();
-            storyViewRepository.save(view);
+        boolean isOwner = story.getUser().getId().equals(currentUser.getId());
+        if (!isOwner) {
+            boolean alreadyViewed = storyViewRepository.existsByStoryAndViewer(story, currentUser);
+            if (!alreadyViewed) {
+                StoryView view = StoryView.builder()
+                        .story(story)
+                        .viewer(currentUser)
+                        .build();
+                storyViewRepository.save(view);
 
-            story.setViewCount(story.getViewCount() + 1);
-            storyRepository.save(story);
+                story.setViewCount(story.getViewCount() + 1);
+                storyRepository.save(story);
 
-            // Notify owner if viewed by another user
-            if (!story.getUser().getId().equals(currentUser.getId())) {
-                notificationService.sendNotification(
-                        story.getUser(),
-                        currentUser,
-                        NotificationType.STORY_VIEW,
-                        "New Story View",
-                        currentUser.getDisplayName() + " viewed your 24h thought",
-                        String.valueOf(story.getId()),
-                        "STORY"
-                );
+                // Notify owner if viewed by another user
+                try {
+                    notificationService.sendNotification(
+                            story.getUser(),
+                            currentUser,
+                            NotificationType.STORY_VIEW,
+                            "New Story View",
+                            currentUser.getDisplayName() + " viewed your story",
+                            String.valueOf(story.getId()),
+                            "STORY"
+                    );
+                } catch (Exception ignored) {}
             }
         }
 
@@ -169,6 +210,9 @@ public class StoryService {
                 .avatarUrl(story.getUser().getAvatarUrl())
                 .isVerified(story.getUser().getIsVerified())
                 .message(story.getMessage())
+                .mediaUrl(story.getMediaUrl())
+                .mediaType(story.getMediaType())
+                .privacy(story.getPrivacy())
                 .musicTrackId(story.getMusicTrackId())
                 .musicTitle(story.getMusicTitle())
                 .musicArtist(story.getMusicArtist())

@@ -24,6 +24,7 @@ class StoryViewerScreen extends StatefulWidget {
   final bool isOwner;
   final String authorName;
   final String? authorAvatarUrl;
+  final bool openViewersOnStart;
 
   const StoryViewerScreen({
     super.key,
@@ -33,6 +34,7 @@ class StoryViewerScreen extends StatefulWidget {
     this.isOwner = true,
     this.authorName = 'Your Story',
     this.authorAvatarUrl,
+    this.openViewersOnStart = false,
   });
 
   @override
@@ -85,6 +87,14 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         _nextStory();
       }
     });
+
+    if (widget.openViewersOnStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _openViewersSheet();
+        }
+      });
+    }
   }
 
   @override
@@ -344,6 +354,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       body: SafeArea(
         child: Stack(
           children: [
+            // Layer 0: Background Media (Photo / Video / Color Gradient)
+            Positioned.fill(
+              child: _buildStoryMediaBackground(item.story),
+            ),
+
             // Layer 1: Left / Right Tap and Long-press gesture areas
             Positioned.fill(
               child: Row(
@@ -475,14 +490,71 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            item.authorName,
-                            style: const TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
+                          Row(
+                            children: [
+                              Text(
+                                item.authorName,
+                                style: const TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              if (item.story.privacy == 'FRIENDS') ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF27AE60).withValues(alpha: 0.25),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: const Color(0xFF27AE60), width: 0.8),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.favorite_rounded, size: 10, color: Color(0xFF2ECC71)),
+                                      SizedBox(width: 3),
+                                      Text(
+                                        'Friends',
+                                        style: TextStyle(
+                                          fontFamily: 'Inter',
+                                          color: Color(0xFF2ECC71),
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ] else if (item.story.privacy == 'FOLLOWERS') ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF2F80ED).withValues(alpha: 0.25),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: const Color(0xFF56CCF2), width: 0.8),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.people_outline_rounded, size: 10, color: Color(0xFF56CCF2)),
+                                      SizedBox(width: 3),
+                                      Text(
+                                        'Followers',
+                                        style: TextStyle(
+                                          fontFamily: 'Inter',
+                                          color: Color(0xFF56CCF2),
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                           Text(
                             item.story.timestamp,
@@ -506,121 +578,186 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
                 const Spacer(flex: 2),
 
-                // 3. Center Thought Balloon & Avatar (Pass taps through to tap zones)
-                IgnorePointer(
-                  ignoring: true,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Speech Balloon
-                      CustomPaint(
-                        painter: _ViewerBubblePainter(),
-                        child: Container(
-                          padding: const EdgeInsets.fromLTRB(28, 16, 28, 22),
-                          constraints: const BoxConstraints(minWidth: 170, maxWidth: 280),
-                          child: Text(
-                            item.story.message,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF141416),
-                              height: 1.3,
-                            ),
-                          ),
+                // 3. Center Content: Photo / Video Caption OR Text Thought Balloon
+                if (item.story.isImage || item.story.isVideo) ...[
+                  // Media Story layout: clear view with caption pill and music chip at bottom
+                  if (item.story.message.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.65),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          width: 1.0,
                         ),
                       ),
-
-                      if (item.story.musicTrack != null) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF222228),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: const Color(0xFF383842),
-                              width: 1.0,
+                      child: Text(
+                        item.story.message,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  if (item.story.musicTrack != null) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF222228).withValues(alpha: 0.85),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: const Color(0xFF383842),
+                          width: 1.0,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.music_note_rounded,
+                            color: Color(0xFF56CCF2),
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${item.story.musicTrack!.title} • ${item.story.musicTrack!.artist}',
+                            style: const TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
                             ),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.music_note_rounded,
-                                color: Color(0xFF56CCF2),
-                                size: 16,
+                          const SizedBox(width: 8),
+                          const _ViewerAudioWaveform(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ] else ...[
+                  // Text Thought Story: Speech Balloon & Avatar
+                  IgnorePointer(
+                    ignoring: true,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Speech Balloon
+                        CustomPaint(
+                          painter: _ViewerBubblePainter(),
+                          child: Container(
+                            padding: const EdgeInsets.fromLTRB(28, 16, 28, 22),
+                            constraints: const BoxConstraints(minWidth: 170, maxWidth: 280),
+                            child: Text(
+                              item.story.message,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF141416),
+                                height: 1.3,
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '${item.story.musicTrack!.title} • ${item.story.musicTrack!.artist}',
-                                style: const TextStyle(
-                                  fontFamily: 'Inter',
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
+                            ),
+                          ),
+                        ),
+
+                        if (item.story.musicTrack != null) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF222228),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: const Color(0xFF383842),
+                                width: 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.music_note_rounded,
+                                  color: Color(0xFF56CCF2),
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '${item.story.musicTrack!.title} • ${item.story.musicTrack!.artist}',
+                                  style: const TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const _ViewerAudioWaveform(),
+                              ],
+                            ),
+                          ),
+                        ],
+
+                        const SizedBox(height: 14),
+
+                        // Center Avatar
+                        if (!item.isOwner && item.authorAvatarUrl != null && item.authorAvatarUrl!.isNotEmpty)
+                          Container(
+                            width: 90,
+                            height: 90,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF2F80ED).withValues(alpha: 0.35),
+                                  blurRadius: 20,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: ClipOval(
+                              child: Image.network(
+                                item.authorAvatarUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  color: const Color(0xFF222228),
+                                  child: const Icon(Icons.person, color: Colors.white, size: 48),
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              const _ViewerAudioWaveform(),
-                            ],
+                            ),
+                          )
+                        else
+                          Container(
+                            width: 90,
+                            height: 90,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF56CCF2), Color(0xFF2F80ED)],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF2F80ED).withValues(alpha: 0.35),
+                                  blurRadius: 20,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: const Center(
+                              child: Icon(Icons.cloud_rounded, color: Colors.white, size: 48),
+                            ),
                           ),
-                        ),
                       ],
-
-                      const SizedBox(height: 14),
-
-                      // Center Avatar
-                      if (!item.isOwner && item.authorAvatarUrl != null && item.authorAvatarUrl!.isNotEmpty)
-                        Container(
-                          width: 90,
-                          height: 90,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF2F80ED).withValues(alpha: 0.35),
-                                blurRadius: 20,
-                                spreadRadius: 2,
-                              ),
-                            ],
-                          ),
-                          child: ClipOval(
-                            child: Image.network(
-                              item.authorAvatarUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => Container(
-                                color: const Color(0xFF222228),
-                                child: const Icon(Icons.person, color: Colors.white, size: 48),
-                              ),
-                            ),
-                          ),
-                        )
-                      else
-                        Container(
-                          width: 90,
-                          height: 90,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF56CCF2), Color(0xFF2F80ED)],
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF2F80ED).withValues(alpha: 0.35),
-                                blurRadius: 20,
-                                spreadRadius: 2,
-                              ),
-                            ],
-                          ),
-                          child: const Center(
-                            child: Icon(Icons.cloud_rounded, color: Colors.white, size: 48),
-                          ),
-                        ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
 
                 const Spacer(flex: 3),
 
@@ -779,6 +916,85 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         ),
       ),
     );
+  }
+
+  Widget _buildStoryMediaBackground(SharedThoughtStory story) {
+    if (story.isImage && story.mediaUrl != null && story.mediaUrl!.isNotEmpty) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.network(
+            story.mediaUrl!,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(color: story.backgroundColor),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.7),
+                  Colors.transparent,
+                  Colors.transparent,
+                  Colors.black.withValues(alpha: 0.85),
+                ],
+                stops: const [0.0, 0.22, 0.65, 1.0],
+              ),
+            ),
+          ),
+        ],
+      );
+    } else if (story.isVideo && story.mediaUrl != null && story.mediaUrl!.isNotEmpty) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.network(
+            story.mediaUrl!,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              color: const Color(0xFF0F172A),
+              child: const Center(
+                child: Icon(Icons.movie_creation_outlined, color: Colors.white24, size: 70),
+              ),
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.7),
+                  Colors.transparent,
+                  Colors.transparent,
+                  Colors.black.withValues(alpha: 0.85),
+                ],
+                stops: const [0.0, 0.22, 0.65, 1.0],
+              ),
+            ),
+          ),
+          Center(
+            child: Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.45),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white38, width: 2.0),
+              ),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                color: Colors.white,
+                size: 40,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Container(color: story.backgroundColor);
   }
 }
 

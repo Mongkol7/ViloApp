@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../auth/data/datasources/token_storage.dart';
 import '../../../profile/data/datasources/profile_remote_data_source.dart';
-import '../../domain/entities/inbox_item.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
+import '../../../profile/presentation/screens/public_profile_screen.dart';
+import '../../data/datasources/chat_manager.dart';
 import 'chat_detail_screen.dart';
 
 class FollowerUserItem {
@@ -143,23 +146,80 @@ class _NewFollowersScreenState extends State<NewFollowersScreen> {
     }).toList();
   }
 
-  void _toggleFollow(FollowerUserItem item) {
-    setState(() {
-      item.isFollowing = !item.isFollowing;
-    });
+  int? _resolveUserId(FollowerUserItem item) {
+    final parsed = int.tryParse(item.id);
+    if (parsed != null && parsed > 0) return parsed;
+    final lower = item.username.toLowerCase();
+    if (lower == 'liza') return 22;
+    if (lower == 'sak') return 23;
+    if (lower == 'mongkol') return 1;
+    if (lower == 'bunheng') return 2;
+    if (lower == 'kimliza') return 4;
+    return null;
+  }
 
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          item.isFollowing
-              ? 'You are now following @${item.username}'
-              : 'Unfollowed @${item.username}',
+  void _openUserProfile(FollowerUserItem item) async {
+    final targetUid = _resolveUserId(item);
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PublicProfileScreen(
+          userId: targetUid,
+          username: item.username,
+          displayName: item.name,
+          avatarUrl: item.avatarUrl,
+          isFollowing: item.isFollowing,
+          followsYou: true,
         ),
-        backgroundColor: item.isFollowing ? const Color(0xFF2F80ED) : const Color(0xFF333338),
-        duration: const Duration(seconds: 2),
       ),
     );
+    if (mounted) {
+      _loadFollowers();
+    }
+  }
+
+  Future<void> _toggleFollow(FollowerUserItem item) async {
+    HapticFeedback.lightImpact();
+    final newStatus = !item.isFollowing;
+    setState(() {
+      item.isFollowing = newStatus;
+    });
+
+    final targetUid = _resolveUserId(item);
+
+    if (targetUid != null) {
+      ProfileSyncService.instance.notifyFollowChanged(
+        targetUserId: targetUid,
+        isFollowing: newStatus,
+      );
+    }
+
+    if (targetUid != null && targetUid > 0) {
+      try {
+        if (newStatus) {
+          await ProfileRemoteDataSource.instance.toggleFollow(targetUid);
+        } else {
+          await ProfileRemoteDataSource.instance.unfollow(targetUid);
+        }
+      } catch (e) {
+        debugPrint('[NewFollowersScreen] Follow error: $e');
+      }
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            newStatus
+                ? 'You and @${item.username} are now friends!'
+                : 'Unfollowed @${item.username}',
+          ),
+          backgroundColor: newStatus ? const Color(0xFF2F80ED) : const Color(0xFF333338),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   void _openUserProfileModal(FollowerUserItem item) {
@@ -184,49 +244,65 @@ class _NewFollowersScreenState extends State<NewFollowersScreen> {
                   ),
                 ),
                 const SizedBox(height: 18),
-                CircleAvatar(
-                  radius: 36,
-                  backgroundColor: const Color(0xFF2C2C32),
-                  child: ClipOval(
-                    child: Image.network(
-                      item.avatarUrl,
-                      width: 72,
-                      height: 72,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => const Icon(
-                        Icons.person,
-                        color: Colors.white38,
-                        size: 36,
+                GestureDetector(
+                  onTap: () {
+                    Navigator.of(modalCtx).pop();
+                    _openUserProfile(item);
+                  },
+                  child: CircleAvatar(
+                    radius: 36,
+                    backgroundColor: const Color(0xFF2C2C32),
+                    child: ClipOval(
+                      child: Image.network(
+                        item.avatarUrl,
+                        width: 72,
+                        height: 72,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => const Icon(
+                          Icons.person,
+                          color: Colors.white38,
+                          size: 36,
+                        ),
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      item.name,
-                      style: const TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
+                GestureDetector(
+                  onTap: () {
+                    Navigator.of(modalCtx).pop();
+                    _openUserProfile(item);
+                  },
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            item.name,
+                            style: const TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                          if (item.isVerified) ...[
+                            const SizedBox(width: 4),
+                            const Icon(Icons.verified_rounded, color: Color(0xFF2F80ED), size: 18),
+                          ],
+                        ],
                       ),
-                    ),
-                    if (item.isVerified) ...[
-                      const SizedBox(width: 4),
-                      const Icon(Icons.verified_rounded, color: Color(0xFF2F80ED), size: 18),
+                      const SizedBox(height: 4),
+                      Text(
+                        '@${item.username}',
+                        style: const TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 14,
+                          color: Color(0xFF8E8E93),
+                        ),
+                      ),
                     ],
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '@${item.username}',
-                  style: const TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 14,
-                    color: Color(0xFF8E8E93),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -264,7 +340,7 @@ class _NewFollowersScreenState extends State<NewFollowersScreen> {
                           _toggleFollow(item);
                         },
                         child: Text(
-                          item.isFollowing ? 'Following' : 'Follow back',
+                          item.isFollowing ? 'Friends 👥' : 'Follow back',
                           style: const TextStyle(
                             fontFamily: 'Inter',
                             fontWeight: FontWeight.w700,
@@ -286,20 +362,18 @@ class _NewFollowersScreenState extends State<NewFollowersScreen> {
                         ),
                         onPressed: () {
                           Navigator.of(modalCtx).pop();
+                          final targetUid = _resolveUserId(item);
+                          final thread = ChatManager.instance.getOrCreateThread(
+                            userId: targetUid ?? (int.tryParse(item.id) ?? 0),
+                            username: item.name.isNotEmpty ? item.name : item.username,
+                            avatarUrl: item.avatarUrl,
+                            isVerified: item.isVerified,
+                            isFollowing: item.isFollowing,
+                            followsYou: true,
+                          );
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => ChatDetailScreen(
-                                thread: DirectMessageThread(
-                                  id: 't_${item.id}',
-                                  username: item.name,
-                                  avatarUrl: item.avatarUrl,
-                                  lastMessage: 'Say hi to your new follower!',
-                                  timeAgo: 'Just now',
-                                  isVerified: item.isVerified,
-                                  followersCount: '12.4k followers',
-                                  messages: const [],
-                                ),
-                              ),
+                              builder: (_) => ChatDetailScreen(thread: thread),
                             ),
                           );
                         },
@@ -321,6 +395,33 @@ class _NewFollowersScreenState extends State<NewFollowersScreen> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Color(0xFF48484E)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () {
+                      Navigator.of(modalCtx).pop();
+                      _openUserProfile(item);
+                    },
+                    icon: const Icon(Icons.person_outline_rounded, size: 18),
+                    label: const Text(
+                      'View Profile',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -476,7 +577,7 @@ class _NewFollowersScreenState extends State<NewFollowersScreen> {
                 : ListView.separated(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     itemCount: list.length,
-                    separatorBuilder: (_, __) => const Divider(
+                    separatorBuilder: (_, _) => const Divider(
                       color: Color(0xFF222226),
                       height: 1,
                       indent: 72,
@@ -485,85 +586,93 @@ class _NewFollowersScreenState extends State<NewFollowersScreen> {
                     itemBuilder: (context, index) {
                       final item = list[index];
                       return InkWell(
-                        onTap: () => _openUserProfileModal(item),
+                        onTap: () => _openUserProfile(item),
+                        onLongPress: () => _openUserProfileModal(item),
                         splashColor: Colors.white.withValues(alpha: 0.05),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                           child: Row(
                             children: [
-                              CircleAvatar(
-                                radius: 24,
-                                backgroundColor: const Color(0xFF2C2C32),
-                                child: ClipOval(
-                                  child: Image.network(
-                                    item.avatarUrl,
-                                    width: 48,
-                                    height: 48,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) => const Icon(
-                                      Icons.person,
-                                      color: Colors.white38,
-                                      size: 24,
+                              GestureDetector(
+                                onTap: () => _openUserProfile(item),
+                                child: CircleAvatar(
+                                  radius: 24,
+                                  backgroundColor: const Color(0xFF2C2C32),
+                                  child: ClipOval(
+                                    child: Image.network(
+                                      item.avatarUrl,
+                                      width: 48,
+                                      height: 48,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) => const Icon(
+                                        Icons.person,
+                                        color: Colors.white38,
+                                        size: 24,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Flexible(
-                                          child: Text(
-                                            item.name,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => _openUserProfile(item),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              item.name,
+                                              style: const TextStyle(
+                                                fontFamily: 'Inter',
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w700,
+                                                color: Colors.white,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          if (item.isVerified) ...[
+                                            const SizedBox(width: 4),
+                                            const Icon(Icons.verified_rounded, color: Color(0xFF2F80ED), size: 15),
+                                          ],
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '• ${item.timeAgo}',
                                             style: const TextStyle(
                                               fontFamily: 'Inter',
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w700,
-                                              color: Colors.white,
+                                              fontSize: 12,
+                                              color: Color(0xFF8E8E93),
                                             ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                        ),
-                                        if (item.isVerified) ...[
-                                          const SizedBox(width: 4),
-                                          const Icon(Icons.verified_rounded, color: Color(0xFF2F80ED), size: 15),
                                         ],
-                                        const SizedBox(width: 6),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '@${item.username}',
+                                        style: const TextStyle(
+                                          fontFamily: 'Inter',
+                                          fontSize: 13,
+                                          color: Color(0xFF8E8E93),
+                                        ),
+                                      ),
+                                      if (item.mutualText != null) ...[
+                                        const SizedBox(height: 2),
                                         Text(
-                                          '• ${item.timeAgo}',
+                                          item.mutualText!,
                                           style: const TextStyle(
                                             fontFamily: 'Inter',
-                                            fontSize: 12,
-                                            color: Color(0xFF8E8E93),
+                                            fontSize: 11,
+                                            color: Color(0xFF56CCF2),
                                           ),
                                         ),
                                       ],
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '@${item.username}',
-                                      style: const TextStyle(
-                                        fontFamily: 'Inter',
-                                        fontSize: 13,
-                                        color: Color(0xFF8E8E93),
-                                      ),
-                                    ),
-                                    if (item.mutualText != null) ...[
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        item.mutualText!,
-                                        style: const TextStyle(
-                                          fontFamily: 'Inter',
-                                          fontSize: 11,
-                                          color: Color(0xFF56CCF2),
-                                        ),
-                                      ),
                                     ],
-                                  ],
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -582,7 +691,7 @@ class _NewFollowersScreenState extends State<NewFollowersScreen> {
                                         ),
                                         onPressed: () => _toggleFollow(item),
                                         child: const Text(
-                                          'Following',
+                                          'Friends 👥',
                                           style: TextStyle(
                                             fontFamily: 'Inter',
                                             fontSize: 13,

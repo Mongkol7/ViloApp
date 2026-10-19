@@ -3,6 +3,12 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../auth/data/datasources/token_storage.dart';
 import '../../data/datasources/notification_remote_data_source.dart';
 import '../../../feed/presentation/pages/video_feed_page.dart';
+import '../../../profile/presentation/screens/public_profile_screen.dart';
+import '../../data/datasources/chat_manager.dart';
+import '../../data/datasources/thought_story_manager.dart';
+import 'chat_detail_screen.dart';
+import 'story_viewer_screen.dart';
+import '../widgets/story_viewers_bottom_sheet.dart';
 
 enum ActivityFilter { all, likes, comments, mentions }
 
@@ -11,12 +17,15 @@ class ActivityModel {
   final String userName;
   final String userHandle;
   final String userAvatarUrl;
-  final String type; // 'like', 'comment', 'mention'
+  final String type; // 'like', 'comment', 'mention', 'message', 'story_view', 'follow'
   final String text;
   final String timeAgo;
   final String mediaThumbnailUrl;
   final int videoIndex;
   final String? commentContent;
+  final int? actorId;
+  final String? actorUsername;
+  final String? entityId;
   bool isRead;
 
   ActivityModel({
@@ -30,6 +39,9 @@ class ActivityModel {
     required this.mediaThumbnailUrl,
     this.videoIndex = 0,
     this.commentContent,
+    this.actorId,
+    this.actorUsername,
+    this.entityId,
     this.isRead = false,
   });
 }
@@ -140,28 +152,119 @@ class _ActivityScreenState extends State<ActivityScreen> {
           _activities = notifications.map((n) {
             final lowerTitle = n.title.toLowerCase();
             final lowerBody = n.subtitle.toLowerCase();
+            final typeUpper = n.type.toUpperCase();
+
             String type = 'like';
-            if (lowerTitle.contains('comment') || lowerBody.contains('comment')) {
+            if (typeUpper == 'MESSAGE' || n.iconType == 'message' || lowerTitle.contains('message') || lowerBody.contains('hi sak') || lowerBody.contains('me liza')) {
+              type = 'message';
+            } else if (typeUpper == 'STORY_VIEW' || n.iconType == 'story_view' || lowerTitle.contains('story view') || lowerBody.contains('thought') || lowerBody.contains('viewed your')) {
+              type = 'story_view';
+            } else if (typeUpper == 'FOLLOW' || n.iconType == 'followers' || lowerTitle.contains('follower') || lowerBody.contains('started following')) {
+              type = 'follow';
+            } else if (typeUpper == 'COMMENT' || lowerTitle.contains('comment') || lowerBody.contains('comment')) {
               type = 'comment';
-            } else if (lowerTitle.contains('mention') || lowerBody.contains('mention')) {
+            } else if (typeUpper == 'MENTION' || lowerTitle.contains('mention') || lowerBody.contains('mention')) {
               type = 'mention';
             }
+
+            // Clean display name and text
+            String userName = n.actorDisplayName ?? n.actorUsername ?? n.title;
+            String text = n.subtitle;
+            if (type == 'message') {
+              if (lowerTitle.contains('from ')) {
+                final idx = lowerTitle.indexOf('from ');
+                userName = n.title.substring(idx + 5).trim();
+              }
+              text = 'sent you a message: "${n.subtitle}"';
+            } else if (type == 'story_view') {
+              if (lowerBody.contains('viewed your')) {
+                userName = n.subtitle.split(' viewed').first.trim();
+              }
+              text = 'viewed your 24h thought';
+            } else if (type == 'follow') {
+              if (lowerBody.contains('started following')) {
+                userName = n.subtitle.split(' started').first.trim();
+              }
+              text = 'started following you';
+            }
+
             return ActivityModel(
               id: n.id,
-              userName: n.title,
-              userHandle: n.title.toLowerCase().replaceAll(' ', '_'),
-              userAvatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+              userName: userName,
+              userHandle: n.actorUsername ?? userName.toLowerCase().replaceAll(' ', '_'),
+              userAvatarUrl: n.actorAvatarUrl ?? (userName.toLowerCase() == 'liza'
+                  ? 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80'
+                  : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80'),
               type: type,
-              text: n.subtitle,
-              timeAgo: 'Recently',
+              text: text,
+              timeAgo: n.timeAgo ?? 'Recently',
               mediaThumbnailUrl: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=150',
               videoIndex: 0,
               isRead: !n.hasDot,
+              actorId: n.actorId,
+              actorUsername: n.actorUsername ?? (userName.isNotEmpty ? userName : null),
+              entityId: n.entityId,
             );
           }).toList();
         });
       }
     } catch (_) {}
+  }
+
+  void _handleActivityTap(ActivityModel activity) {
+    setState(() => activity.isRead = true);
+    NotificationRemoteDataSource.instance.markAsRead(activity.id);
+
+    if (activity.type == 'message') {
+      final targetUsername = activity.actorUsername ?? activity.userName;
+      final targetUid = activity.actorId ?? (targetUsername.toLowerCase() == 'liza' ? 2 : (targetUsername.toLowerCase() == 'sak' ? 1 : 0));
+      final thread = ChatManager.instance.getOrCreateThread(
+        userId: targetUid,
+        username: targetUsername,
+        avatarUrl: activity.userAvatarUrl,
+      );
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatDetailScreen(thread: thread),
+        ),
+      );
+      return;
+    }
+
+    if (activity.type == 'story_view') {
+      final currentStory = ThoughtStoryManager.instance.currentStory;
+      if (currentStory != null) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => StoryViewerScreen(
+              story: currentStory,
+              openViewersOnStart: true,
+            ),
+          ),
+        );
+      } else {
+        StoryViewersBottomSheet.show(
+          context,
+          storyId: activity.entityId,
+          viewCount: 1,
+        );
+      }
+      return;
+    }
+
+    if (activity.type == 'follow') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PublicProfileScreen(
+            userId: activity.actorId,
+            username: activity.actorUsername ?? activity.userName,
+          ),
+        ),
+      );
+      return;
+    }
+
+    _navigateToVideo(activity);
   }
 
   List<ActivityModel> get _filteredActivities {
@@ -316,6 +419,33 @@ class _ActivityScreenState extends State<ActivityScreen> {
                           ),
                           child: const Icon(Icons.chat_bubble_rounded, color: Colors.white, size: 10),
                         );
+                      } else if (item.type == 'message') {
+                        badgeIcon = Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF2F80ED),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.mail_rounded, color: Colors.white, size: 10),
+                        );
+                      } else if (item.type == 'story_view') {
+                        badgeIcon = Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(colors: [Color(0xFFFE2C55), Color(0xFF2F80ED)]),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.visibility_rounded, color: Colors.white, size: 10),
+                        );
+                      } else if (item.type == 'follow') {
+                        badgeIcon = Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFE2C55),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.person_add_rounded, color: Colors.white, size: 10),
+                        );
                       } else {
                         badgeIcon = Container(
                           padding: const EdgeInsets.all(3),
@@ -327,8 +457,122 @@ class _ActivityScreenState extends State<ActivityScreen> {
                         );
                       }
 
+                      Widget trailingWidget;
+                      if (item.type == 'message') {
+                        trailingWidget = GestureDetector(
+                          onTap: () => _handleActivityTap(item),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2F80ED),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Text(
+                              'Chat',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        );
+                      } else if (item.type == 'story_view') {
+                        trailingWidget = GestureDetector(
+                          onTap: () => _handleActivityTap(item),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFE2C55), Color(0xFF2F80ED)],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Text(
+                              'Story',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        );
+                      } else if (item.type == 'follow') {
+                        trailingWidget = GestureDetector(
+                          onTap: () => _handleActivityTap(item),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A30),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFF383842), width: 1),
+                            ),
+                            child: const Text(
+                              'Profile',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        );
+                      } else {
+                        trailingWidget = GestureDetector(
+                          onTap: () => _navigateToVideo(item),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 56,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  color: const Color(0xFF2A2A30),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.15),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(7),
+                                  child: Image.network(
+                                    item.mediaThumbnailUrl,
+                                    width: 48,
+                                    height: 56,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      color: const Color(0xFF2A2A30),
+                                      child: const Icon(Icons.videocam_rounded,
+                                          color: Colors.white24, size: 22),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                width: 22,
+                                height: 22,
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.6),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.play_arrow_rounded,
+                                  color: Colors.white,
+                                  size: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
                       return InkWell(
-                        onTap: () => _navigateToVideo(item),
+                        onTap: () => _handleActivityTap(item),
                         splashColor: Colors.white.withValues(alpha: 0.05),
                         child: Container(
                           color: item.isRead
@@ -436,54 +680,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              // Post preview video thumbnail - Direct to video!
-                              GestureDetector(
-                                onTap: () => _navigateToVideo(item),
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    Container(
-                                      width: 48,
-                                      height: 56,
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(8),
-                                        color: const Color(0xFF2A2A30),
-                                        border: Border.all(
-                                          color: Colors.white.withValues(alpha: 0.15),
-                                          width: 1,
-                                        ),
-                                      ),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(7),
-                                        child: Image.network(
-                                          item.mediaThumbnailUrl,
-                                          width: 48,
-                                          height: 56,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (context, error, stackTrace) => Container(
-                                            color: const Color(0xFF2A2A30),
-                                            child: const Icon(Icons.videocam_rounded,
-                                                color: Colors.white24, size: 22),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    Container(
-                                      width: 22,
-                                      height: 22,
-                                      decoration: BoxDecoration(
-                                        color: Colors.black.withValues(alpha: 0.6),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.play_arrow_rounded,
-                                        color: Colors.white,
-                                        size: 14,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                              trailingWidget,
                             ],
                           ),
                         ),
