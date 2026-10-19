@@ -4,8 +4,8 @@ import '../../../auth/data/datasources/token_storage.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../../inbox_activity/data/datasources/thought_story_manager.dart';
 import '../../../inbox_activity/domain/entities/shared_thought_story.dart';
-import '../../../inbox_activity/presentation/pages/share_thought_screen.dart';
 import '../../../inbox_activity/presentation/pages/story_viewer_screen.dart';
+import '../../../inbox_activity/presentation/pages/upload_story_screen.dart';
 import '../../../inbox_activity/presentation/widgets/animated_mini_music_wave.dart';
 import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../../feed/data/models/video_feed_model.dart';
@@ -406,10 +406,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         ThoughtStoryManager.instance.deleteStory();
       }
     } else {
-      // If no story, open ShareThoughtScreen
+      // If no story, open UploadStoryScreen (gallery picker)
       final result = await Navigator.of(context).push<SharedThoughtStory>(
         MaterialPageRoute(
-          builder: (_) => const ShareThoughtScreen(),
+          builder: (_) => const UploadStoryScreen(),
         ),
       );
 
