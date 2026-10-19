@@ -88,6 +88,11 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
       _pageController.dispose();
       _pageController = PageController(initialPage: _currentPage);
       _fetchFeed(refresh: true);
+    } else if (oldWidget.isActive != widget.isActive) {
+      setState(() {});
+      if (widget.isActive && _videos.isNotEmpty && _currentPage < _videos.length) {
+        _recordView(_videos[_currentPage].id);
+      }
     }
   }
 
@@ -567,12 +572,18 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
     }
   }
 
-  void _initController() {
-    final url = widget.video.videoUrl;
-    if (url.startsWith('assets/')) {
-      _controller = VideoPlayerController.asset(url);
+  void _initController({bool isFallback = false}) {
+    final rawUrl = widget.video.videoUrl;
+    if (rawUrl.isEmpty) {
+      if (mounted) setState(() => _hasControllerError = true);
+      return;
+    }
+
+    if (!isFallback && rawUrl.startsWith('assets/')) {
+      _controller = VideoPlayerController.asset(rawUrl);
     } else {
-      _controller = VideoPlayerController.networkUrl(Uri.parse(url));
+      final networkUrl = VideoModel.toNetworkMediaUrl(rawUrl);
+      _controller = VideoPlayerController.networkUrl(Uri.parse(networkUrl));
     }
 
     _controller!.addListener(_videoListener);
@@ -580,15 +591,28 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
       if (!mounted) return;
       _controller!.setLooping(true);
       _controller!.setVolume(_isMuted ? 0.0 : 1.0);
-      setState(() {});
+      setState(() {
+        _hasControllerError = false;
+      });
       if (widget.isActive && widget.isCurrentPage && !_manuallyPaused) {
         _controller!.play();
       }
     }).catchError((error) {
-      if (mounted) {
-        setState(() {
-          _hasControllerError = true;
-        });
+      debugPrint('[_VideoPostWidget] Video init error for $rawUrl (isFallback: $isFallback): $error');
+      if (!isFallback && rawUrl.startsWith('assets/')) {
+        // Fallback to backend network stream if local APK asset bundle doesn't have the file
+        if (mounted) {
+          _controller?.removeListener(_videoListener);
+          _controller?.dispose();
+          _controller = null;
+          _initController(isFallback: true);
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _hasControllerError = true;
+          });
+        }
       }
     });
   }
@@ -703,12 +727,15 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
     }
 
     final shouldPlay = widget.isActive && widget.isCurrentPage && !_manuallyPaused;
-    if (_controller!.value.isInitialized) {
+    if (_controller != null && _controller!.value.isInitialized) {
       if (shouldPlay && !_controller!.value.isPlaying) {
         _controller!.play();
       } else if (!shouldPlay && _controller!.value.isPlaying) {
         _controller!.pause();
       }
+    } else if (shouldPlay && _hasControllerError) {
+      _hasControllerError = false;
+      _initController(isFallback: true);
     }
   }
 
@@ -757,6 +784,11 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   }
 
   void _togglePlayPause() {
+    if (_hasControllerError) {
+      setState(() => _hasControllerError = false);
+      _initController(isFallback: true);
+      return;
+    }
     if (_controller == null) return;
     setState(() {
       if (_controller!.value.isPlaying) {
@@ -1060,16 +1092,23 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                       )
                     : Center(
                         child: (_controller != null && (_controller!.value.hasError || _hasControllerError))
-                            ? Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.play_circle_outline_rounded, color: Colors.white24, size: 54),
-                                  const SizedBox(height: 10),
-                                  Text(
-                                    'Video playback paused',
-                                    style: TextStyle(color: Colors.white.withValues(alpha: 0.38), fontSize: 13),
-                                  ),
-                                ],
+                            ? GestureDetector(
+                                onTap: () {
+                                  setState(() => _hasControllerError = false);
+                                  _initController(isFallback: true);
+                                },
+                                behavior: HitTestBehavior.opaque,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.play_circle_outline_rounded, color: Colors.white24, size: 54),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      'Video playback paused (Tap to play)',
+                                      style: TextStyle(color: Colors.white.withValues(alpha: 0.38), fontSize: 13),
+                                    ),
+                                  ],
+                                ),
                               )
                             : const SizedBox(
                                 width: 28,

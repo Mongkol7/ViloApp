@@ -135,6 +135,20 @@ class VideoModel {
     return '$host/$clean';
   }
 
+  /// Resolves any media URL (including assets/...) to an absolute backend HTTP streaming URL
+  static String toNetworkMediaUrl(String? url) {
+    if (url == null || url.trim().isEmpty) return '';
+    final clean = url.trim();
+    if (clean.startsWith('http://') || clean.startsWith('https://')) {
+      return clean;
+    }
+    final host = ApiClient.baseUrl.replaceAll('/api/v1', '');
+    if (clean.startsWith('/')) {
+      return '$host$clean';
+    }
+    return '$host/$clean';
+  }
+
   factory VideoModel.fromJson(Map<String, dynamic> json) {
     final rawVideoUrl = json['videoUrl']?.toString() ?? '';
     final rawThumbUrl = json['thumbnailUrl']?.toString();

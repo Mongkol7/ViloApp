@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../data/datasources/feed_remote_data_source.dart';
 import '../../data/models/video_feed_model.dart';
+import '../../data/models/video_model.dart';
 import '../controllers/video_feed_manager.dart';
+import 'video_feed_page.dart';
 
 class CommunityFeedPage extends StatefulWidget {
   const CommunityFeedPage({super.key});
@@ -19,6 +21,7 @@ class _CommunityFeedPageState extends State<CommunityFeedPage>
   bool get wantKeepAlive => true;
 
   List<Map<String, dynamic>> _posts = [];
+  List<VideoModel> _communityVideos = [];
   bool _isLoading = true;
 
   static final List<Map<String, dynamic>> _fallbackPosts = [
@@ -121,6 +124,7 @@ class _CommunityFeedPageState extends State<CommunityFeedPage>
       if (!mounted) return;
 
       if (videos.isNotEmpty) {
+        _communityVideos = videos;
         final mappedPosts = videos.asMap().entries.map((entry) {
           final i = entry.key;
           final VideoFeedModel v = entry.value;
@@ -140,6 +144,8 @@ class _CommunityFeedPageState extends State<CommunityFeedPage>
             'username': v.displayName.isNotEmpty ? v.displayName : v.username,
             'likes': v.likes,
             'height': height,
+            'video': v,
+            'videoIndex': i,
           };
         }).toList();
 
@@ -163,6 +169,22 @@ class _CommunityFeedPageState extends State<CommunityFeedPage>
     }
   }
 
+  void _openVideo(Map<String, dynamic> data) {
+    final v = data['video'] as VideoModel?;
+    if (v == null) return;
+    final index = (data['videoIndex'] as int?) ?? 0;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => VideoFeedPage(
+          initialVideos: _communityVideos.isNotEmpty ? _communityVideos : [v],
+          initialIndex: index,
+          isActive: true,
+          canDelete: false,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -176,10 +198,15 @@ class _CommunityFeedPageState extends State<CommunityFeedPage>
     final rightColumn = <Widget>[];
 
     for (int i = 0; i < _posts.length; i++) {
+      final post = _posts[i];
+      final card = _PostCard(
+        data: post,
+        onTap: post['video'] != null ? () => _openVideo(post) : null,
+      );
       if (i % 2 == 0) {
-        leftColumn.add(_PostCard(data: _posts[i]));
+        leftColumn.add(card);
       } else {
-        rightColumn.add(_PostCard(data: _posts[i]));
+        rightColumn.add(card);
       }
     }
 
@@ -203,98 +230,128 @@ class _CommunityFeedPageState extends State<CommunityFeedPage>
 
 class _PostCard extends StatelessWidget {
   final Map<String, dynamic> data;
+  final VoidCallback? onTap;
 
-  const _PostCard({required this.data});
+  const _PostCard({required this.data, this.onTap});
+
+  Widget _buildImage(String url, double height) {
+    if (url.startsWith('assets/')) {
+      return Image.asset(
+        url,
+        height: height,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _errorPlaceholder(height),
+      );
+    }
+    return Image.network(
+      url,
+      height: height,
+      width: double.infinity,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => _errorPlaceholder(height),
+    );
+  }
+
+  Widget _errorPlaceholder(double height) {
+    return Container(
+      height: height,
+      color: const Color(0xFF1E1E24),
+      child: const Center(
+        child: Icon(Icons.image_outlined, color: Colors.white24, size: 36),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final height = (data['height'] as num?)?.toDouble() ?? 200.0;
+    final imageUrl = (data['imageUrl'] as String?) ?? '';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Image
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12.0),
-            child: Stack(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12.0),
+              child: Stack(
+                children: [
+                  _buildImage(imageUrl, height),
+                  if (height > 200 || data['video'] != null)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Title
+            Text(
+              data['title'] as String,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.onSurface,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Bottom Info Row
+            Row(
               children: [
-                Image.network(
-                  data['imageUrl'] as String,
-                  height: height,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    height: height,
-                    color: const Color(0xFF1E1E24),
-                    child: const Center(
-                      child: Icon(Icons.image_outlined, color: Colors.white24, size: 36),
+                CircleAvatar(
+                  radius: 10,
+                  backgroundImage: NetworkImage(data['avatar'] as String),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    data['username'] as String,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.onSurfaceVariant,
+                      fontSize: 12,
                     ),
                   ),
                 ),
-                if (height > 200)
-                  const Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Icon(
-                      Icons.play_arrow_rounded,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Title
-          Text(
-            data['title'] as String,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.onSurface,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Bottom Info Row
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 10,
-                backgroundImage: NetworkImage(data['avatar'] as String),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  data['username'] as String,
-                  overflow: TextOverflow.ellipsis,
+                const Icon(
+                  Icons.favorite_border_rounded,
+                  size: 14,
+                  color: AppColors.onSurfaceVariant,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  data['likes'] as String,
                   style: const TextStyle(
                     color: AppColors.onSurfaceVariant,
                     fontSize: 12,
                   ),
                 ),
-              ),
-              const Icon(
-                Icons.favorite_border_rounded,
-                size: 14,
-                color: AppColors.onSurfaceVariant,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                data['likes'] as String,
-                style: const TextStyle(
-                  color: AppColors.onSurfaceVariant,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
