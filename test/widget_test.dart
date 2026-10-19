@@ -351,6 +351,39 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('SearchScreen search username shows up user account with display name and verified badge', (WidgetTester tester) async {
+    await tester.pumpWidget(_buildTestApp(child: const SearchScreen()));
+    await tester.pumpAndSettle();
+
+    // Search for @mongkol
+    await tester.enterText(find.byType(TextField), '@mongkol');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    // Top category shows Accounts section header and user
+    expect(find.text('Accounts'), findsOneWidget);
+    expect(find.text('Thoeung Sereymongkol'), findsOneWidget);
+    expect(find.text('@mongkol • 1.2M followers'), findsOneWidget);
+    expect(find.byIcon(Icons.verified_rounded), findsWidgets);
+    expect(find.text('Follow'), findsOneWidget);
+  });
+
+  testWidgets('SearchScreen Top category shows all matching entities together', (WidgetTester tester) async {
+    await tester.pumpWidget(_buildTestApp(child: const SearchScreen()));
+    await tester.pumpAndSettle();
+
+    // Search for 'pulse' which matches both Accounts and Sounds
+    await tester.enterText(find.byType(TextField), 'pulse');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    // Top category shows all matching categories together
+    expect(find.text('Accounts'), findsOneWidget);
+    expect(find.text('Noir Pulse'), findsOneWidget);
+    expect(find.text('Sounds'), findsWidgets);
+    expect(find.text('Pulse Bass Drop (Original)'), findsOneWidget);
+  });
+
   testWidgets('SoundDetailPage renders sound details, toggles favorite state, and shows Use this sound button', (WidgetTester tester) async {
     await tester.pumpWidget(
       _buildTestApp(

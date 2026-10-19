@@ -10,12 +10,13 @@ class SearchRemoteDataSource {
   final ApiClient _client = ApiClient.instance;
 
   Future<Map<String, dynamic>> search(String query, {String type = 'ALL'}) async {
+    final cleanQuery = query.trim().replaceAll(RegExp(r'^@+'), '');
     try {
-      final endpoint = '/search?q=${Uri.encodeComponent(query)}&type=${Uri.encodeComponent(type)}';
+      final endpoint = '/search?q=${Uri.encodeComponent(cleanQuery)}&type=${Uri.encodeComponent(type)}';
       final response = await _client.get(endpoint, requireAuth: false);
 
       if (response != null && response['success'] == true && response['data'] != null) {
-        return _parseSearchSummary(response['data']);
+        return _parseSearchSummary(response['data'], isSearch: true);
       }
     } catch (e) {
       debugPrint('[SearchRemoteDataSource] Live search error, falling back to local: $e');
@@ -28,7 +29,7 @@ class SearchRemoteDataSource {
     try {
       final response = await _client.get('/explore/trending', requireAuth: false);
       if (response != null && response['success'] == true && response['data'] != null) {
-        return _parseSearchSummary(response['data']);
+        return _parseSearchSummary(response['data'], isSearch: false);
       }
     } catch (e) {
       debugPrint('[SearchRemoteDataSource] Trending error: $e');
@@ -38,7 +39,7 @@ class SearchRemoteDataSource {
       'trendingVideos': StaticSearchData.trendingVideos,
       'accounts': StaticSearchData.accounts,
       'sounds': StaticSearchData.sounds,
-      'hashtags': <String>['#viloapp', '#flutterdev', '#tokyocoding', '#cambodiavibes', '#springsecurity'],
+      'hashtags': StaticSearchData.hashtags,
     };
   }
 
@@ -65,16 +66,25 @@ class SearchRemoteDataSource {
     }
   }
 
-  Map<String, dynamic> _parseSearchSummary(Map<String, dynamic> data) {
+  Map<String, dynamic> _parseSearchSummary(Map<String, dynamic> data, {bool isSearch = false}) {
     final List<SearchAccount> accounts = [];
     if (data['users'] is List) {
       for (final u in data['users']) {
+        final rawUsername = u['username']?.toString() ?? '';
+        final username = rawUsername.startsWith('@') ? rawUsername : '@$rawUsername';
+        final displayName = u['displayName']?.toString() ?? rawUsername;
+        final followers = u['followersCount'] != null && u['followersCount'] != 0
+            ? '${u['followersCount']} followers'
+            : (u['followerCountFormatted']?.toString() ?? '12.4K followers');
+
         accounts.add(SearchAccount(
           id: u['id']?.toString() ?? '',
-          username: u['username']?.toString() ?? '',
-          followersCount: u['followersCount']?.toString() ?? '0 followers',
+          username: username,
+          displayName: displayName,
+          followersCount: followers,
           avatarUrl: u['avatarUrl']?.toString() ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
           isFollowed: u['isFollowing'] == true,
+          isVerified: u['isVerified'] == true,
         ));
       }
     }
@@ -99,6 +109,7 @@ class SearchRemoteDataSource {
       for (final v in data['trendingVideos']) {
         videos.add(TrendingVideo(
           id: v['id']?.toString() ?? '',
+          title: v['title']?.toString() ?? '',
           thumbnailUrl: v['thumbnailUrl']?.toString() ?? '',
           views: v['views']?.toString() ?? '1.2M',
         ));
@@ -112,31 +123,68 @@ class SearchRemoteDataSource {
       }
     }
 
+    if (isSearch) {
+      return {
+        'accounts': accounts,
+        'sounds': sounds,
+        'trendingVideos': videos,
+        'hashtags': hashtags,
+      };
+    }
+
     return {
       'accounts': accounts.isNotEmpty ? accounts : StaticSearchData.accounts,
       'sounds': sounds.isNotEmpty ? sounds : StaticSearchData.sounds,
       'trendingVideos': videos.isNotEmpty ? videos : StaticSearchData.trendingVideos,
-      'hashtags': hashtags.isNotEmpty ? hashtags : ['#viloapp', '#flutterdev', '#tokyocoding'],
+      'hashtags': hashtags.isNotEmpty ? hashtags : StaticSearchData.hashtags,
     };
   }
 
   Map<String, dynamic> _fallbackLocalSearch(String query, String type) {
-    final q = query.toLowerCase();
-    final filteredAccounts = StaticSearchData.accounts
-        .where((a) => a.username.toLowerCase().contains(q))
-        .toList();
+    final cleanQ = query.trim().toLowerCase().replaceAll(RegExp(r'^[@#]+'), '');
 
-    final filteredSounds = StaticSearchData.sounds
-        .where((s) => s.title.toLowerCase().contains(q) || s.artist.toLowerCase().contains(q))
-        .toList();
+    // 1. Match Accounts (by username without @, or by displayName)
+    List<SearchAccount> filteredAccounts = [];
+    if (type == 'ALL' || type == 'USERS') {
+      filteredAccounts = StaticSearchData.accounts.where((a) {
+        final u = a.username.toLowerCase().replaceAll('@', '');
+        final d = a.displayName.toLowerCase();
+        return u.contains(cleanQ) || d.contains(cleanQ);
+      }).toList();
+    }
 
-    final filteredVideos = StaticSearchData.trendingVideos;
+    // 2. Match Sounds (by title or artist)
+    List<SearchSound> filteredSounds = [];
+    if (type == 'ALL' || type == 'SOUNDS') {
+      filteredSounds = StaticSearchData.sounds.where((s) {
+        final t = s.title.toLowerCase();
+        final a = s.artist.toLowerCase();
+        return t.contains(cleanQ) || a.contains(cleanQ);
+      }).toList();
+    }
+
+    // 3. Match Hashtags
+    List<String> filteredHashtags = [];
+    if (type == 'ALL') {
+      filteredHashtags = StaticSearchData.hashtags.where((tag) {
+        return tag.toLowerCase().replaceAll('#', '').contains(cleanQ);
+      }).toList();
+    }
+
+    // 4. Match Videos (by title or show sample if generic)
+    List<TrendingVideo> filteredVideos = [];
+    if (type == 'ALL' || type == 'VIDEOS') {
+      filteredVideos = StaticSearchData.trendingVideos.where((v) {
+        final t = v.title.toLowerCase();
+        return t.contains(cleanQ);
+      }).toList();
+    }
 
     return {
       'accounts': filteredAccounts,
       'sounds': filteredSounds,
       'trendingVideos': filteredVideos,
-      'hashtags': ['#viloapp', '#flutterdev', '#tokyocoding'],
+      'hashtags': filteredHashtags,
     };
   }
 }

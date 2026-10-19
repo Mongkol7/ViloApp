@@ -222,7 +222,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: _categories.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
                 itemBuilder: (context, index) {
                   final cat = _categories[index];
                   final isSelected = _selectedCategory == cat;
@@ -335,65 +335,110 @@ class _SearchScreenState extends State<SearchScreen> {
                           const SizedBox(height: 24),
                         ],
 
-                        // Trending Hashtags
-                        if (_hashtags.isNotEmpty && (_selectedCategory == 'Top' || _selectedCategory == 'Videos')) ...[
-                          _buildSectionHeader('Trending Hashtags'),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: _hashtags.map((tag) {
-                              return GestureDetector(
-                                onTap: () => _onSelectHashtag(tag),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF28282D),
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.white12, width: 0.8),
-                                  ),
-                                  child: Text(
-                                    tag,
-                                    style: const TextStyle(
-                                      fontFamily: 'Inter',
-                                      color: Colors.white,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                          const SizedBox(height: 24),
-                        ],
+                        // === VIEW 1: SEARCH ACTIVE (Text input is NOT empty) ===
+                        if (_searchController.text.isNotEmpty) ...[
+                          if (_selectedCategory == 'Top') ...[
+                            // 1. Accounts matching query (Top priority)
+                            if (_accounts.isNotEmpty) ...[
+                              _buildSectionHeader('Accounts'),
+                              const SizedBox(height: 12),
+                              ...List.generate(_accounts.length, (index) => _buildAccountItem(index)),
+                              const SizedBox(height: 24),
+                            ],
 
-                        // --- SECTION 1: Trending / Videos ---
-                        if ((_selectedCategory == 'Top' || _selectedCategory == 'Videos') && _trendingVideos.isNotEmpty) ...[
-                          _buildSectionHeader(_searchController.text.isEmpty ? 'Trending Results' : 'Videos'),
-                          const SizedBox(height: 12),
-                          _buildTrendingGrid(),
-                          const SizedBox(height: 28),
-                        ],
+                            // 2. Videos matching query
+                            if (_trendingVideos.isNotEmpty) ...[
+                              _buildSectionHeader('Videos'),
+                              const SizedBox(height: 12),
+                              _buildTrendingGrid(),
+                              const SizedBox(height: 28),
+                            ],
 
-                        // --- SECTION 2: Accounts ---
-                        if ((_selectedCategory == 'Top' || _selectedCategory == 'Users') && _accounts.isNotEmpty) ...[
-                          _buildSectionHeader('Accounts'),
-                          const SizedBox(height: 12),
-                          ...List.generate(_accounts.length, (index) {
-                            return _buildAccountItem(index);
-                          }),
-                          const SizedBox(height: 28),
-                        ],
+                            // 3. Sounds matching query
+                            if (_sounds.isNotEmpty) ...[
+                              _buildSectionHeader('Sounds'),
+                              const SizedBox(height: 12),
+                              ...List.generate(_sounds.length, (index) => _buildSoundItem(index)),
+                              const SizedBox(height: 28),
+                            ],
 
-                        // --- SECTION 3: Sounds ---
-                        if ((_selectedCategory == 'Top' || _selectedCategory == 'Sounds') && _sounds.isNotEmpty) ...[
-                          _buildSectionHeader('Sounds'),
-                          const SizedBox(height: 12),
-                          ...List.generate(_sounds.length, (index) {
-                            return _buildSoundItem(index);
-                          }),
-                          const SizedBox(height: 40),
+                            // 4. Hashtags matching query
+                            if (_hashtags.isNotEmpty) ...[
+                              _buildSectionHeader('Hashtags'),
+                              const SizedBox(height: 10),
+                              _buildHashtagsWrap(),
+                              const SizedBox(height: 28),
+                            ],
+
+                            // Empty state if nothing matches across any category
+                            if (_accounts.isEmpty &&
+                                _trendingVideos.isEmpty &&
+                                _sounds.isEmpty &&
+                                _hashtags.isEmpty)
+                              _buildEmptyState('No results found for "${_searchController.text.trim()}"'),
+                          ] else if (_selectedCategory == 'Users') ...[
+                            if (_accounts.isNotEmpty) ...[
+                              _buildSectionHeader('Accounts'),
+                              const SizedBox(height: 12),
+                              ...List.generate(_accounts.length, (index) => _buildAccountItem(index)),
+                            ] else
+                              _buildEmptyState('No accounts found for "${_searchController.text.trim()}"'),
+                          ] else if (_selectedCategory == 'Videos') ...[
+                            if (_trendingVideos.isNotEmpty) ...[
+                              _buildSectionHeader('Videos'),
+                              const SizedBox(height: 12),
+                              _buildTrendingGrid(),
+                            ] else
+                              _buildEmptyState('No videos found for "${_searchController.text.trim()}"'),
+                          ] else if (_selectedCategory == 'Sounds') ...[
+                            if (_sounds.isNotEmpty) ...[
+                              _buildSectionHeader('Sounds'),
+                              const SizedBox(height: 12),
+                              ...List.generate(_sounds.length, (index) => _buildSoundItem(index)),
+                            ] else
+                              _buildEmptyState('No sounds found for "${_searchController.text.trim()}"'),
+                          ],
+                        ]
+
+                        // === VIEW 2: EXPLORE / LANDING (Text input is EMPTY) ===
+                        else ...[
+                          // Trending Hashtags
+                          if (_hashtags.isNotEmpty) ...[
+                            _buildSectionHeader('Trending Hashtags'),
+                            const SizedBox(height: 10),
+                            _buildHashtagsWrap(),
+                            const SizedBox(height: 24),
+                          ],
+
+                          // Trending Results / Videos
+                          if (_trendingVideos.isNotEmpty) ...[
+                            _buildSectionHeader('Trending Results'),
+                            const SizedBox(height: 12),
+                            _buildTrendingGrid(),
+                            const SizedBox(height: 28),
+                          ],
+
+                          // Suggested Creators
+                          if (_accounts.isNotEmpty) ...[
+                            _buildSectionHeader('Suggested Creators'),
+                            const SizedBox(height: 12),
+                            ...List.generate(
+                              _accounts.length > 5 ? 5 : _accounts.length,
+                              (index) => _buildAccountItem(index),
+                            ),
+                            const SizedBox(height: 28),
+                          ],
+
+                          // Popular Sounds
+                          if (_sounds.isNotEmpty) ...[
+                            _buildSectionHeader('Popular Sounds'),
+                            const SizedBox(height: 12),
+                            ...List.generate(
+                              _sounds.length > 5 ? 5 : _sounds.length,
+                              (index) => _buildSoundItem(index),
+                            ),
+                            const SizedBox(height: 40),
+                          ],
                         ],
                       ],
                     ),
@@ -491,6 +536,8 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildAccountItem(int index) {
     final account = _accounts[index];
+    final cleanUsername = account.username.replaceAll('@', '');
+    final effectiveDisplayName = account.displayName.isNotEmpty ? account.displayName : cleanUsername;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -503,8 +550,8 @@ class _SearchScreenState extends State<SearchScreen> {
                 MaterialPageRoute(
                   builder: (_) => PublicProfileScreen(
                     userId: int.tryParse(account.id),
-                    username: account.username,
-                    displayName: account.username,
+                    username: cleanUsername,
+                    displayName: effectiveDisplayName,
                     avatarUrl: account.avatarUrl,
                   ),
                 ),
@@ -542,8 +589,8 @@ class _SearchScreenState extends State<SearchScreen> {
                   MaterialPageRoute(
                     builder: (_) => PublicProfileScreen(
                       userId: int.tryParse(account.id),
-                      username: account.username,
-                      displayName: account.username,
+                      username: cleanUsername,
+                      displayName: effectiveDisplayName,
                       avatarUrl: account.avatarUrl,
                     ),
                   ),
@@ -553,18 +600,38 @@ class _SearchScreenState extends State<SearchScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    account.username,
-                    style: const TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          effectiveDisplayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      if (account.isVerified) ...[
+                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.verified_rounded,
+                          color: Color(0xFF20D5EC),
+                          size: 15,
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    account.followersCount,
+                    account.displayName.isNotEmpty
+                        ? '@$cleanUsername • ${account.followersCount}'
+                        : account.followersCount,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontFamily: 'Inter',
                       fontSize: 13,
@@ -610,6 +677,83 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildHashtagsWrap() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: _hashtags.map((tag) {
+        return GestureDetector(
+          onTap: () => _onSelectHashtag(tag),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF28282D),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white12, width: 0.8),
+            ),
+            child: Text(
+              tag,
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildEmptyState(String message) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: const Color(0xFF202024),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.surfaceStroke, width: 1),
+              ),
+              child: const Icon(
+                Icons.search_off_rounded,
+                color: AppColors.outline,
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Try searching for another keyword, creator name, or hashtag.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 13,
+                color: AppColors.outline,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

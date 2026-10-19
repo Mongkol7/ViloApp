@@ -2,42 +2,52 @@ class TrendingVideo {
   final String id;
   final String thumbnailUrl;
   final String views;
+  final String title;
 
   const TrendingVideo({
     required this.id,
     required this.thumbnailUrl,
     required this.views,
+    this.title = '',
   });
 }
 
 class SearchAccount {
   final String id;
   final String username;
+  final String displayName;
   final String followersCount;
   final String avatarUrl;
   final bool isFollowed;
+  final bool isVerified;
 
   const SearchAccount({
     required this.id,
     required this.username,
+    this.displayName = '',
     required this.followersCount,
     required this.avatarUrl,
     this.isFollowed = false,
+    this.isVerified = false,
   });
 
   SearchAccount copyWith({
     String? id,
     String? username,
+    String? displayName,
     String? followersCount,
     String? avatarUrl,
     bool? isFollowed,
+    bool? isVerified,
   }) {
     return SearchAccount(
       id: id ?? this.id,
       username: username ?? this.username,
+      displayName: displayName ?? this.displayName,
       followersCount: followersCount ?? this.followersCount,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       isFollowed: isFollowed ?? this.isFollowed,
+      isVerified: isVerified ?? this.isVerified,
     );
   }
 }

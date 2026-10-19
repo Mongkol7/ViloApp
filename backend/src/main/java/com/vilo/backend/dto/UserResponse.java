@@ -72,6 +72,13 @@ public class UserResponse {
     }
 
     public static UserResponse fromEntitySummary(User user) {
+        int followers = 0;
+        int following = 0;
+        try {
+            if (user.getFollowers() != null) followers = user.getFollowers().size();
+            if (user.getFollowing() != null) following = user.getFollowing().size();
+        } catch (Exception ignored) {}
+
         return UserResponse.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -79,10 +86,10 @@ public class UserResponse {
                 .displayName(user.getDisplayName() != null ? user.getDisplayName() : user.getUsername())
                 .bio(user.getBio())
                 .avatarUrl(user.getAvatarUrl())
-                .isVerified(user.getIsVerified() != null ? user.getIsVerified() : false)
+                .isVerified(Boolean.TRUE.equals(user.getIsVerified()))
                 .roles(user.getRoles())
-                .followersCount(0)
-                .followingCount(0)
+                .followersCount(followers)
+                .followingCount(following)
                 .createdAt(user.getCreatedAt())
                 .build();
     }

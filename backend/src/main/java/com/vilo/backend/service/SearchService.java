@@ -60,7 +60,10 @@ public class SearchService {
 
         // 1. Search Users
         if ("ALL".equals(normalizedType) || "USERS".equals(normalizedType)) {
-            List<User> users = userRepository.searchUsers(trimmed, PageRequest.of(0, 10));
+            String userQuery = trimmed.replaceAll("^@+", "").trim();
+            List<User> users = userQuery.isEmpty()
+                    ? userRepository.findAll(PageRequest.of(0, 10)).getContent()
+                    : userRepository.searchUsers(userQuery, PageRequest.of(0, 10));
             List<UserResponse> userDtos = users.stream()
                     .map(UserResponse::fromEntitySummary)
                     .collect(Collectors.toList());
@@ -69,7 +72,8 @@ public class SearchService {
 
         // 2. Search Sounds
         if ("ALL".equals(normalizedType) || "SOUNDS".equals(normalizedType)) {
-            List<Sound> sounds = soundRepository.searchSounds(trimmed, PageRequest.of(0, 10));
+            String soundQuery = trimmed.replaceAll("^[#@]+", "").trim();
+            List<Sound> sounds = soundRepository.searchSounds(soundQuery, PageRequest.of(0, 10));
             List<SoundResponse> soundDtos = sounds.stream()
                     .map(SoundResponse::fromEntity)
                     .collect(Collectors.toList());
@@ -78,8 +82,10 @@ public class SearchService {
 
         // 3. Search Hashtags
         if ("ALL".equals(normalizedType) || "HASHTAGS".equals(normalizedType)) {
-            String tagQuery = trimmed.replaceAll("^#", "");
-            List<Hashtag> hashtags = hashtagRepository.searchHashtags(tagQuery, PageRequest.of(0, 10));
+            String tagQuery = trimmed.replaceAll("^#+", "").trim();
+            List<Hashtag> hashtags = tagQuery.isEmpty()
+                    ? hashtagRepository.findAll(PageRequest.of(0, 10)).getContent()
+                    : hashtagRepository.searchHashtags(tagQuery, PageRequest.of(0, 10));
             List<HashtagResponse> tagDtos = hashtags.stream()
                     .map(HashtagResponse::fromEntity)
                     .collect(Collectors.toList());
@@ -88,7 +94,8 @@ public class SearchService {
 
         // 4. Trending Videos matching query
         if ("ALL".equals(normalizedType) || "VIDEOS".equals(normalizedType)) {
-            response.setTrendingVideos(getSampleMatchingVideos(trimmed));
+            String videoQuery = trimmed.replaceAll("^[#@]+", "").trim();
+            response.setTrendingVideos(getSampleMatchingVideos(videoQuery));
         }
 
         return response;
