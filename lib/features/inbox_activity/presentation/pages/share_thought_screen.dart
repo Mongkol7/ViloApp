@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../data/datasources/story_remote_data_source.dart';
 import '../../domain/entities/music_track.dart';
 import '../../domain/entities/shared_thought_story.dart';
 import '../widgets/music_picker_bottom_sheet.dart';
@@ -276,18 +277,19 @@ class _ShareThoughtScreenState extends State<ShareThoughtScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 child: GestureDetector(
-                  onTap: () {
-                    final story = SharedThoughtStory(
-                      id: DateTime.now().millisecondsSinceEpoch.toString(),
-                      message: _thoughtController.text.trim().isNotEmpty
-                          ? _thoughtController.text.trim()
-                          : "Today's vibe...",
+                  onTap: () async {
+                    final messageText = _thoughtController.text.trim().isNotEmpty
+                        ? _thoughtController.text.trim()
+                        : "Today's vibe...";
+
+                    final story = await StoryRemoteDataSource.instance.createStory(
+                      message: messageText,
                       musicTrack: _selectedTrack,
-                      backgroundColor: currentColor,
-                      timestamp: 'Just now',
-                      viewCount: 418,
                     );
-                    Navigator.of(context).pop(story);
+
+                    if (context.mounted) {
+                      Navigator.of(context).pop(story);
+                    }
                   },
                   child: Container(
                     width: double.infinity,

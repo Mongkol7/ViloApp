@@ -1,14 +1,23 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../search_discover/presentation/pages/search_screen.dart';
+import '../../data/datasources/chat_manager.dart';
 import '../../data/datasources/static_inbox_data.dart';
 import '../../data/datasources/thought_story_manager.dart';
+import '../../data/datasources/chat_remote_data_source.dart';
+import '../../data/datasources/chat_stomp_service.dart';
+import '../../data/datasources/notification_remote_data_source.dart';
+import '../../data/datasources/story_remote_data_source.dart';
 import '../../domain/entities/inbox_item.dart';
+import '../../domain/entities/music_track.dart';
 import '../../domain/entities/shared_thought_story.dart';
 import '../widgets/animated_mini_music_wave.dart';
 import 'chat_detail_screen.dart';
 import 'share_thought_screen.dart';
 import 'story_viewer_screen.dart';
+import 'activity_screen.dart';
+import 'new_followers_screen.dart';
+import 'system_notifications_screen.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -18,18 +27,146 @@ class InboxScreen extends StatefulWidget {
 }
 
 class _InboxScreenState extends State<InboxScreen> {
+  List<StoryItem> _stories = List.from(StaticInboxData.stories);
+  List<NotificationItem> _notifications = List.from(StaticInboxData.notifications);
+  List<DirectMessageThread> _threads = List.from(StaticInboxData.threads);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAllData();
+    ChatStompService.instance.connect();
+  }
+
+  Future<void> _loadAllData() async {
+    try {
+      final stories = await StoryRemoteDataSource.instance.getActiveStories();
+      final notifications = await NotificationRemoteDataSource.instance.getNotifications();
+      final threads = await ChatRemoteDataSource.instance.getConversations();
+
+      if (mounted) {
+        setState(() {
+          _stories = List.from(stories);
+          _notifications = List.from(notifications);
+          _threads = List.from(threads);
+        });
+        ChatManager.instance.init(threads);
+      }
+    } catch (_) {}
+  }
+
+  List<StoryViewerItem> _buildStoryViewerList() {
+    final List<StoryViewerItem> items = [];
+
+    final myStory = ThoughtStoryManager.instance.currentStory;
+    if (myStory != null) {
+      items.add(
+        StoryViewerItem(
+          story: myStory,
+          isOwner: true,
+          authorName: 'Your Story',
+        ),
+      );
+    }
+
+    for (final s in _stories) {
+      if (s.isCreate) continue;
+      items.add(
+        StoryViewerItem(
+          story: SharedThoughtStory(
+            id: s.id,
+            message: s.message ?? "Living the moment ✨",
+            musicTrack: s.musicTitle != null
+                ? MusicTrack(
+                    id: 'm_${s.id}',
+                    title: s.musicTitle!,
+                    artist: s.musicArtist ?? 'Unknown Artist',
+                    albumArtUrl: s.imageUrl,
+                    duration: '0:30',
+                  )
+                : null,
+            timestamp: s.timestamp ?? '2h ago',
+            viewCount: 1250,
+            backgroundColor: const Color(0xFF141416),
+          ),
+          isOwner: false,
+          authorName: s.title,
+          authorAvatarUrl: s.imageUrl,
+        ),
+      );
+    }
+
+    return items;
+  }
+
+  void _openOtherUserStory(StoryItem story) {
+    final items = _buildStoryViewerList();
+    int targetIndex = items.indexWhere((it) => it.story.id == story.id);
+    if (targetIndex < 0) targetIndex = 0;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => StoryViewerScreen(
+          stories: items,
+          initialIndex: targetIndex,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openNotificationHub(NotificationItem item) async {
+    setState(() {
+      _notifications = List.from(_notifications);
+      final idx = _notifications.indexWhere((n) => n.id == item.id);
+      if (idx != -1) {
+        _notifications[idx] = NotificationItem(
+          id: item.id,
+          title: item.title,
+          subtitle: item.subtitle,
+          iconType: item.iconType,
+          badgeCount: null,
+          hasDot: false,
+        );
+      }
+    });
+
+    NotificationRemoteDataSource.instance.markAsRead(item.id);
+
+    Widget screen;
+    if (item.iconType == 'followers') {
+      screen = const NewFollowersScreen();
+    } else if (item.iconType == 'activity') {
+      screen = const ActivityScreen();
+    } else {
+      screen = const SystemNotificationsScreen();
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => screen),
+    );
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   Future<void> _handleCreateOrViewStory() async {
     final currentStory = ThoughtStoryManager.instance.currentStory;
     if (currentStory != null) {
-      // If already shared, open StoryViewerScreen and listen for delete action
+      final items = _buildStoryViewerList();
       final result = await Navigator.of(context).push<String>(
         MaterialPageRoute(
-          builder: (_) => StoryViewerScreen(story: currentStory),
+          builder: (_) => StoryViewerScreen(
+            stories: items,
+            initialIndex: 0,
+            story: currentStory,
+          ),
         ),
       );
 
       if (result == 'delete' && mounted) {
         ThoughtStoryManager.instance.deleteStory();
+        _loadAllData();
       }
     } else {
       // If not shared yet, open ShareThoughtScreen
@@ -41,6 +178,7 @@ class _InboxScreenState extends State<InboxScreen> {
 
       if (result != null && mounted) {
         ThoughtStoryManager.instance.setStory(result);
+        _loadAllData();
       }
     }
   }
@@ -89,57 +227,70 @@ class _InboxScreenState extends State<InboxScreen> {
           const SizedBox(width: 6),
         ],
       ),
-      body: ListView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.only(bottom: 110),
-        children: [
-          // 1. Stories / Memories Horizontal Row
-          SizedBox(
-            height: 124,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              itemCount: StaticInboxData.stories.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 14),
-              itemBuilder: (context, index) {
-                final story = StaticInboxData.stories[index];
-                return _buildStoryCircle(context, story);
-              },
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          // 2. Notification Hub Items
-          ...List.generate(StaticInboxData.notifications.length, (index) {
-            final notification = StaticInboxData.notifications[index];
-            return _buildNotificationTile(notification);
-          }),
-
-          const SizedBox(height: 20),
-
-          // 3. "MESSAGES" Section Header
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(
-              'MESSAGES',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF8E8E93),
-                letterSpacing: 1.2,
+      body: RefreshIndicator(
+        onRefresh: _loadAllData,
+        color: const Color(0xFF2F80ED),
+        backgroundColor: const Color(0xFF161618),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          padding: const EdgeInsets.only(bottom: 110),
+          children: [
+            // 1. Stories / Memories Horizontal Row
+            SizedBox(
+              height: 124,
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                itemCount: _stories.length,
+                separatorBuilder: (context, index) => const SizedBox(width: 14),
+                itemBuilder: (context, index) {
+                  final story = _stories[index];
+                  return _buildStoryCircle(context, story);
+                },
               ),
             ),
-          ),
 
-          // 4. Direct Messages Thread List
-          ...List.generate(StaticInboxData.threads.length, (index) {
-            final thread = StaticInboxData.threads[index];
-            return _buildMessageThreadTile(context, thread);
-          }),
-        ],
+            const SizedBox(height: 8),
+
+            // 2. Notification Hub Items
+            ...List.generate(_notifications.length, (index) {
+              final notification = _notifications[index];
+              return _buildNotificationTile(notification);
+            }),
+
+            const SizedBox(height: 20),
+
+            // 3. "MESSAGES" Section Header
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text(
+                'MESSAGES',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF8E8E93),
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+
+            // 4. Direct Messages Thread List
+            ValueListenableBuilder<List<DirectMessageThread>>(
+              valueListenable: ChatManager.instance.threadsNotifier,
+              builder: (context, activeThreads, _) {
+                final displayThreads = activeThreads.isNotEmpty ? activeThreads : _threads;
+                return Column(
+                  children: List.generate(displayThreads.length, (index) {
+                    final thread = displayThreads[index];
+                    return _buildMessageThreadTile(context, thread);
+                  }),
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -295,52 +446,55 @@ class _InboxScreenState extends State<InboxScreen> {
   );
 }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Top Spacer to align avatars with the create item
-        const SizedBox(height: 23),
-        Container(
-          width: 58,
-          height: 58,
-          padding: const EdgeInsets.all(2.5),
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF56CCF2), Color(0xFF2F80ED), Color(0xFF9B51E0)],
-            ),
-          ),
-          child: Container(
+    return GestureDetector(
+      onTap: () => _openOtherUserStory(story),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Top Spacer to align avatars with the create item
+          const SizedBox(height: 23),
+          Container(
+            width: 58,
+            height: 58,
+            padding: const EdgeInsets.all(2.5),
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.black,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF56CCF2), Color(0xFF2F80ED), Color(0xFF9B51E0)],
+              ),
             ),
-            padding: const EdgeInsets.all(2.0),
-            child: ClipOval(
-              child: Image.network(
-                story.imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: AppColors.surface,
-                  child: const Icon(Icons.person, color: Colors.white),
+            child: Container(
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.black,
+              ),
+              padding: const EdgeInsets.all(2.0),
+              child: ClipOval(
+                child: Image.network(
+                  story.imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: AppColors.surface,
+                    child: const Icon(Icons.person, color: Colors.white),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          story.title,
-          style: const TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: Colors.white,
+          const SizedBox(height: 5),
+          Text(
+            story.title,
+            style: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Colors.white,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -390,77 +544,85 @@ class _InboxScreenState extends State<InboxScreen> {
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: [
-          leadingIcon,
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  item.title,
-                  style: const TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openNotificationHub(item),
+        splashColor: Colors.white.withValues(alpha: 0.05),
+        highlightColor: Colors.white.withValues(alpha: 0.03),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              leadingIcon,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      item.title,
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      item.subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        color: Color(0xFF8E8E93),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  item.subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w400,
-                    color: Color(0xFF8E8E93),
+              ),
+              if (item.badgeCount != null)
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF2F80ED),
+                    shape: BoxShape.circle,
                   ),
+                  child: Center(
+                    child: Text(
+                      item.badgeCount.toString(),
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                )
+              else if (item.hasDot)
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF2F80ED),
+                    shape: BoxShape.circle,
+                  ),
+                )
+              else
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Color(0xFF2F80ED),
+                  size: 24,
                 ),
-              ],
-            ),
+            ],
           ),
-          if (item.badgeCount != null)
-            Container(
-              width: 22,
-              height: 22,
-              decoration: const BoxDecoration(
-                color: Color(0xFF2F80ED),
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Text(
-                  item.badgeCount.toString(),
-                  style: const TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            )
-          else if (item.hasDot)
-            Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                color: Color(0xFF2F80ED),
-                shape: BoxShape.circle,
-              ),
-            )
-          else
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: Color(0xFF2F80ED),
-              size: 24,
-            ),
-        ],
+        ),
       ),
     );
   }
