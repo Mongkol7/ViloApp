@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../../feed/presentation/pages/sound_detail_page.dart';
 import '../../../profile/data/datasources/profile_remote_data_source.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
@@ -629,6 +630,8 @@ class _SearchScreenState extends State<SearchScreen> {
           // Avatar with routing to PublicProfileScreen
           GestureDetector(
             onTap: () {
+              final cached = FeedRemoteDataSource.instance.getCachedUserVideos(cleanUsername) ??
+                  (account.id.isNotEmpty ? FeedRemoteDataSource.instance.getCachedUserVideos(account.id) : null);
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => PublicProfileScreen(
@@ -638,6 +641,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     avatarUrl: effectiveAvatarUrl,
                     isFollowing: account.isFollowed,
                     followsYou: account.followsYou,
+                    initialVideos: cached,
                   ),
                 ),
               );
@@ -677,6 +681,8 @@ class _SearchScreenState extends State<SearchScreen> {
           Expanded(
             child: GestureDetector(
               onTap: () {
+                final cached = FeedRemoteDataSource.instance.getCachedUserVideos(cleanUsername) ??
+                    (account.id.isNotEmpty ? FeedRemoteDataSource.instance.getCachedUserVideos(account.id) : null);
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => PublicProfileScreen(
@@ -686,6 +692,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       avatarUrl: effectiveAvatarUrl,
                       isFollowing: account.isFollowed,
                       followsYou: account.followsYou,
+                      initialVideos: cached,
                     ),
                   ),
                 );

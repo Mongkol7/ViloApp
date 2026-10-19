@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
@@ -6,16 +8,63 @@ import 'static_search_data.dart';
 
 class SearchRemoteDataSource {
   static final SearchRemoteDataSource instance = SearchRemoteDataSource._();
-  SearchRemoteDataSource._();
+  SearchRemoteDataSource._() {
+    _loadPersistedHistory();
+  }
 
   final ApiClient _client = ApiClient.instance;
 
-  final List<String> _localHistory = [
+  List<String> _localHistory = [
     'neon aesthetic',
     'tokyo cyberpunk',
     'flutter ui',
     'seven7',
   ];
+
+  File? _getHistoryFile() {
+    if (kIsWeb) return null;
+    try {
+      if (Platform.isAndroid) {
+        final dir = Directory('/data/user/0/com.example.viloapp/files');
+        if (!dir.existsSync()) {
+          dir.createSync(recursive: true);
+        }
+        return File('${dir.path}/vilo_search_history.json');
+      }
+      final dir = Directory.systemTemp;
+      return File('${dir.path}/vilo_search_history.json');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _loadPersistedHistory() {
+    try {
+      final file = _getHistoryFile();
+      if (file != null && file.existsSync()) {
+        final content = file.readAsStringSync();
+        final list = jsonDecode(content);
+        if (list is List) {
+          final items = list
+              .map((e) => e.toString().trim())
+              .where((e) => e.isNotEmpty)
+              .toList();
+          if (items.isNotEmpty) {
+            _localHistory = items;
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  void _persistLocalHistory() {
+    try {
+      final file = _getHistoryFile();
+      if (file != null) {
+        file.writeAsStringSync(jsonEncode(_localHistory));
+      }
+    } catch (_) {}
+  }
 
   Future<Map<String, dynamic>> search(String query, {String type = 'ALL'}) async {
     final cleanQuery = query.trim().replaceAll(RegExp(r'^[@#]+'), '');
@@ -24,8 +73,17 @@ class SearchRemoteDataSource {
       final endpoint = '/search?q=${Uri.encodeComponent(cleanQuery)}&type=${Uri.encodeComponent(type)}';
       final response = await _client.get(endpoint, requireAuth: false);
 
-      if (response != null && response['success'] == true && response['data'] != null) {
-        final parsed = _parseSearchSummary(response['data'], isSearch: true);
+      Map<String, dynamic>? dataMap;
+      if (response is Map<String, dynamic>) {
+        if (response.containsKey('data') && response['data'] is Map<String, dynamic>) {
+          dataMap = response['data'] as Map<String, dynamic>;
+        } else {
+          dataMap = response;
+        }
+      }
+
+      if (dataMap != null) {
+        final parsed = _parseSearchSummary(dataMap, isSearch: true);
         final List<SearchAccount> remoteAccounts = (parsed['accounts'] as List?)?.cast<SearchAccount>() ?? [];
         if (remoteAccounts.isEmpty) {
           final local = _fallbackLocalSearch(query, type);
@@ -48,8 +106,17 @@ class SearchRemoteDataSource {
   Future<Map<String, dynamic>> getTrendingExplore() async {
     try {
       final response = await _client.get('/explore/trending', requireAuth: false);
-      if (response != null && response['success'] == true && response['data'] != null) {
-        return _parseSearchSummary(response['data'], isSearch: false);
+      Map<String, dynamic>? dataMap;
+      if (response is Map<String, dynamic>) {
+        if (response.containsKey('data') && response['data'] is Map<String, dynamic>) {
+          dataMap = response['data'] as Map<String, dynamic>;
+        } else {
+          dataMap = response;
+        }
+      }
+
+      if (dataMap != null) {
+        return _parseSearchSummary(dataMap, isSearch: false);
       }
     } catch (e) {
       debugPrint('[SearchRemoteDataSource] Trending error: $e');
@@ -66,17 +133,33 @@ class SearchRemoteDataSource {
   Future<List<String>> getSearchHistory() async {
     try {
       final response = await _client.get('/search/history', requireAuth: true);
-      if (response != null && response['success'] == true && response['data'] is List) {
-        final remote = (response['data'] as List)
-            .map((item) => item['query']?.toString() ?? '')
-            .where((q) => q.isNotEmpty)
+      List<dynamic>? historyList;
+      if (response is List) {
+        historyList = response;
+      } else if (response is Map && response['data'] is List) {
+        historyList = response['data'] as List;
+      }
+
+      if (historyList != null) {
+        final remote = historyList
+            .map((item) {
+              if (item is Map) {
+                return item['query']?.toString() ?? '';
+              }
+              return item?.toString() ?? '';
+            })
+            .where((q) => q.trim().isNotEmpty)
+            .map((q) => q.trim())
             .toList();
+
         if (remote.isNotEmpty) {
-          return remote;
+          _localHistory = remote;
+          _persistLocalHistory();
+          return List<String>.from(_localHistory);
         }
       }
     } catch (e) {
-      debugPrint('[SearchRemoteDataSource] History error: $e');
+      debugPrint('[SearchRemoteDataSource] History remote fetch error, using local: $e');
     }
     return List<String>.from(_localHistory);
   }
@@ -86,19 +169,45 @@ class SearchRemoteDataSource {
     if (trimmed.isEmpty) return;
     _localHistory.remove(trimmed);
     _localHistory.insert(0, trimmed);
-    if (_localHistory.length > 12) {
+    if (_localHistory.length > 20) {
       _localHistory.removeLast();
     }
+    _persistLocalHistory();
+
+    // Asynchronously record search history on the user account in DB
+    _client.post(
+      '/search/history',
+      body: {'query': trimmed, 'type': 'ALL'},
+      requireAuth: true,
+    ).then((_) {
+      debugPrint('[SearchRemoteDataSource] Search query recorded in DB: $trimmed');
+    }).catchError((e) {
+      debugPrint('[SearchRemoteDataSource] Search query DB sync note: $e');
+    });
   }
 
   void removeSearchHistory(String term) {
-    _localHistory.remove(term.trim());
+    final trimmed = term.trim();
+    _localHistory.remove(trimmed);
+    _persistLocalHistory();
+
+    // Remove from user account in DB
+    _client.delete(
+      '/search/history?q=${Uri.encodeComponent(trimmed)}',
+      requireAuth: true,
+    ).then((_) {
+      debugPrint('[SearchRemoteDataSource] Removed query from DB: $trimmed');
+    }).catchError((e) {
+      debugPrint('[SearchRemoteDataSource] Remove query DB sync note: $e');
+    });
   }
 
   Future<void> clearSearchHistory() async {
     _localHistory.clear();
+    _persistLocalHistory();
     try {
       await _client.delete('/search/history', requireAuth: true);
+      debugPrint('[SearchRemoteDataSource] Cleared all search history in DB');
     } catch (e) {
       debugPrint('[SearchRemoteDataSource] Clear history error: $e');
     }

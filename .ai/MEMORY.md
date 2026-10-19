@@ -10,3 +10,28 @@
 
 ## 3. Scroll Hysteresis Thresholds
 - To avoid jitter during slow reading or micro-scrolling, require $\Delta y > 20\text{pt}$ for downward compaction, but allow immediate expansion on upward flick $\Delta y < -6\text{pt}$ or top bounce `offset <= 0`.
+
+## 4. Android 13+ Granular Media Permissions
+- **Symptom**: `Permission denied` or `MissingPluginException` when opening file picker on API 33+ devices.
+- **Cause**: Android 13 deprecated `READ_EXTERNAL_STORAGE` in favor of `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, and `READ_MEDIA_VISUAL_USER_SELECTED`.
+- **Fix**: Declare these permissions in `android/app/src/main/AndroidManifest.xml` and use `ImagePicker` as the primary picker with `FilePicker(withData: false)` as graceful fallback.
+
+## 5. Large File Uploads & OOM Prevention
+- **Symptom**: Flutter app crashes or hangs when picking or uploading high-resolution videos (20MB–50MB).
+- **Cause**: Reading entire video byte arrays into memory (`file.readAsBytes()`) before constructing multipart requests leads to GC spikes and crashes.
+- **Fix**: Pass the file path directly to `http.MultipartFile.fromPath('videoFile', filePath)` so the HTTP stream pumps directly from disk without buffer allocation.
+
+## 6. NestedScrollView Pull-To-Refresh
+- **Symptom**: Pulling down on profile grid does not trigger `RefreshIndicator`.
+- **Cause**: Inner `CustomScrollView` inside `TabBarView` does not propagate overscroll notifications to the parent `NestedScrollView` unless configured with scrollable physics.
+- **Fix**: Provide `physics: const AlwaysScrollableScrollPhysics()` to each tab's `CustomScrollView`.
+
+## 7. Spring Boot Static File Serving (`WebMvcConfig`)
+- **Symptom**: Uploaded video files return 404 when requested via `http://localhost:3000/uploads/videos/...`.
+- **Cause**: In multi-module or project root setups, relative paths like `file:./uploads/` resolve relative to the current working directory, which may be `backend/` or the project root.
+- **Fix**: In `WebMvcConfig.java`, specify multiple resource locations: `addResourceLocations(uploadUri, "file:./uploads/", "file:backend/uploads/")` and permit them in `SecurityConfig`.
+
+## 8. Windows Port 3000 Clean-Up
+- **Symptom**: `Failed to start bean 'webServerStartStop'` / `Port 3000 was already in use`.
+- **Cause**: Orphaned background `java.exe` or node processes holding the TCP socket.
+- **Fix**: Run `Get-NetTCPConnection -LocalPort 3000 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }` before launching the backend.

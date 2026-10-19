@@ -48,8 +48,7 @@ public class SearchService {
         // Record search history if authenticated and query is not empty
         if (username != null && !trimmed.isEmpty()) {
             userRepository.findByUsername(username).ifPresent(user -> {
-                SearchHistory history = new SearchHistory(user, trimmed, normalizedType);
-                searchHistoryRepository.save(history);
+                recordSearch(user, trimmed, normalizedType);
             });
         }
 
@@ -143,14 +142,42 @@ public class SearchService {
         return summary;
     }
 
+    @Transactional
+    public void recordSearch(User user, String query, String searchType) {
+        if (user == null || query == null || query.trim().isEmpty()) return;
+        String cleanQuery = query.trim();
+        try {
+            searchHistoryRepository.deleteByUserAndQuery(user, cleanQuery);
+        } catch (Exception ignored) {}
+        SearchHistory history = new SearchHistory(user, cleanQuery, searchType != null ? searchType : "ALL");
+        searchHistoryRepository.save(history);
+    }
+
+    @Transactional
+    public void recordSearchHistory(String username, String query, String searchType) {
+        if (username != null && query != null && !query.trim().isEmpty()) {
+            userRepository.findByUsername(username).ifPresent(user -> {
+                recordSearch(user, query, searchType);
+            });
+        }
+    }
+
     @Transactional(readOnly = true)
     public List<SearchHistoryResponse> getSearchHistory(String username) {
         if (username == null) return Collections.emptyList();
         return userRepository.findByUsername(username)
-                .map(user -> searchHistoryRepository.findByUserOrderByCreatedAtDesc(user, PageRequest.of(0, 15))
-                        .stream()
-                        .map(SearchHistoryResponse::fromEntity)
-                        .collect(Collectors.toList()))
+                .map(user -> {
+                    List<SearchHistory> raw = searchHistoryRepository.findByUserOrderByCreatedAtDesc(user, PageRequest.of(0, 25));
+                    Set<String> seen = new HashSet<>();
+                    List<SearchHistoryResponse> result = new ArrayList<>();
+                    for (SearchHistory sh : raw) {
+                        String q = sh.getQuery().trim();
+                        if (seen.add(q.toLowerCase())) {
+                            result.add(SearchHistoryResponse.fromEntity(sh));
+                        }
+                    }
+                    return result;
+                })
                 .orElse(Collections.emptyList());
     }
 
@@ -158,6 +185,15 @@ public class SearchService {
     public void clearSearchHistory(String username) {
         if (username != null) {
             userRepository.findByUsername(username).ifPresent(searchHistoryRepository::deleteByUser);
+        }
+    }
+
+    @Transactional
+    public void deleteSearchHistoryByQuery(String username, String query) {
+        if (username != null && query != null && !query.trim().isEmpty()) {
+            userRepository.findByUsername(username).ifPresent(user -> {
+                searchHistoryRepository.deleteByUserAndQuery(user, query.trim());
+            });
         }
     }
 

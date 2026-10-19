@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../feed/presentation/pages/home_feed_page.dart';
+import '../../../feed/presentation/widgets/create_action_sheet.dart';
 import '../../../inbox_activity/presentation/pages/inbox_screen.dart';
 import '../../../profile/presentation/pages/people_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
@@ -29,10 +30,10 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   double _accumulatedDelta = 0.0;
 
   List<Widget> get _pages => [
-    HomeFeedPage(isActive: _currentIndex == 0),
-    const PeopleScreen(),
-    const InboxScreen(),
-    const ProfileScreen(),
+    HomeFeedPage(key: const PageStorageKey('main_nav_home'), isActive: _currentIndex == 0),
+    const PeopleScreen(key: PageStorageKey('main_nav_people')),
+    const InboxScreen(key: PageStorageKey('main_nav_inbox')),
+    const ProfileScreen(key: PageStorageKey('main_nav_profile')),
   ];
 
   @override
@@ -51,10 +52,21 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     });
   }
 
-  void _onAddPressed() {
+  void _onAddPressed() async {
     setState(() {
-      _isAddActive = !_isAddActive;
+      _isAddActive = true;
     });
+
+    final createdVideo = await CreateActionSheet.show(context);
+
+    if (mounted) {
+      setState(() {
+        _isAddActive = false;
+        if (createdVideo != null && _currentIndex != 0) {
+          _currentIndex = 0;
+        }
+      });
+    }
   }
 
   bool _handleScrollNotification(ScrollNotification notification) {

@@ -7,6 +7,9 @@ import '../../../inbox_activity/domain/entities/shared_thought_story.dart';
 import '../../../inbox_activity/presentation/pages/share_thought_screen.dart';
 import '../../../inbox_activity/presentation/pages/story_viewer_screen.dart';
 import '../../../inbox_activity/presentation/widgets/animated_mini_music_wave.dart';
+import '../../../feed/data/datasources/feed_remote_data_source.dart';
+import '../../../feed/data/models/video_feed_model.dart';
+import '../../../feed/presentation/pages/video_feed_page.dart';
 import '../../data/datasources/profile_remote_data_source.dart';
 import '../../data/datasources/profile_sync_service.dart';
 import '../mock/profile_mock_data.dart';
@@ -15,6 +18,7 @@ import '../pages/followers_following_screen.dart';
 import '../style/pulse_tokens.dart';
 import '../widgets/profile_tab_content.dart';
 import '../widgets/profile_menu_drawer.dart';
+import '../widgets/vilo_tab_bar_view.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.isOwnProfile = true});
@@ -24,21 +28,28 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
+class _ProfileScreenState extends State<ProfileScreen>
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   late TabController _tabController;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   UserModel? _user;
+  List<VideoFeedModel> _myVideos = [];
+  List<VideoFeedModel> _savedVideos = [];
+  List<VideoFeedModel> _likedVideos = [];
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this, initialIndex: 1);
     // Initialize with local default for immediate render / testing
-    final cached = ProfileSyncService.instance.cachedMyProfile;
+    final cachedProfile = ProfileSyncService.instance.cachedMyProfile;
     final currentUid = TokenStorage.instance.currentUserIdSync;
     final isDemo = TokenStorage.instance.isDemoUserSync;
 
-    _user = cached ??
+    _user = cachedProfile ??
         (isDemo
             ? UserModel(
                 id: 1,
@@ -63,6 +74,19 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                 followingCount: 0,
               ));
     ProfileSyncService.instance.followEvents.addListener(_onFollowEvent);
+    ProfileSyncService.instance.videoUploadedEvents.addListener(_onVideoUploaded);
+    ProfileSyncService.instance.videoInteractionEvents.addListener(_onVideoInteractionEvent);
+    ProfileSyncService.instance.videoDeletedEvents.addListener(_onVideoDeleted);
+
+    // Instant zero-latency seed from cache if available
+    final cached = (_user != null && _user!.id > 0)
+        ? (FeedRemoteDataSource.instance.getCachedUserVideos(_user!.id) ??
+            FeedRemoteDataSource.instance.getCachedUserVideos(_user!.username))
+        : null;
+    if (cached != null && cached.isNotEmpty) {
+      _myVideos = List.from(cached);
+    }
+
     _loadProfile();
   }
 
@@ -75,28 +99,165 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           _user = _user!.copyWith(followingCount: updatedFollowing);
         });
       }
-      _loadProfile();
     }
   }
 
-  Future<void> _loadProfile() async {
+  void _onVideoUploaded() {
+    final video = ProfileSyncService.instance.videoUploadedEvents.value;
+    if (video != null && mounted) {
+      setState(() {
+        final existingIndex = _myVideos.indexWhere((v) => v.id == video.id);
+        if (existingIndex != -1) {
+          _myVideos[existingIndex] = video;
+        } else {
+          _myVideos = [video, ..._myVideos];
+        }
+      });
+    }
+  }
+
+  void _onVideoDeleted() {
+    final deletedId = ProfileSyncService.instance.videoDeletedEvents.value;
+    if (deletedId != null && mounted) {
+      setState(() {
+        _myVideos.removeWhere((v) => v.id == deletedId);
+        _likedVideos.removeWhere((v) => v.id == deletedId);
+        _savedVideos.removeWhere((v) => v.id == deletedId);
+      });
+    }
+  }
+
+  void _onVideoInteractionEvent() {
+    final event = ProfileSyncService.instance.videoInteractionEvents.value;
+    if (event == null || !mounted) return;
+
+    setState(() {
+      // 1. Update matching video in _myVideos
+      final myIdx = _myVideos.indexWhere((v) => v.id == event.videoId);
+      if (myIdx != -1) {
+        _myVideos[myIdx] = _myVideos[myIdx].copyWith(
+          isLiked: event.isLiked,
+          likeCount: event.likeCount,
+          isSaved: event.isSaved,
+          saveCount: event.saveCount,
+          commentCount: event.commentCount,
+        );
+      }
+
+      // 2. Update in _savedVideos immediately
+      if (event.isSaved != null) {
+        if (event.isSaved == true) {
+          final existingIdx = _savedVideos.indexWhere((v) => v.id == event.videoId);
+          if (existingIdx != -1) {
+            _savedVideos[existingIdx] = _savedVideos[existingIdx].copyWith(
+              isSaved: true,
+              saveCount: event.saveCount,
+              isLiked: event.isLiked,
+              likeCount: event.likeCount,
+              commentCount: event.commentCount,
+            );
+          } else if (event.video != null) {
+            _savedVideos.insert(0, event.video!.copyWith(isSaved: true, saveCount: event.saveCount));
+          }
+        } else {
+          _savedVideos.removeWhere((v) => v.id == event.videoId);
+        }
+      } else {
+        final existingIdx = _savedVideos.indexWhere((v) => v.id == event.videoId);
+        if (existingIdx != -1) {
+          _savedVideos[existingIdx] = _savedVideos[existingIdx].copyWith(
+            isLiked: event.isLiked,
+            likeCount: event.likeCount,
+            commentCount: event.commentCount,
+          );
+        }
+      }
+
+      // 3. Update in _likedVideos immediately
+      if (event.isLiked != null) {
+        if (event.isLiked == true) {
+          final existingIdx = _likedVideos.indexWhere((v) => v.id == event.videoId);
+          if (existingIdx != -1) {
+            _likedVideos[existingIdx] = _likedVideos[existingIdx].copyWith(
+              isLiked: true,
+              likeCount: event.likeCount,
+              isSaved: event.isSaved,
+              saveCount: event.saveCount,
+              commentCount: event.commentCount,
+            );
+          } else if (event.video != null) {
+            _likedVideos.insert(0, event.video!.copyWith(isLiked: true, likeCount: event.likeCount));
+          }
+        } else {
+          _likedVideos.removeWhere((v) => v.id == event.videoId);
+        }
+      } else {
+        final existingIdx = _likedVideos.indexWhere((v) => v.id == event.videoId);
+        if (existingIdx != -1) {
+          _likedVideos[existingIdx] = _likedVideos[existingIdx].copyWith(
+            isSaved: event.isSaved,
+            saveCount: event.saveCount,
+            commentCount: event.commentCount,
+          );
+        }
+      }
+    });
+  }
+
+  Future<void> _loadProfile({bool forceRefresh = false}) async {
+    // 1. Attempt to fetch current user profile details
     try {
       final user = await ProfileRemoteDataSource.instance.getMyProfile();
       if (mounted) {
         setState(() => _user = user);
         ProfileSyncService.instance.cachedMyProfile = user;
       }
-      // Pre-warm following & followers cache in background for zero-latency instant listing
-      if (user.id > 0) {
-        ProfileRemoteDataSource.instance.getFollowing(user.id).then((fl) {
-          ProfileSyncService.instance.cachedFollowing = List.from(fl);
-        }).catchError((_) {});
-        ProfileRemoteDataSource.instance.getFollowers(user.id).then((f) {
-          ProfileSyncService.instance.cachedFollowers = List.from(f);
-        }).catchError((_) {});
+    } catch (e) {
+      debugPrint('[ProfileScreen] getMyProfile notice: $e');
+    }
+
+    // 2. Always fetch posted videos from backend for the user
+    try {
+      final identifier = (_user?.id != null && _user!.id > 0)
+          ? _user!.id
+          : (_user?.username.isNotEmpty == true ? _user!.username : 'me');
+      final videos = await FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true);
+      if (mounted) {
+        setState(() => _myVideos = List.from(videos));
       }
-    } catch (_) {
-      // Keep existing user state if network fetch fails
+    } catch (e) {
+      debugPrint('[ProfileScreen] getUserVideos notice: $e');
+    }
+
+    // Fetch real saved videos
+    try {
+      final saved = await FeedRemoteDataSource.instance.getSavedVideos();
+      if (mounted) {
+        setState(() => _savedVideos = List.from(saved));
+      }
+    } catch (e) {
+      debugPrint('[ProfileScreen] getSavedVideos notice: $e');
+    }
+
+    // Fetch real liked videos
+    try {
+      final liked = await FeedRemoteDataSource.instance.getLikedVideos();
+      if (mounted) {
+        setState(() => _likedVideos = List.from(liked));
+      }
+    } catch (e) {
+      debugPrint('[ProfileScreen] getLikedVideos notice: $e');
+    }
+
+    // 3. Pre-warm following & followers cache in background for zero-latency instant listing
+    final targetId = _user?.id ?? 1;
+    if (targetId > 0) {
+      ProfileRemoteDataSource.instance.getFollowing(targetId).then((fl) {
+        ProfileSyncService.instance.cachedFollowing = List.from(fl);
+      }).catchError((_) {});
+      ProfileRemoteDataSource.instance.getFollowers(targetId).then((f) {
+        ProfileSyncService.instance.cachedFollowers = List.from(f);
+      }).catchError((_) {});
     }
   }
 
@@ -153,9 +314,80 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     return '$count';
   }
 
+  void _confirmDeleteProfileVideo(VideoFeedModel video) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Video', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text(
+          'Are you sure you want to delete this video? This action cannot be undone.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFE2C55),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+              ),
+              SizedBox(width: 12),
+              Text('Deleting video...', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+          duration: Duration(milliseconds: 1500),
+          backgroundColor: Color(0xFF1E1E24),
+        ),
+      );
+
+      final success = await FeedRemoteDataSource.instance.deleteVideo(video.id);
+      if (!mounted) return;
+      if (success) {
+        ProfileSyncService.instance.notifyVideoDeleted(video.id);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Video deleted successfully'),
+            backgroundColor: Color(0xFF1E1E24),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to delete video. Please check your connection.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     ProfileSyncService.instance.followEvents.removeListener(_onFollowEvent);
+    ProfileSyncService.instance.videoUploadedEvents.removeListener(_onVideoUploaded);
+    ProfileSyncService.instance.videoInteractionEvents.removeListener(_onVideoInteractionEvent);
+    ProfileSyncService.instance.videoDeletedEvents.removeListener(_onVideoDeleted);
     _tabController.dispose();
     super.dispose();
   }
@@ -189,12 +421,15 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final currentUsername = _user?.username.isNotEmpty == true ? _user!.username : ProfileMockData.username;
     final currentDisplayName = _user?.displayName.isNotEmpty == true ? _user!.displayName : currentUsername;
     final currentAvatarUrl = _user?.avatarUrl?.isNotEmpty == true ? _user!.avatarUrl! : ProfileMockData.avatarUrl;
     final currentBio = _user?.bio?.isNotEmpty == true ? _user!.bio! : ProfileMockData.bio;
-    final followersDisplay = _formatCount(_user?.followersCount ?? ProfileSyncService.instance.mockFollowersCount);
-    final followingDisplay = _formatCount(_user?.followingCount ?? ProfileSyncService.instance.mockFollowingCount);
+    final followersDisplay = _formatCount(_user?.followersCount ?? 0);
+    final followingDisplay = _formatCount(_user?.followingCount ?? 0);
+    final totalLikes = _myVideos.fold<int>(0, (sum, v) => sum + v.likeCount);
+    final likesDisplay = _formatCount(totalLikes);
 
     return Scaffold(
       key: _scaffoldKey,
@@ -224,7 +459,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _loadProfile,
+        onRefresh: () => _loadProfile(forceRefresh: true),
         color: Colors.white,
         backgroundColor: const Color(0xFF1E1E24),
         child: NestedScrollView(
@@ -404,7 +639,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       _buildDivider(),
                       _buildStatItem('Followers', followersDisplay, onTap: () => _openFollowersFollowing(0)),
                       _buildDivider(),
-                      _buildStatItem('Likes', TokenStorage.instance.isDemoUserSync ? '154K' : '0'),
+                      _buildStatItem('Likes', likesDisplay),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -440,8 +675,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.grey,
                   tabs: const [
-                    Tab(icon: Icon(Icons.music_note_rounded)), // Music
-                    Tab(icon: Icon(Icons.grid_view_rounded)),  // Grid
+                    Tab(icon: Icon(Icons.music_note_rounded)), // Music (Left)
+                    Tab(icon: Icon(Icons.grid_view_rounded)),  // Grid / Posted Videos (Right)
                     Tab(icon: Icon(Icons.shopping_bag_outlined)), // Shop
                     Tab(icon: Icon(Icons.bookmark_border_rounded)), // Saved
                     Tab(icon: Icon(Icons.favorite_border_rounded)), // Liked
@@ -451,39 +686,75 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             ),
           ];
         },
-        body: TabBarView(
+        body: ViloTabBarView(
           controller: _tabController,
           children: [
-            Builder(
-              builder: (context) {
-                final isClean = !TokenStorage.instance.isDemoUserSync;
-                return CustomScrollView(slivers: buildProfileTabSlivers(0, isCleanSlate: isClean));
-              },
-            ),
-            Builder(
-              builder: (context) {
-                final isClean = !TokenStorage.instance.isDemoUserSync;
-                return CustomScrollView(slivers: buildProfileTabSlivers(1, isCleanSlate: isClean));
-              },
-            ),
-            Builder(
-              builder: (context) {
-                final isClean = !TokenStorage.instance.isDemoUserSync;
-                return CustomScrollView(slivers: buildProfileTabSlivers(2, isCleanSlate: isClean));
-              },
-            ),
-            Builder(
-              builder: (context) {
-                final isClean = !TokenStorage.instance.isDemoUserSync;
-                return CustomScrollView(slivers: buildProfileTabSlivers(3, isCleanSlate: isClean));
-              },
-            ),
-            Builder(
-              builder: (context) {
-                final isClean = !TokenStorage.instance.isDemoUserSync;
-                return CustomScrollView(slivers: buildProfileTabSlivers(4, isCleanSlate: isClean));
-              },
-            ),
+            CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: buildProfileTabSlivers(0),
+            ), // Music (Index 0)
+            CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: buildProfileTabSlivers(
+                1,
+                userVideos: _myVideos,
+                onVideoTap: (video, index) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => VideoFeedPage(
+                        isActive: true,
+                        initialVideos: _myVideos,
+                        initialIndex: index,
+                        canDelete: true, // Only posted videos viewed from profile can be deleted
+                      ),
+                    ),
+                  );
+                },
+                onVideoLongPress: (video, index) => _confirmDeleteProfileVideo(video),
+              ),
+            ), // Grid / Posted Videos (Index 1)
+            CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: buildProfileTabSlivers(2),
+            ), // Shop
+            CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: buildProfileTabSlivers(
+                3,
+                savedVideos: _savedVideos,
+                onSavedVideoTap: (video, index) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => VideoFeedPage(
+                        isActive: true,
+                        initialVideos: _savedVideos,
+                        initialIndex: index,
+                        canDelete: false,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ), // Saved
+            CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: buildProfileTabSlivers(
+                4,
+                likedVideos: _likedVideos,
+                onLikedVideoTap: (video, index) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => VideoFeedPage(
+                        isActive: true,
+                        initialVideos: _likedVideos,
+                        initialIndex: index,
+                        canDelete: false,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ), // Liked
           ],
         ),
       ),

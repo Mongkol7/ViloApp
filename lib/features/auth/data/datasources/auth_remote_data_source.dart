@@ -1,4 +1,7 @@
 import '../../../../core/network/api_client.dart';
+import '../../../feed/data/datasources/feed_remote_data_source.dart';
+import '../../../profile/data/datasources/profile_remote_data_source.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../models/user_model.dart';
 import 'token_storage.dart';
 
@@ -35,7 +38,13 @@ class AuthRemoteDataSource {
       id: user.id,
       username: user.username,
       displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+      email: user.email,
     );
+
+    // Sync globally so identity immediately reflects active user
+    ProfileSyncService.instance.cachedMyProfile = user;
+    ProfileRemoteDataSource.instance.cacheUser(user);
 
     return user;
   }
@@ -69,14 +78,23 @@ class AuthRemoteDataSource {
       id: user.id,
       username: user.username,
       displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+      email: user.email,
     );
+
+    // Sync globally so identity immediately reflects active user
+    ProfileSyncService.instance.cachedMyProfile = user;
+    ProfileRemoteDataSource.instance.cacheUser(user);
 
     return user;
   }
 
   Future<UserModel> getMe() async {
     final response = await _client.get('/users/me', requireAuth: true);
-    return UserModel.fromJson(response as Map<String, dynamic>);
+    final user = UserModel.fromJson(response as Map<String, dynamic>);
+    ProfileSyncService.instance.cachedMyProfile = user;
+    ProfileRemoteDataSource.instance.cacheUser(user);
+    return user;
   }
 
   Future<void> logout() async {
@@ -89,5 +107,8 @@ class AuthRemoteDataSource {
       );
     } catch (_) {}
     await _tokenStorage.clear();
+    ProfileSyncService.instance.clear();
+    ProfileRemoteDataSource.instance.clearCache();
+    FeedRemoteDataSource.instance.clearCache();
   }
 }

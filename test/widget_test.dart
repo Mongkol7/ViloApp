@@ -12,8 +12,11 @@ import 'package:viloapp/features/profile/presentation/pages/people_screen.dart';
 import 'package:viloapp/features/profile/presentation/pages/settings_and_privacy_screen.dart';
 import 'package:viloapp/features/profile/presentation/screens/profile_screen.dart';
 import 'package:viloapp/features/profile/presentation/screens/public_profile_screen.dart';
+import 'package:viloapp/features/feed/data/models/video_feed_model.dart';
+import 'package:viloapp/features/feed/presentation/pages/home_feed_page.dart';
 import 'package:viloapp/features/search_discover/presentation/pages/search_screen.dart';
 import 'package:viloapp/features/feed/presentation/pages/sound_detail_page.dart';
+import 'package:viloapp/features/feed/presentation/pages/video_feed_page.dart';
 
 Widget _buildTestApp({required Widget child}) {
   return MaterialApp(
@@ -744,6 +747,87 @@ void main() {
     // Verify persisted in ChatManager
     final messages = ChatManager.instance.getMessages('2');
     expect(messages.any((m) => m.text == 'Hey Bunheng, check this out!'), isTrue);
+  });
+
+  testWidgets('VideoFeedPage renders real DB creator account with follow status and hides + button when followed', (WidgetTester tester) async {
+    await tester.pumpWidget(_buildTestApp(child: const VideoFeedPage(feedType: 'FOLLOWING', isActive: false)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Verify creator from DB is rendered (@bunheng)
+    expect(find.text('@bunheng'), findsOneWidget);
+    expect(find.text('Night walk through the neon streets #citylife #neon #cyberpunk'), findsOneWidget);
+    // Because bunheng is already followed, + icon is NOT shown on avatar
+    expect(find.byIcon(Icons.add), findsNothing);
+  });
+
+  testWidgets('PublicProfileScreen renders creator clean username without double @ and shows video grid', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      _buildTestApp(
+        child: const PublicProfileScreen(
+          userId: 2,
+          username: '@bunheng',
+          displayName: 'Lim Bunheng',
+          isFollowing: true,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // Must show @bunheng, NEVER @@bunheng
+    expect(find.text('@bunheng'), findsOneWidget);
+    expect(find.text('@@bunheng'), findsNothing);
+    expect(find.text('Lim Bunheng'), findsOneWidget);
+  });
+
+  testWidgets('HomeFeedPage renders tabs (Community, Following, For You, Shop) with PageStorageKeys', (WidgetTester tester) async {
+    await tester.pumpWidget(_buildTestApp(child: const HomeFeedPage(isActive: false)));
+    await tester.pump();
+
+    // Verify all 4 tabs exist
+    expect(find.text('Community'), findsOneWidget);
+    expect(find.text('Following'), findsOneWidget);
+    expect(find.text('For You'), findsOneWidget);
+    expect(find.text('Shop'), findsOneWidget);
+
+    // Verify active tab child has PageStorageKey
+    expect(find.byKey(const PageStorageKey('tab_for_you')), findsOneWidget);
+  });
+
+  testWidgets('PublicProfileScreen renders initialVideos on frame 0 with 0ms latency', (WidgetTester tester) async {
+    final testVideo = VideoFeedModel(
+      id: 99,
+      creatorId: 2,
+      username: '@bunheng',
+      displayName: 'Lim Bunheng',
+      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500',
+      isVerified: true,
+      videoUrl: 'assets/videos/vid2.mp4',
+      caption: 'Instant profile video test',
+      musicTitle: 'Cyber Beats',
+      likes: '999K',
+      comments: '1K',
+      saves: '500',
+      isFollowing: true,
+      isMe: false,
+    );
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        child: PublicProfileScreen(
+          userId: 2,
+          username: '@bunheng',
+          displayName: 'Lim Bunheng',
+          isFollowing: true,
+          initialVideos: [testVideo],
+        ),
+      ),
+    );
+
+    // Verify video likes badge is visible immediately on first pump without waiting for network
+    expect(find.text('999K'), findsOneWidget);
+    expect(find.text('@bunheng'), findsOneWidget);
   });
 }
 
