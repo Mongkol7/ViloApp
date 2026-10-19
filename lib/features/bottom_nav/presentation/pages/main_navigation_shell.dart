@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../feed/data/models/video_model.dart';
 import '../../../feed/presentation/pages/home_feed_page.dart';
 import '../../../feed/presentation/widgets/create_action_sheet.dart';
-import '../../../feed/presentation/widgets/upload_video_sheet.dart';
 import '../../../inbox_activity/presentation/pages/inbox_screen.dart';
 import '../../../profile/presentation/pages/people_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';

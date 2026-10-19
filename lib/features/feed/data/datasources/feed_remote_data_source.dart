@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io' show File;
+import 'dart:io' show File, Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
@@ -352,26 +352,38 @@ class FeedRemoteDataSource {
     }
 
     // Video payload (either multipart file or direct videoPath reference)
-    if (videoBytes != null && videoBytes.isNotEmpty) {
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'videoFile',
-          videoBytes,
-          filename: videoFilename,
-        ),
-      );
-      if (videoPath != null && videoPath.trim().isNotEmpty) {
-        request.fields['videoPath'] = videoPath.trim();
-      }
-    } else if (videoPath != null && videoPath.trim().isNotEmpty) {
+    if (videoPath != null && videoPath.trim().isNotEmpty) {
       final trimmedPath = videoPath.trim();
-      request.fields['videoPath'] = trimmedPath;
-
       final fileOnDisk = File(trimmedPath);
+
       if (fileOnDisk.existsSync()) {
         try {
-          request.files.add(await http.MultipartFile.fromPath('videoFile', trimmedPath));
-        } catch (_) {}
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              'videoFile',
+              trimmedPath,
+              filename: videoFilename.isNotEmpty ? videoFilename : trimmedPath.split(Platform.pathSeparator).last,
+            ),
+          );
+        } catch (e) {
+          debugPrint('[FeedRemoteDataSource] MultipartFile.fromPath failed, fallback to bytes: $e');
+          final bytes = await fileOnDisk.readAsBytes();
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'videoFile',
+              bytes,
+              filename: videoFilename.isNotEmpty ? videoFilename : trimmedPath.split(Platform.pathSeparator).last,
+            ),
+          );
+        }
+      } else if (videoBytes != null && videoBytes.isNotEmpty) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'videoFile',
+            videoBytes,
+            filename: videoFilename,
+          ),
+        );
       } else if (trimmedPath.startsWith('assets/')) {
         try {
           final byteData = await rootBundle.load(trimmedPath);
@@ -385,13 +397,67 @@ class FeedRemoteDataSource {
             ),
           );
         } catch (_) {}
+      } else {
+        request.fields['videoPath'] = trimmedPath;
       }
+    } else if (videoBytes != null && videoBytes.isNotEmpty) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'videoFile',
+          videoBytes,
+          filename: videoFilename,
+        ),
+      );
     } else {
       throw ApiResponseException('A video path or video file must be provided', 400);
     }
 
     // Thumbnail payload (optional)
-    if (thumbnailBytes != null && thumbnailBytes.isNotEmpty) {
+    if (thumbnailPath != null && thumbnailPath.isNotEmpty) {
+      final thumbOnDisk = File(thumbnailPath);
+      if (thumbOnDisk.existsSync()) {
+        try {
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              'thumbnailFile',
+              thumbnailPath,
+              filename: thumbnailFilename.isNotEmpty ? thumbnailFilename : 'thumbnail.jpg',
+            ),
+          );
+        } catch (e) {
+          debugPrint('[FeedRemoteDataSource] Thumbnail fromPath failed: $e');
+          final bytes = await thumbOnDisk.readAsBytes();
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'thumbnailFile',
+              bytes,
+              filename: thumbnailFilename,
+            ),
+          );
+        }
+      } else if (thumbnailBytes != null && thumbnailBytes.isNotEmpty) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'thumbnailFile',
+            thumbnailBytes,
+            filename: thumbnailFilename,
+          ),
+        );
+      } else if (thumbnailPath.startsWith('assets/')) {
+        try {
+          final byteData = await rootBundle.load(thumbnailPath);
+          final bytes = byteData.buffer.asUint8List();
+          final name = thumbnailPath.split('/').last;
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'thumbnailFile',
+              bytes,
+              filename: name.isNotEmpty ? name : thumbnailFilename,
+            ),
+          );
+        } catch (_) {}
+      }
+    } else if (thumbnailBytes != null && thumbnailBytes.isNotEmpty) {
       request.files.add(
         http.MultipartFile.fromBytes(
           'thumbnailFile',
@@ -399,24 +465,6 @@ class FeedRemoteDataSource {
           filename: thumbnailFilename,
         ),
       );
-    } else if (thumbnailPath != null && thumbnailPath.isNotEmpty) {
-      final thumbOnDisk = File(thumbnailPath);
-      if (thumbOnDisk.existsSync()) {
-        request.files.add(await http.MultipartFile.fromPath('thumbnailFile', thumbnailPath));
-      } else if (thumbnailPath.startsWith('assets/')) {
-        final byteData = await rootBundle.load(thumbnailPath);
-        final bytes = byteData.buffer.asUint8List();
-        final name = thumbnailPath.split('/').last;
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'thumbnailFile',
-            bytes,
-            filename: name.isNotEmpty ? name : thumbnailFilename,
-          ),
-        );
-      } else {
-        request.files.add(await http.MultipartFile.fromPath('thumbnailFile', thumbnailPath));
-      }
     }
 
     final streamedResponse = await request.send();

@@ -1,6 +1,8 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../auth/data/datasources/auth_remote_data_source.dart';
 import '../../../auth/data/datasources/token_storage.dart';
 import '../../data/datasources/feed_remote_data_source.dart';
@@ -134,23 +136,80 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
   Future<void> _pickVideo() async {
     try {
+      // 1. Try ImagePicker first (native Gallery / Media Library on mobile & web)
+      try {
+        final picker = ImagePicker();
+        final xFile = await picker.pickMedia();
+        if (xFile != null) {
+          int size = 0;
+          Uint8List? bytes;
+          if (xFile.path.isNotEmpty) {
+            final file = File(xFile.path);
+            if (file.existsSync()) {
+              size = file.lengthSync();
+              if (size <= 25 * 1024 * 1024) {
+                bytes = await file.readAsBytes();
+              }
+            }
+          }
+          if (bytes == null && size == 0) {
+            bytes = await xFile.readAsBytes();
+            size = bytes.length;
+          }
+
+          setState(() {
+            _selectedFile = PlatformFile(
+              name: xFile.name.isNotEmpty ? xFile.name : 'media_upload.mp4',
+              size: size,
+              bytes: bytes,
+              path: xFile.path.isNotEmpty ? xFile.path : null,
+            );
+            _errorMessage = null;
+          });
+          return;
+        } else {
+          // User closed the picker dialog
+          return;
+        }
+      } catch (pickerErr) {
+        debugPrint('[UploadVideoSheet] ImagePicker pickMedia fell back or unavailable: $pickerErr');
+      }
+
+      // 2. Fallback to FilePicker (for desktop Windows/macOS/Linux or file explorer)
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['mp4', 'mov', 'mkv', 'webm', 'jpg', 'jpeg', 'png', 'webp', 'gif'],
         allowMultiple: false,
-        withData: true,
+        withData: false,
       );
 
       if (result != null && result.files.isNotEmpty) {
+        final picked = result.files.first;
+        Uint8List? bytes = picked.bytes;
+        if (bytes == null && picked.path != null) {
+          final file = File(picked.path!);
+          if (file.existsSync() && file.lengthSync() <= 25 * 1024 * 1024) {
+            bytes = await file.readAsBytes();
+          }
+        }
         setState(() {
-          _selectedFile = result.files.first;
+          _selectedFile = PlatformFile(
+            name: picked.name,
+            size: picked.size,
+            bytes: bytes,
+            path: picked.path,
+          );
           _errorMessage = null;
         });
       }
     } catch (e) {
       if (mounted) {
+        String msg = 'Could not select file: $e';
+        if (e.toString().contains('MissingPluginException')) {
+          msg = 'File picker plugin requires an app restart. Please rebuild/restart the app or pick from Gallery.';
+        }
         setState(() {
-          _errorMessage = 'Could not select file: $e';
+          _errorMessage = msg;
         });
       }
     }
@@ -158,16 +217,53 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
   Future<void> _pickThumbnail() async {
     try {
+      // 1. Try ImagePicker first
+      try {
+        final picker = ImagePicker();
+        final xFile = await picker.pickImage(source: ImageSource.gallery);
+        if (xFile != null) {
+          final bytes = await xFile.readAsBytes();
+          setState(() {
+            _selectedThumbnail = PlatformFile(
+              name: xFile.name.isNotEmpty ? xFile.name : 'thumbnail.jpg',
+              size: bytes.length,
+              bytes: bytes,
+              path: xFile.path.isNotEmpty ? xFile.path : null,
+            );
+            _errorMessage = null;
+          });
+          return;
+        } else {
+          return;
+        }
+      } catch (pickerErr) {
+        debugPrint('[UploadVideoSheet] ImagePicker pickThumbnail fell back: $pickerErr');
+      }
+
+      // 2. Fallback to FilePicker
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
         allowMultiple: false,
-        withData: true,
+        withData: false,
       );
 
       if (result != null && result.files.isNotEmpty) {
+        final picked = result.files.first;
+        Uint8List? bytes = picked.bytes;
+        if (bytes == null && picked.path != null) {
+          final file = File(picked.path!);
+          if (file.existsSync() && file.lengthSync() <= 10 * 1024 * 1024) {
+            bytes = await file.readAsBytes();
+          }
+        }
         setState(() {
-          _selectedThumbnail = result.files.first;
+          _selectedThumbnail = PlatformFile(
+            name: picked.name,
+            size: picked.size,
+            bytes: bytes,
+            path: picked.path,
+          );
         });
       }
     } catch (e) {
@@ -222,12 +318,21 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
         await _quickLogin();
       }
 
+      final hasTokenNow = await _tokenStorage.hasValidToken();
+      if (!hasTokenNow) {
+        setState(() {
+          _isUploading = false;
+          _errorMessage = 'Authentication required. Please sign in to upload.';
+        });
+        return;
+      }
+
       final isImage = _isSelectedFileImage;
 
       List<int>? videoBytes = _selectedFile!.bytes;
       if ((videoBytes == null || videoBytes.isEmpty) && _selectedFile!.path != null) {
         final localFile = File(_selectedFile!.path!);
-        if (localFile.existsSync()) {
+        if (localFile.existsSync() && localFile.lengthSync() <= 25 * 1024 * 1024) {
           videoBytes = await localFile.readAsBytes();
         }
       }
@@ -235,7 +340,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
       List<int>? thumbnailBytes = isImage ? null : _selectedThumbnail?.bytes;
       if (!isImage && (thumbnailBytes == null || thumbnailBytes.isEmpty) && _selectedThumbnail?.path != null) {
         final localThumb = File(_selectedThumbnail!.path!);
-        if (localThumb.existsSync()) {
+        if (localThumb.existsSync() && localThumb.lengthSync() <= 10 * 1024 * 1024) {
           thumbnailBytes = await localThumb.readAsBytes();
         }
       }
