@@ -309,14 +309,14 @@ void main() {
 
     // Verify initial users in Followers tab
     expect(find.text('Lim Bunheng'), findsOneWidget);
-    expect(find.text('Chhuon Rithysak'), findsOneWidget);
+    expect(find.text('Sok Rithysak'), findsOneWidget);
 
     // Search for "bunheng"
     await tester.enterText(find.byType(TextField), 'bunheng');
     await tester.pumpAndSettle();
 
     expect(find.text('Lim Bunheng'), findsOneWidget);
-    expect(find.text('Chhuon Rithysak'), findsNothing);
+    expect(find.text('Sok Rithysak'), findsNothing);
 
     // Clear search
     await tester.enterText(find.byType(TextField), '');
@@ -429,7 +429,12 @@ void main() {
 
     // Verify creator from DB is rendered (@bunheng)
     expect(find.text('@bunheng'), findsOneWidget);
-    expect(find.text('Night walk through the neon streets #citylife #neon #cyberpunk'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is RichText && widget.text.toPlainText().contains('60fps video engine'),
+      ),
+      findsOneWidget,
+    );
     // Because bunheng is already followed, + icon is NOT shown on avatar
     expect(find.byIcon(Icons.add), findsNothing);
   });

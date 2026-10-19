@@ -45,11 +45,34 @@ Vilo is architected as a full-stack, production-grade short-form video and e-com
   - Color interpolation from TikTok crimson (`#FE2C55`) to emerald green (`#10B981`).
   - Celebratory hold followed by an `easeInBack` scale-down and fade-out into the creator avatar.
 
+### D. Team Accounts & Video Asset Distribution
+- **Active Team Roster (7 Accounts)**:
+  1. **Thoeung Sereymongkol** (`@mongkol`) — *Lead*: Auth, Security & Profile Management
+  2. **Lim Bunheng** (`@bunheng`) — Video Engine, Feed Streaming & Interactions
+  3. **Sok Rithysak** (`@rithysak`, renamed from *Chhuon Rithysak*) — E-Commerce, Shop & Orders
+  4. **Set Kimliza** (`@setkimliza`, renamed from *Kim Liza*) — Chat, Stories & Notifications
+  5. **Tren Mono** (`@trenmono`, renamed from *Mono T*) — Search, Sounds, OpenAPI & DevOps
+  6. **Try Phien** (`@tryphien`, *new creator*) — Creative Media, Camera Studio & Audio Sync
+  7. **Nen Seanghai** (`@nenseanghai`, *new creator*) — Mobile UI/UX & Responsive Layouts
+- **Zero-Duplication Asset Allocation**:
+  - 14 distinct videos selected from `assets/videos/vid1.mp4` – `assets/videos/vid20.mp4`.
+  - Exactly 2 distinct videos per creator account:
+    - `@mongkol`: `assets/videos/vid1.mp4`, `assets/videos/vid2.mp4`
+    - `@rithysak`: `assets/videos/vid3.mp4`, `assets/videos/vid4.mp4`
+    - `@setkimliza`: `assets/videos/vid5.mp4`, `assets/videos/vid6.mp4`
+    - `@trenmono`: `assets/videos/vid7.mp4`, `assets/videos/vid8.mp4`
+    - `@bunheng`: `assets/videos/vid9.mp4`, `assets/videos/vid10.mp4`
+    - `@tryphien`: `assets/videos/vid11.mp4`, `assets/videos/vid12.mp4`
+    - `@nenseanghai`: `assets/videos/vid13.mp4`, `assets/videos/vid14.mp4`
+  - All accounts start with baseline authentic counts (`0` likes, `0` comments, `0` saves, `0` views).
+  - Mutual team follow graph established across all 7 members in `followers_following`.
+
 ---
 
 ## 3. Reference Links
 
 - [Release Notes](RELEASE_NOTES.md) — Detailed changelog of recent updates and bug fixes.
+- [Team Task Division](../../TEAM_TASK_DIVISION.md) — Full team architecture and domain ownership.
 - [Active Tasks & Roadmap](../../.ai/ACTIVE_TASKS.md) — Current task board and milestones.
 - [Architectural Decision Records](../../.ai/DECISIONS.md) — Formal records of key system decisions.
 - [Learned Quirks & Gotchas](../../.ai/MEMORY.md) — Repository of edge cases, fixes, and troubleshooting steps.

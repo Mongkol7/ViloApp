@@ -49,6 +49,29 @@
    - Cleared `StaticSearchData.trendingVideos` mockup data and removed hardcoded `"2.4M"`, `"940K"` fallback lists from `SearchService.java`.
    - Reset client fallback feed counters in `FeedRemoteDataSource._getFallbackFeed` and `ProfileMockData` to authentic baseline `0`.
 
+9. **Team Account Renames & Roster Expansion**:
+   - Renamed existing team member accounts:
+     - `Chhuon Rithysak` $\rightarrow$ **`Sok Rithysak`** (`@rithysak`, `rithysak@vilo.app`)
+     - `Mono T` $\rightarrow$ **`Tren Mono`** (`@trenmono`, `trenmono@vilo.app`)
+     - `Kim Liza` $\rightarrow$ **`Set Kimliza`** (`@setkimliza`, `setkimliza@vilo.app`)
+   - Added new core creator accounts:
+     - **`Try Phien`** (`@tryphien`, `tryphien@vilo.app`) — Creative Media, Camera Studio & Audio Sync
+     - **`Nen Seanghai`** (`@nenseanghai`, `nenseanghai@vilo.app`) — Mobile UI/UX & Responsive Layouts
+   - Added automated startup database migrations in `DataInitializer.java` to cleanly migrate legacy usernames and emails while preserving relational integrity.
+   - Established mutual follow graph across all 7 creator accounts in PostgreSQL `followers_following`.
+
+10. **Zero-Duplication Asset Video Seeding**:
+    - Purged all legacy uploaded videos and photos from disk storage (`./uploads/videos`, `./uploads/photos`) and database tables (`videos`, `video_tags`, `video_likes`, `video_saves`, `comments`).
+    - Allocated 14 fresh distinct videos from `assets/videos/vid1.mp4` – `assets/videos/vid14.mp4` across all 7 creator accounts (exactly 2 unique videos per account):
+      - `Thoeung Sereymongkol` (`@mongkol`): `vid1.mp4`, `vid2.mp4`
+      - `Sok Rithysak` (`@rithysak`): `vid3.mp4`, `vid4.mp4`
+      - `Set Kimliza` (`@setkimliza`): `vid5.mp4`, `vid6.mp4`
+      - `Tren Mono` (`@trenmono`): `vid7.mp4`, `vid8.mp4`
+      - `Lim Bunheng` (`@bunheng`): `vid9.mp4`, `vid10.mp4`
+      - `Try Phien` (`@tryphien`): `vid11.mp4`, `vid12.mp4`
+      - `Nen Seanghai` (`@nenseanghai`): `vid13.mp4`, `vid14.mp4`
+    - Seeded corresponding database tags in `video_tags` and populated `StaticSearchData.trendingVideos` and `FeedRemoteDataSource._getFallbackFeed` with zero duplicate videos and baseline zero counters.
+
 ---
 
 ## [v1.1.0] — Full-Stack Media Upload & Profile Sync
