@@ -41,6 +41,103 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
   bool _isLoadingFollowing = false;
   String _searchQuery = '';
 
+  static final List<UserModel> _mockFollowers = [
+    UserModel(
+      id: 2,
+      username: 'bunheng',
+      email: 'bunheng@vilo.app',
+      displayName: 'Lim Bunheng',
+      bio: 'Video Engine & Feed Specialist | Vilo Team',
+      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80',
+      isVerified: true,
+      isFollowing: true,
+      followsYou: true,
+      followersCount: 1,
+      followingCount: 1,
+    ),
+    UserModel(
+      id: 3,
+      username: 'rithysak',
+      email: 'rithysak@vilo.app',
+      displayName: 'Chhuon Rithysak',
+      bio: 'Mobile UI/UX Developer & Orders Lead',
+      avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80',
+      isVerified: true,
+      isFollowing: false,
+      followsYou: true,
+      followersCount: 0,
+      followingCount: 1,
+    ),
+    UserModel(
+      id: 4,
+      username: 'kimliza',
+      email: 'kimliza@vilo.app',
+      displayName: 'Kim Liza',
+      bio: 'Social Stories & Real-Time Chat Specialist',
+      avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80',
+      isVerified: true,
+      isFollowing: false,
+      followsYou: true,
+      followersCount: 0,
+      followingCount: 1,
+    ),
+    UserModel(
+      id: 7,
+      username: 'sophia_art',
+      email: 'sophia@vilo.app',
+      displayName: 'Sophia Vance',
+      bio: 'Digital Artist & Visual Storyteller',
+      avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80',
+      isVerified: true,
+      isFollowing: true,
+      followsYou: true,
+      followersCount: 1,
+      followingCount: 1,
+    ),
+  ];
+
+  static final List<UserModel> _mockFollowing = [
+    UserModel(
+      id: 2,
+      username: 'bunheng',
+      email: 'bunheng@vilo.app',
+      displayName: 'Lim Bunheng',
+      bio: 'Video Engine & Feed Specialist | Vilo Team',
+      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80',
+      isVerified: true,
+      isFollowing: true,
+      followsYou: true,
+      followersCount: 1,
+      followingCount: 1,
+    ),
+    UserModel(
+      id: 7,
+      username: 'sophia_art',
+      email: 'sophia@vilo.app',
+      displayName: 'Sophia Vance',
+      bio: 'Digital Artist & Visual Storyteller',
+      avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80',
+      isVerified: true,
+      isFollowing: true,
+      followsYou: true,
+      followersCount: 1,
+      followingCount: 1,
+    ),
+    UserModel(
+      id: 10,
+      username: 'davi_beats',
+      email: 'davi@vilo.app',
+      displayName: 'David Miller',
+      bio: 'Lo-fi producer & sound designer',
+      avatarUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500&auto=format&fit=crop&q=80',
+      isVerified: true,
+      isFollowing: true,
+      followsYou: false,
+      followersCount: 1,
+      followingCount: 0,
+    ),
+  ];
+
   int get _displayFollowersCount {
     if (_followers.isNotEmpty) return _followers.length;
     if (widget.initialFollowersCount != null) return widget.initialFollowersCount!;
@@ -108,6 +205,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
     }).catchError((_) {
       if (mounted) {
         setState(() {
+          if (_followers.isEmpty) _followers = List.from(_mockFollowers);
           _isLoadingFollowers = false;
         });
       }
@@ -126,6 +224,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
     }).catchError((_) {
       if (mounted) {
         setState(() {
+          if (_following.isEmpty) _following = List.from(_mockFollowing);
           _isLoadingFollowing = false;
         });
       }

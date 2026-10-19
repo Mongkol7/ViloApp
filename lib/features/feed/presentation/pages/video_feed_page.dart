@@ -834,11 +834,16 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
     final words = text.split(RegExp(r'(\s+)'));
     final spans = <TextSpan>[];
 
-    for (final word in words) {
+    for (int i = 0; i < words.length; i++) {
+      final word = words[i];
+      if (word.isEmpty) continue;
+      final isLast = i == words.length - 1;
+      final trailing = isLast ? '' : ' ';
+
       if (word.startsWith('#')) {
         spans.add(
           TextSpan(
-            text: '$word ',
+            text: '$word$trailing',
             style: const TextStyle(
               color: Color(0xFF20D5EC), // Vibrant cyan for hashtags
               fontWeight: FontWeight.w600,
@@ -849,7 +854,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
       } else if (word.startsWith('@')) {
         spans.add(
           TextSpan(
-            text: '$word ',
+            text: '$word$trailing',
             style: const TextStyle(
               color: Color(0xFF60A5FA), // Light blue for user mentions
               fontWeight: FontWeight.w600,
@@ -857,10 +862,10 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
             ),
           ),
         );
-      } else if (word.trim().isNotEmpty) {
+      } else {
         spans.add(
           TextSpan(
-            text: '$word ',
+            text: '$word$trailing',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 14,
@@ -871,8 +876,8 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
       }
     }
 
-    return RichText(
-      text: TextSpan(children: spans),
+    return Text.rich(
+      TextSpan(children: spans),
       maxLines: 4,
       overflow: TextOverflow.ellipsis,
     );
@@ -1253,15 +1258,36 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const SoundDetailPage(),
+                      builder: (context) => SoundDetailPage(
+                        soundId: video.soundId?.toString() ?? video.id.toString(),
+                        title: video.musicTitle,
+                        artist: (video.musicArtist != null && video.musicArtist!.isNotEmpty)
+                            ? video.musicArtist!
+                            : (video.displayName.isNotEmpty ? video.displayName : video.username),
+                        albumArtUrl: video.thumbnailUrl,
+                        audioUrl: video.audioUrl,
+                      ),
                     ),
                   );
                 },
-                child: CircleAvatar(
-                  radius: 18,
-                  backgroundColor: Colors.grey[800],
-                  backgroundImage: const NetworkImage('https://images.unsplash.com/photo-1518770660439-4636190af475?w=100'),
-                  onBackgroundImageError: (_, _) {},
+child: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white24, width: 2),
+                  ),
+                  child: CircleAvatar(
+                    radius: 17,
+                    backgroundColor: Colors.black,
+                    backgroundImage: NetworkImage(
+                      (video.thumbnailUrl != null && video.thumbnailUrl!.isNotEmpty)
+                          ? video.thumbnailUrl!
+                          : 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100',
+                    ),
+                    onBackgroundImageError: (_, __) {},
+                  ),
                 ),
               ),
 
@@ -1310,22 +1336,40 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
               const SizedBox(height: 8),
               _buildCaptionWithHashtags(video),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Icon(Icons.music_note, color: Colors.white, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      widget.video.musicTitle,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => SoundDetailPage(
+                        soundId: video.soundId?.toString() ?? video.id.toString(),
+                        title: video.musicTitle,
+                        artist: (video.musicArtist != null && video.musicArtist!.isNotEmpty)
+                            ? video.musicArtist!
+                            : (video.displayName.isNotEmpty ? video.displayName : video.username),
+                        albumArtUrl: video.thumbnailUrl,
+                        audioUrl: video.audioUrl,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ],
+                  );
+                },
+                child: Row(
+                  children: [
+                    const Icon(Icons.music_note, color: Colors.white, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        widget.video.musicTitle,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

@@ -92,6 +92,64 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
     }
   }
 
+Future<void> _deleteComment(CommentModel comment) async {
+    if (widget.videoId == null) return;
+    try {
+      final success = await _dataSource.deleteComment(widget.videoId!, comment.id);
+      if (success && mounted) {
+        setState(() {
+          _comments.removeWhere((c) => c.id == comment.id);
+          _commentCount = (_commentCount - 1).clamp(0, 999999);
+        });
+        widget.onCommentCountChanged?.call(_commentCount);
+      }
+    } catch (e) {
+      debugPrint('[CommentBottomSheet] Delete comment error: $e');
+    }
+  }
+
+  void _loadFallbackMock() {
+    if (!mounted) return;
+    setState(() {
+      _comments = [
+        CommentModel(
+          id: 1,
+          videoId: widget.videoId ?? 1,
+          userId: 101,
+          username: 'Ractz',
+          displayName: 'Ractz',
+          avatarUrl: 'https://i.pravatar.cc/150?img=14',
+          content: 'លេងអន់ចឹងលុប game ចោលទៅ ah bot',
+          createdAt: DateTime.now().subtract(const Duration(minutes: 9)),
+        ),
+        CommentModel(
+          id: 2,
+          videoId: widget.videoId ?? 1,
+          userId: 102,
+          username: 'Hengg',
+          displayName: 'Hengg',
+          avatarUrl: 'https://i.pravatar.cc/150?img=11',
+          content: 'Your Product so good😘',
+          createdAt: DateTime.now().subtract(const Duration(minutes: 32)),
+        ),
+        CommentModel(
+          id: 3,
+          videoId: widget.videoId ?? 1,
+          userId: 103,
+          username: 'សំពៀន',
+          displayName: 'សំពៀន',
+          avatarUrl: 'https://i.pravatar.cc/150?img=15',
+          content: 'មុខភ័យសង្ឃឹមជួយ',
+          createdAt: DateTime.now().subtract(const Duration(minutes: 45)),
+        ),
+      ];
+      if (_commentCount == 0) {
+        _commentCount = _comments.length;
+      }
+      _isLoading = false;
+    });
+  }
+
   Future<void> _submitComment() async {
     final text = _commentController.text.trim();
     if (text.isEmpty || _isPosting) return;
@@ -243,24 +301,20 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                     child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                   )
                 : _comments.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.chat_bubble_outline_rounded, color: Colors.white24, size: 48),
-                            SizedBox(height: 12),
-                            Text(
+                            const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white24, size: 48),
+                            const SizedBox(height: 12),
+                            const Text(
                               'No comments yet',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
                             ),
-                            SizedBox(height: 4),
+                            const SizedBox(height: 4),
                             Text(
-                              'Be the first to comment!',
-                              style: TextStyle(color: Colors.white38, fontSize: 13),
+                              'Be the first to share your thoughts!',
+                              style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
                             ),
                           ],
                         ),
@@ -272,6 +326,7 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                           return _CommentCard(
                             comment: _comments[index],
                             onReply: () => _onReplyTap(_comments[index]),
+onDelete: () => _deleteComment(_comments[index]),
                           );
                         },
                       ),
@@ -425,10 +480,12 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
 class _CommentCard extends StatefulWidget {
   final CommentModel comment;
   final VoidCallback onReply;
+  final VoidCallback? onDelete;
 
   const _CommentCard({
     required this.comment,
     required this.onReply,
+    this.onDelete,
   });
 
   @override
@@ -558,6 +615,20 @@ class _CommentCardState extends State<_CommentCard> {
                             ),
                           ),
                         ),
+                        if (widget.onDelete != null) ...[
+                          const SizedBox(width: 16),
+                          GestureDetector(
+                            onTap: widget.onDelete,
+                            child: Text(
+                              'Delete',
+                              style: TextStyle(
+                                color: Colors.redAccent.withValues(alpha: 0.8),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ],

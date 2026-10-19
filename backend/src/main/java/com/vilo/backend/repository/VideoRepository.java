@@ -21,6 +21,23 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
 
     List<Video> findByCreatorOrderByCreatedAtDesc(User creator);
 
+    List<Video> findByCreatorIdOrderByCreatedAtDesc(Long creatorId);
+
+    List<Video> findByCreatorUsernameOrderByCreatedAtDesc(String username);
+
+    List<Video> findBySoundIdOrderByCreatedAtDesc(Long soundId);
+
+    long countBySoundId(Long soundId);
+
     @Query("SELECT v FROM Video v WHERE v.creator.id IN :creatorIds ORDER BY v.createdAt DESC")
     Page<Video> findByCreatorIdIn(@Param("creatorIds") List<Long> creatorIds, Pageable pageable);
+
+    @Query("SELECT v FROM Video v JOIN VideoLike vl ON v.id = vl.videoId WHERE vl.userId = :userId ORDER BY vl.createdAt DESC")
+    List<Video> findLikedVideosByUserId(@Param("userId") Long userId);
+
+    @Query("SELECT v FROM Video v JOIN VideoSave vs ON v.id = vs.videoId WHERE vs.userId = :userId ORDER BY vs.createdAt DESC")
+    List<Video> findSavedVideosByUserId(@Param("userId") Long userId);
+
+    @Query("SELECT v FROM Video v WHERE LOWER(v.musicTitle) LIKE LOWER(CONCAT('%', :musicTitle, '%')) ORDER BY v.createdAt DESC")
+    List<Video> findByMusicTitleContainingIgnoreCase(@Param("musicTitle") String musicTitle);
 }

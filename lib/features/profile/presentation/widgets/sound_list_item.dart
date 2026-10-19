@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import '../../../feed/presentation/pages/sound_detail_page.dart';
 import '../mock/profile_mock_data.dart';
 import '../style/pulse_tokens.dart';
 
@@ -21,7 +21,24 @@ class _SoundListItemState extends State<SoundListItem> {
   @override
   Widget build(BuildContext context) {
     final sound = widget.sound;
-    return Container(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => SoundDetailPage(
+              soundId: sound.id?.toString(),
+              title: sound.title,
+              artist: sound.artist,
+              albumArtUrl: sound.coverUrl,
+              audioUrl: sound.audioUrl,
+              videosCount: sound.usedByLabel,
+            ),
+          ),
+        );
+      },
+      child: Container(
       margin: const EdgeInsets.only(bottom: PulseSpacing.stackGap),
       padding: const EdgeInsets.all(PulseSpacing.containerPadding),
       decoration: BoxDecoration(
@@ -116,6 +133,7 @@ class _SoundListItemState extends State<SoundListItem> {
             ),
         ],
       ),
+    ),
     );
   }
 }

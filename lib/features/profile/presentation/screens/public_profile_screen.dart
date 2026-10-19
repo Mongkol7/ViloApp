@@ -43,6 +43,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
   late bool _isFollowing;
   int _followersCount = 0;
   UserModel? _loadedUser;
+  List<SoundTrack> _userSounds = [];
   List<VideoFeedModel> _userVideos = [];
   List<VideoFeedModel> _savedVideos = [];
   List<VideoFeedModel> _likedVideos = [];
@@ -82,7 +83,15 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
       _userVideos = List.from(cachedVideos);
     }
 
+    ProfileSyncService.instance.interactionEvents.addListener(_onInteractionEvent);
+
     if (widget.userId != null || (widget.username != null && widget.username!.isNotEmpty)) {
+      _fetchPublicProfile();
+    }
+  }
+
+  void _onInteractionEvent() {
+    if (mounted) {
       _fetchPublicProfile();
     }
   }
@@ -98,7 +107,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
     }
 
     try {
-      // Execute profile fetch and video postings fetch concurrently in parallel
+      // Execute profile fetch, sounds, postings, saved, and liked concurrently
       await Future.wait([
         ProfileRemoteDataSource.instance.getUser(identifier).then((user) {
           if (mounted) {
@@ -109,18 +118,26 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
             });
           }
         }).catchError((_) {}),
-        FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then((videos) {
+FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then((videos) {
           if (mounted) {
             setState(() {
               _userVideos = videos.isNotEmpty ? videos : (widget.initialVideos ?? []);
             });
           }
         }).catchError((_) {}),
-        FeedRemoteDataSource.instance.getLikedVideos(userId: identifier).then((liked) {
+        FeedRemoteDataSource.instance.getUserSounds(identifier).then((sounds) {
           if (mounted) {
-            setState(() {
-              _likedVideos = List.from(liked);
-            });
+            setState(() => _userSounds = sounds);
+          }
+        }).catchError((_) {}),
+        FeedRemoteDataSource.instance.getUserSavedVideos(identifier).then((saved) {
+          if (mounted) {
+            setState(() => _savedVideos = saved);
+          }
+        }).catchError((_) {}),
+        FeedRemoteDataSource.instance.getUserLikedVideos(identifier).then((liked) {
+          if (mounted) {
+            setState(() => _likedVideos = liked);
           }
         }).catchError((_) {}),
       ]);
@@ -144,6 +161,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
     ProfileSyncService.instance.videoInteractionEvents.removeListener(_onVideoInteractionEvent);
     ProfileSyncService.instance.videoDeletedEvents.removeListener(_onVideoDeleted);
     _tabController.dispose();
+    ProfileSyncService.instance.interactionEvents.removeListener(_onInteractionEvent);
     super.dispose();
   }
 
@@ -517,9 +535,9 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
         body: ViloTabBarView(
           controller: _tabController,
           children: [
-            CustomScrollView(
+CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(0),
+              slivers: buildProfileTabSlivers(0, userSounds: _userSounds, isLoading: _isLoading),
             ), // Music (Index 0)
             CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),

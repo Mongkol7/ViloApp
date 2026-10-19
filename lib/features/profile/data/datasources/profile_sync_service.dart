@@ -3,6 +3,7 @@ import '../../../auth/data/datasources/token_storage.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../../feed/data/models/video_model.dart';
+import '../../presentation/mock/profile_mock_data.dart';
 
 class FollowChangeEvent {
   final int targetUserId;
@@ -45,7 +46,7 @@ class ProfileSyncService {
   /// Emits whenever follow state changes anywhere in the app
   final ValueNotifier<FollowChangeEvent?> followEvents = ValueNotifier<FollowChangeEvent?>(null);
 
-  /// Emits whenever a new video or photo is uploaded by the current user
+/// Emits whenever a new video or photo is uploaded by the current user
   final ValueNotifier<VideoModel?> videoUploadedEvents = ValueNotifier<VideoModel?>(null);
 
   /// Emits whenever like, save, or comment count changes on any video in the app
@@ -73,6 +74,14 @@ class ProfileSyncService {
       saveCount: event.saveCount,
       commentCount: event.commentCount,
     );
+    notifyInteraction();
+  }
+
+  /// Emits whenever video interaction (like, save, upload) happens so Profile tabs automatically refresh
+  final ValueNotifier<int> interactionEvents = ValueNotifier<int>(0);
+
+  void notifyInteraction() {
+    interactionEvents.value = interactionEvents.value + 1;
   }
 
   /// Cached user profile for immediate optimistic updates across screens
@@ -116,7 +125,7 @@ class ProfileSyncService {
     if (cached != null && cached.trim().isNotEmpty) {
       return cached.trim();
     }
-    return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150';
+    return ProfileMockData.avatarUrl;
   }
 
   /// Returns the current active user's display name
@@ -129,7 +138,7 @@ class ProfileSyncService {
     if (username != null && username.trim().isNotEmpty) {
       return username.trim();
     }
-    return 'User';
+    return ProfileMockData.name;
   }
 
   /// Returns the current active user's clean username (without @)
@@ -142,19 +151,27 @@ class ProfileSyncService {
   }
 
   /// Returns true if the given username or ID belongs to the current user.
-  /// Matches ONLY the active authenticated session — no hardcoded fallbacks.
+  /// Matches the active authenticated session, or defaults to the app profile mock (@mongkol / id: 1) if no session is stored.
   bool isCurrentUser({String? username, String? id}) {
     final profile = cachedMyProfile;
-    if (profile == null) return false;
+    if (profile != null) {
+      if (id != null && id.isNotEmpty && id != '0') {
+        if (profile.id.toString() == id) return true;
+      }
 
-    if (id != null && id.isNotEmpty && id != '0') {
-      if (profile.id.toString() == id) return true;
+      if (username != null && username.isNotEmpty) {
+        final clean = username.trim().toLowerCase().replaceAll('@', '');
+        final myUser = currentUsername;
+        if (myUser.isNotEmpty && clean == myUser) return true;
+      }
+
+      return false;
     }
 
+    if (id != null && (id == '1' || id == '0')) return true;
     if (username != null && username.isNotEmpty) {
       final clean = username.trim().toLowerCase().replaceAll('@', '');
-      final myUser = currentUsername;
-      if (myUser.isNotEmpty && clean == myUser) return true;
+      if (clean == 'mongkol') return true;
     }
 
     return false;

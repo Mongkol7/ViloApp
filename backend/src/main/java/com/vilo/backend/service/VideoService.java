@@ -31,19 +31,22 @@ public class VideoService {
     private final VideoSaveRepository videoSaveRepository;
     private final CommentRepository commentRepository;
     private final FileStorageService fileStorageService;
+    private final com.vilo.backend.repository.SoundRepository soundRepository;
 
     public VideoService(VideoRepository videoRepository,
                         UserRepository userRepository,
                         VideoLikeRepository videoLikeRepository,
                         VideoSaveRepository videoSaveRepository,
                         CommentRepository commentRepository,
-                        FileStorageService fileStorageService) {
+                        FileStorageService fileStorageService,
+                        com.vilo.backend.repository.SoundRepository soundRepository) {
         this.videoRepository = videoRepository;
         this.userRepository = userRepository;
         this.videoLikeRepository = videoLikeRepository;
         this.videoSaveRepository = videoSaveRepository;
         this.commentRepository = commentRepository;
         this.fileStorageService = fileStorageService;
+        this.soundRepository = soundRepository;
     }
 
     @Transactional(readOnly = true)
@@ -279,7 +282,10 @@ public class VideoService {
     @Transactional
     public Video createVideo(Long creatorId, String title, String description, String caption,
                             MultipartFile videoFile, List<MultipartFile> mediaFiles, String directPath,
-                            MultipartFile thumbnailFile, String thumbnailPath, List<String> tags) {
+                            MultipartFile thumbnailFile, String thumbnailPath,
+                            Long soundId, MultipartFile audioFile,
+                            String musicTitle, String musicArtist, String audioUrl,
+                            List<String> tags) {
         User creator = userRepository.findById(creatorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Creator not found with id: " + creatorId));
 
@@ -337,6 +343,56 @@ public class VideoService {
 
         Video video = new Video(creator, title, description, effectiveCaption, videoUrl, thumbnailUrl);
 
+        // Handle Optional Music / Sound
+        if (audioFile != null && !audioFile.isEmpty()) {
+            String storedAudioUrl = fileStorageService.storeFile(audioFile, "music");
+            String soundTitle = (musicTitle != null && !musicTitle.isBlank() && !"None".equalsIgnoreCase(musicTitle))
+                    ? musicTitle.trim()
+                    : (audioFile.getOriginalFilename() != null ? audioFile.getOriginalFilename().replaceFirst("[.][^.]+$", "") : "Original Sound");
+            com.vilo.backend.entity.Sound newSound = new com.vilo.backend.entity.Sound(
+                    soundTitle,
+                    creator.getId(),
+                    creator.getUsername(),
+                    storedAudioUrl,
+                    thumbnailUrl != null ? thumbnailUrl : videoUrl,
+                    1L
+            );
+            newSound = soundRepository.save(newSound);
+            video.setSoundId(newSound.getId());
+            video.setMusicTitle(newSound.getTitle());
+            video.setMusicArtist("@" + creator.getUsername());
+            video.setAudioUrl(storedAudioUrl);
+        } else if (soundId != null) {
+            Optional<com.vilo.backend.entity.Sound> soundOpt = soundRepository.findById(soundId);
+            if (soundOpt.isPresent()) {
+                com.vilo.backend.entity.Sound s = soundOpt.get();
+                video.setSoundId(s.getId());
+                video.setMusicTitle(s.getTitle());
+                video.setMusicArtist(s.getArtist());
+                video.setAudioUrl(s.getAudioUrl());
+                s.setUsageCount(s.getUsageCount() != null ? s.getUsageCount() + 1 : 1L);
+                soundRepository.save(s);
+            }
+        } else if (musicTitle != null && !musicTitle.isBlank() && !"None".equalsIgnoreCase(musicTitle.trim())) {
+            String trimmedTitle = musicTitle.trim();
+            video.setMusicTitle(trimmedTitle);
+            video.setMusicArtist(musicArtist != null && !musicArtist.isBlank() ? musicArtist.trim() : "@" + creator.getUsername());
+            if (audioUrl != null && !audioUrl.isBlank()) {
+                video.setAudioUrl(audioUrl.trim());
+            }
+            soundRepository.findByTitleIgnoreCase(trimmedTitle).ifPresent(s -> {
+                video.setSoundId(s.getId());
+                s.setUsageCount(s.getUsageCount() != null ? s.getUsageCount() + 1 : 1L);
+                soundRepository.save(s);
+            });
+        } else {
+            // Optional: User explicitly posted without music or selected None
+            video.setSoundId(null);
+            video.setMusicTitle(null);
+            video.setMusicArtist(null);
+            video.setAudioUrl(null);
+        }
+
         if (tags != null) {
             for (String tag : tags) {
                 if (tag != null && !tag.isBlank()) {
@@ -351,8 +407,34 @@ public class VideoService {
     @Transactional
     public Video createVideo(Long creatorId, String title, String description, String caption,
                             MultipartFile videoFile, String directPath,
+MultipartFile thumbnailFile, String thumbnailPath,
+                            Long soundId, MultipartFile audioFile,
+                            String musicTitle, String musicArtist, String audioUrl,
+                            List<String> tags) {
+        return createVideo(creatorId, title, description, caption, videoFile, null, directPath, thumbnailFile, thumbnailPath, soundId, audioFile, musicTitle, musicArtist, audioUrl, tags);
+    }
+
+    @Transactional
+    public Video createVideo(Long creatorId, String title, String description, String caption,
+                            MultipartFile videoFile, String directPath,
+                            MultipartFile thumbnailFile, String thumbnailPath,
+                            String musicTitle, String musicArtist, String audioUrl,
+                            List<String> tags) {
+        return createVideo(creatorId, title, description, caption, videoFile, null, directPath, thumbnailFile, thumbnailPath, null, null, musicTitle, musicArtist, audioUrl, tags);
+    }
+
+    @Transactional
+    public Video createVideo(Long creatorId, String title, String description, String caption,
+                            MultipartFile videoFile, List<MultipartFile> mediaFiles, String directPath,
                             MultipartFile thumbnailFile, String thumbnailPath, List<String> tags) {
-        return createVideo(creatorId, title, description, caption, videoFile, null, directPath, thumbnailFile, thumbnailPath, tags);
+        return createVideo(creatorId, title, description, caption, videoFile, mediaFiles, directPath, thumbnailFile, thumbnailPath, null, null, null, null, null, tags);
+    }
+
+    @Transactional
+    public Video createVideo(Long creatorId, String title, String description, String caption,
+                            MultipartFile videoFile, String directPath,
+                            MultipartFile thumbnailFile, String thumbnailPath, List<String> tags) {
+        return createVideo(creatorId, title, description, caption, videoFile, null, directPath, thumbnailFile, thumbnailPath, null, null, null, null, null, tags);
     }
 
     @Transactional
@@ -443,5 +525,53 @@ public class VideoService {
     public boolean isSavedBy(Long videoId, Long userId) {
         if (userId == null) return false;
         return videoSaveRepository.existsByUserIdAndVideoId(userId, videoId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<VideoResponse> getLikedVideos(Long userId) {
+        final User currentUser = userRepository.findById(userId).orElse(null);
+        List<Video> videos = videoRepository.findLikedVideosByUserId(userId);
+        return videos.stream()
+                .map(v -> {
+                    VideoResponse resp = VideoResponse.fromEntity(v, currentUser);
+                    resp.setLiked(true);
+                    resp.setSaved(isSavedBy(v.getId(), userId));
+                    return resp;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<VideoResponse> getSavedVideos(Long userId) {
+        final User currentUser = userRepository.findById(userId).orElse(null);
+        List<Video> videos = videoRepository.findSavedVideosByUserId(userId);
+        return videos.stream()
+                .map(v -> {
+                    VideoResponse resp = VideoResponse.fromEntity(v, currentUser);
+                    resp.setLiked(isLikedBy(v.getId(), userId));
+                    resp.setSaved(true);
+                    return resp;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<VideoResponse> getVideosBySound(String musicName, User currentUser) {
+        final User reloadedUser = (currentUser != null && currentUser.getId() != null)
+                ? userRepository.findById(currentUser.getId()).orElse(currentUser)
+                : null;
+        Long currentUserId = reloadedUser != null ? reloadedUser.getId() : null;
+
+        List<Video> videos = videoRepository.findByMusicTitleContainingIgnoreCase(musicName != null ? musicName.trim() : "");
+        return videos.stream()
+                .map(v -> {
+                    VideoResponse resp = VideoResponse.fromEntity(v, reloadedUser);
+                    if (currentUserId != null) {
+                        resp.setLiked(isLikedBy(v.getId(), currentUserId));
+                        resp.setSaved(isSavedBy(v.getId(), currentUserId));
+                    }
+                    return resp;
+                })
+                .collect(Collectors.toList());
     }
 }

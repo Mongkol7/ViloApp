@@ -32,9 +32,11 @@ class _ProfileScreenState extends State<ProfileScreen>
   late TabController _tabController;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   UserModel? _user;
+  List<SoundTrack> _mySounds = [];
   List<VideoFeedModel> _myVideos = [];
   List<VideoFeedModel> _savedVideos = [];
   List<VideoFeedModel> _likedVideos = [];
+bool _isLoadingTabs = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -57,9 +59,10 @@ class _ProfileScreenState extends State<ProfileScreen>
           followingCount: 0,
         );
     ProfileSyncService.instance.followEvents.addListener(_onFollowEvent);
-    ProfileSyncService.instance.videoUploadedEvents.addListener(_onVideoUploaded);
+ProfileSyncService.instance.videoUploadedEvents.addListener(_onVideoUploaded);
     ProfileSyncService.instance.videoInteractionEvents.addListener(_onVideoInteractionEvent);
     ProfileSyncService.instance.videoDeletedEvents.addListener(_onVideoDeleted);
+    ProfileSyncService.instance.interactionEvents.addListener(_onInteractionEvent);
 
     // Instant zero-latency seed from cache if available
     final cached = (_user != null && _user!.id > 0)
@@ -69,8 +72,18 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (cached != null && cached.isNotEmpty) {
       _myVideos = List.from(cached);
     }
-
     _loadProfile();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    ProfileSyncService.instance.followEvents.removeListener(_onFollowEvent);
+    ProfileSyncService.instance.videoUploadedEvents.removeListener(_onVideoUploaded);
+    ProfileSyncService.instance.videoInteractionEvents.removeListener(_onVideoInteractionEvent);
+    ProfileSyncService.instance.videoDeletedEvents.removeListener(_onVideoDeleted);
+    ProfileSyncService.instance.interactionEvents.removeListener(_onInteractionEvent);
+    super.dispose();
   }
 
   void _onFollowEvent() {
@@ -85,7 +98,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  void _onVideoUploaded() {
+void _onVideoUploaded() {
     final video = ProfileSyncService.instance.videoUploadedEvents.value;
     if (video != null && mounted) {
       setState(() {
@@ -115,7 +128,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (event == null || !mounted) return;
 
     setState(() {
-      // 1. Update matching video in _myVideos
       final myIdx = _myVideos.indexWhere((v) => v.id == event.videoId);
       if (myIdx != -1) {
         _myVideos[myIdx] = _myVideos[myIdx].copyWith(
@@ -127,7 +139,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         );
       }
 
-      // 2. Update in _savedVideos immediately
       if (event.isSaved != null) {
         if (event.isSaved == true) {
           final existingIdx = _savedVideos.indexWhere((v) => v.id == event.videoId);
@@ -145,18 +156,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         } else {
           _savedVideos.removeWhere((v) => v.id == event.videoId);
         }
-      } else {
-        final existingIdx = _savedVideos.indexWhere((v) => v.id == event.videoId);
-        if (existingIdx != -1) {
-          _savedVideos[existingIdx] = _savedVideos[existingIdx].copyWith(
-            isLiked: event.isLiked,
-            likeCount: event.likeCount,
-            commentCount: event.commentCount,
-          );
-        }
       }
 
-      // 3. Update in _likedVideos immediately
       if (event.isLiked != null) {
         if (event.isLiked == true) {
           final existingIdx = _likedVideos.indexWhere((v) => v.id == event.videoId);
@@ -174,21 +175,18 @@ class _ProfileScreenState extends State<ProfileScreen>
         } else {
           _likedVideos.removeWhere((v) => v.id == event.videoId);
         }
-      } else {
-        final existingIdx = _likedVideos.indexWhere((v) => v.id == event.videoId);
-        if (existingIdx != -1) {
-          _likedVideos[existingIdx] = _likedVideos[existingIdx].copyWith(
-            isSaved: event.isSaved,
-            saveCount: event.saveCount,
-            commentCount: event.commentCount,
-          );
-        }
       }
     });
   }
 
+  void _onInteractionEvent() {
+    if (mounted) {
+      _loadProfile();
+    }
+  }
+
   Future<void> _loadProfile({bool forceRefresh = false}) async {
-    // 1. Attempt to fetch current user profile details
+    setState(() => _isLoadingTabs = true);
     try {
       final user = await ProfileRemoteDataSource.instance.getMyProfile();
       if (mounted) {
@@ -199,48 +197,75 @@ class _ProfileScreenState extends State<ProfileScreen>
       debugPrint('[ProfileScreen] getMyProfile notice: $e');
     }
 
-    // 2. Always fetch posted videos from backend for the user
-    try {
-      final identifier = (_user?.id != null && _user!.id > 0)
-          ? _user!.id
-          : (_user?.username.isNotEmpty == true ? _user!.username : 'me');
-      final videos = await FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true);
-      if (mounted) {
-        setState(() => _myVideos = List.from(videos));
+// 1. Load user's uploaded sounds
+      try {
+        final sounds = await FeedRemoteDataSource.instance.getMySounds();
+        if (mounted) {
+          setState(() => _mySounds = sounds);
+        }
+      } catch (_) {
+        try {
+          if (_user != null && _user!.id > 0) {
+            final fallbackSounds = await FeedRemoteDataSource.instance.getUserSounds(_user!.id);
+            if (mounted) {
+              setState(() => _mySounds = fallbackSounds);
+            }
+          }
+        } catch (_) {}
       }
-    } catch (e) {
-      debugPrint('[ProfileScreen] getUserVideos notice: $e');
-    }
 
-    // Fetch real saved videos
-    try {
-      final saved = await FeedRemoteDataSource.instance.getSavedVideos();
-      if (mounted) {
-        setState(() => _savedVideos = List.from(saved));
+      // 2. Load user's posted videos
+      try {
+        final videos = await FeedRemoteDataSource.instance.getMyVideos();
+        if (mounted) {
+          setState(() => _myVideos = videos);
+        }
+      } catch (_) {
+        try {
+          final identifier = (_user?.id != null && _user!.id > 0)
+              ? _user!.id
+              : (_user?.username.isNotEmpty == true ? _user!.username : 'me');
+          final videos = await FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: forceRefresh);
+          if (mounted) {
+            setState(() => _myVideos = List.from(videos));
+          }
+        } catch (e) {
+          debugPrint('[ProfileScreen] getUserVideos notice: $e');
+        }
       }
-    } catch (e) {
-      debugPrint('[ProfileScreen] getSavedVideos notice: $e');
-    }
 
-    // Fetch real liked videos
-    try {
-      final liked = await FeedRemoteDataSource.instance.getLikedVideos();
-      if (mounted) {
-        setState(() => _likedVideos = List.from(liked));
+      // 3. Load user's saved/bookmarked videos
+      try {
+        final saved = await FeedRemoteDataSource.instance.getSavedVideos();
+        if (mounted) {
+          setState(() => _savedVideos = List.from(saved));
+        }
+      } catch (e) {
+        debugPrint('[ProfileScreen] getSavedVideos notice: $e');
       }
-    } catch (e) {
-      debugPrint('[ProfileScreen] getLikedVideos notice: $e');
-    }
 
-    // 3. Pre-warm following & followers cache in background for zero-latency instant listing
-    final targetId = _user?.id ?? 1;
-    if (targetId > 0) {
-      ProfileRemoteDataSource.instance.getFollowing(targetId).then((fl) {
-        ProfileSyncService.instance.cachedFollowing = List.from(fl);
-      }).catchError((_) {});
-      ProfileRemoteDataSource.instance.getFollowers(targetId).then((f) {
-        ProfileSyncService.instance.cachedFollowers = List.from(f);
-      }).catchError((_) {});
+      // 4. Load user's liked videos
+      try {
+        final liked = await FeedRemoteDataSource.instance.getLikedVideos();
+        if (mounted) {
+          setState(() => _likedVideos = List.from(liked));
+        }
+      } catch (e) {
+        debugPrint('[ProfileScreen] getLikedVideos notice: $e');
+      }
+
+      // Pre-warm following & followers cache in background
+      final targetId = _user?.id ?? 1;
+      if (targetId > 0) {
+        ProfileRemoteDataSource.instance.getFollowing(targetId).then((fl) {
+          ProfileSyncService.instance.cachedFollowing = List.from(fl);
+        }).catchError((_) {});
+        ProfileRemoteDataSource.instance.getFollowers(targetId).then((f) {
+          ProfileSyncService.instance.cachedFollowers = List.from(f);
+        }).catchError((_) {});
+      }
+    if (mounted) {
+      setState(() => _isLoadingTabs = false);
     }
   }
 
@@ -297,7 +322,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     return '$count';
   }
 
-  void _confirmDeleteProfileVideo(VideoFeedModel video) async {
+void _confirmDeleteProfileVideo(VideoFeedModel video) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -365,15 +390,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  @override
-  void dispose() {
-    ProfileSyncService.instance.followEvents.removeListener(_onFollowEvent);
-    ProfileSyncService.instance.videoUploadedEvents.removeListener(_onVideoUploaded);
-    ProfileSyncService.instance.videoInteractionEvents.removeListener(_onVideoInteractionEvent);
-    ProfileSyncService.instance.videoDeletedEvents.removeListener(_onVideoDeleted);
-    _tabController.dispose();
-    super.dispose();
-  }
+
 
   Future<void> _handleCreateOrViewStory() async {
     final currentStory = ThoughtStoryManager.instance.currentStory;
@@ -672,15 +689,16 @@ class _ProfileScreenState extends State<ProfileScreen>
         body: ViloTabBarView(
           controller: _tabController,
           children: [
-            CustomScrollView(
+CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(0),
+              slivers: buildProfileTabSlivers(0, userSounds: _mySounds, isLoading: _isLoadingTabs),
             ), // Music (Index 0)
             CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: buildProfileTabSlivers(
                 1,
                 userVideos: _myVideos,
+                isLoading: _isLoadingTabs,
                 onVideoTap: (video, index) {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -705,6 +723,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               slivers: buildProfileTabSlivers(
                 3,
                 savedVideos: _savedVideos,
+                isLoading: _isLoadingTabs,
                 onSavedVideoTap: (video, index) {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -724,6 +743,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               slivers: buildProfileTabSlivers(
                 4,
                 likedVideos: _likedVideos,
+                isLoading: _isLoadingTabs,
                 onLikedVideoTap: (video, index) {
                   Navigator.of(context).push(
                     MaterialPageRoute(

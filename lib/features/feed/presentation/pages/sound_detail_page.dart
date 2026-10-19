@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../profile/presentation/mock/profile_mock_data.dart';
+import '../../data/datasources/feed_remote_data_source.dart';
+import '../../data/models/video_model.dart';
 
 class SoundDetailPage extends StatefulWidget {
   final String? soundId;
@@ -33,9 +36,18 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
   List<Map<String, dynamic>> _videos = [];
   bool _isLoadingVideos = true;
 
+  String? _title;
+  String? _artist;
+  String? _videosCount;
+  String? _albumArtUrl;
+
   @override
   void initState() {
     super.initState();
+    _title = widget.title;
+    _artist = widget.artist;
+    _videosCount = widget.videosCount;
+    _albumArtUrl = widget.albumArtUrl;
     _rotationController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 8),
@@ -75,38 +87,65 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
   }
 
   Future<void> _loadVideos() async {
-    final id = widget.soundId ?? '1';
-    try {
-      final response = await ApiClient.instance.get('/sounds/$id/videos', requireAuth: false);
-      if (mounted && response != null && response['success'] == true && response['data'] is List) {
-        setState(() {
-          _videos = List<Map<String, dynamic>>.from(response['data']);
-          _isLoadingVideos = false;
-        });
-        return;
+    // 1. If soundId is provided, query sound details from backend
+    if (widget.soundId != null && widget.soundId!.isNotEmpty && widget.soundId != '0') {
+      try {
+        final details = await FeedRemoteDataSource.instance.getSoundDetails(widget.soundId!);
+        final sound = details['sound'] as SoundTrack?;
+        final videosList = details['videos'] as List<VideoModel>?;
+
+        if (mounted && (sound != null || (videosList != null && videosList.isNotEmpty))) {
+          setState(() {
+            if (sound != null) {
+              _title = sound.title;
+              _artist = sound.artist ?? sound.creatorUsername;
+              _videosCount = sound.usedByLabel;
+              if (sound.coverUrl.isNotEmpty) {
+                _albumArtUrl = sound.coverUrl;
+              }
+            }
+            if (videosList != null) {
+              _videos = videosList.map((v) => {
+                'id': v.id.toString(),
+                'thumbnailUrl': (v.thumbnailUrl != null && v.thumbnailUrl!.isNotEmpty)
+                    ? v.thumbnailUrl!
+                    : 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500',
+                'views': v.likes,
+              }).toList();
+            }
+            _isLoadingVideos = false;
+          });
+          return;
+        }
+      } catch (e) {
+        debugPrint('[SoundDetailPage] Error loading sound details: $e');
       }
-    } catch (_) {}
+    }
+
+    // 2. If sound title is provided, query videos by sound title
+    final queryTitle = _title ?? widget.title;
+    if (queryTitle != null && queryTitle.isNotEmpty && queryTitle != 'None') {
+      try {
+        final soundVideos = await FeedRemoteDataSource.instance.getVideosBySound(queryTitle);
+        if (mounted && soundVideos.isNotEmpty) {
+          setState(() {
+            _videos = soundVideos.map((v) => {
+              'id': v.id.toString(),
+              'thumbnailUrl': (v.thumbnailUrl != null && v.thumbnailUrl!.isNotEmpty)
+                  ? v.thumbnailUrl!
+                  : 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500',
+              'views': v.likes,
+            }).toList();
+            _videosCount = '${soundVideos.length} videos';
+            _isLoadingVideos = false;
+          });
+          return;
+        }
+      } catch (_) {}
+    }
 
     if (mounted) {
-      final fallbackThumbs = [
-        'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=500&auto=format&fit=crop&q=80',
-      ];
-      final fallbackViews = ['1.8M', '820K', '542K', '310K', '295K', '180K', '125K', '98K', '64K'];
-
       setState(() {
-        _videos = List.generate(fallbackThumbs.length, (i) => {
-          'id': 'v_$i',
-          'thumbnailUrl': fallbackThumbs[i],
-          'views': fallbackViews[i],
-        });
         _isLoadingVideos = false;
       });
     }
@@ -114,13 +153,15 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.title ?? 'Midnight City Pulse';
-    final artist = widget.artist ?? 'Neon Dreams';
-    final count = widget.videosCount ?? '1.8M videos';
+    final title = _title ?? widget.title ?? 'Original Sound';
+    final artist = _artist ?? widget.artist ?? 'Creator';
+    final count = _videosCount ?? widget.videosCount ?? '0 videos';
     final duration = '${widget.durationSeconds ?? 45}s';
-    final albumArt = widget.albumArtUrl?.isNotEmpty == true
-        ? widget.albumArtUrl!
-        : 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=80';
+    final albumArt = (_albumArtUrl != null && _albumArtUrl!.isNotEmpty)
+        ? _albumArtUrl!
+        : (widget.albumArtUrl?.isNotEmpty == true
+            ? widget.albumArtUrl!
+            : 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=80');
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -368,6 +409,25 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
                     child: Padding(
                       padding: EdgeInsets.all(40),
                       child: CircularProgressIndicator(color: Colors.white),
+                    ),
+                  ),
+                )
+              else if (_videos.isEmpty)
+                const SliverToBoxAdapter(
+                  child: Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 60, horizontal: 24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.music_off_outlined, color: Colors.white24, size: 48),
+                          SizedBox(height: 12),
+                          Text(
+                            'No videos using this sound yet',
+                            style: TextStyle(color: Colors.white54, fontSize: 14, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 )

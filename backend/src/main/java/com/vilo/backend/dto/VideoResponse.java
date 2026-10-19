@@ -24,8 +24,11 @@ public class VideoResponse {
     private String caption;
     private String videoUrl;
     private String thumbnailUrl;
-    private List<String> mediaUrls = new ArrayList<>();
+private List<String> mediaUrls = new ArrayList<>();
+    private Long soundId;
     private String musicTitle;
+    private String musicArtist;
+    private String audioUrl;
     private Long viewCount = 0L;
     private Long likeCount = 0L;
     private Long commentCount = 0L;
@@ -106,6 +109,7 @@ public class VideoResponse {
         resp.setCaption(video.getCaption());
         resp.setVideoUrl(video.getVideoUrl());
         resp.setThumbnailUrl(video.getThumbnailUrl());
+resp.setSoundId(video.getSoundId());
         if (video.getVideoUrl() != null && !video.getVideoUrl().isBlank()) {
             if (video.getVideoUrl().contains(",")) {
                 String[] parts = video.getVideoUrl().split(",");
@@ -121,6 +125,8 @@ public class VideoResponse {
             }
         }
         resp.setMusicTitle(video.getMusicTitle() != null ? video.getMusicTitle() : "Original Sound - " + resp.getDisplayName());
+        resp.setMusicArtist(video.getMusicArtist() != null ? video.getMusicArtist() : resp.getDisplayName());
+        resp.setAudioUrl(video.getAudioUrl());
         
         long likes = video.getLikeCount() != null ? video.getLikeCount() : 0L;
         long comments = video.getCommentCount() != null ? video.getCommentCount() : 0L;
@@ -198,11 +204,24 @@ public class VideoResponse {
     public String getThumbnailUrl() { return thumbnailUrl; }
     public void setThumbnailUrl(String thumbnailUrl) { this.thumbnailUrl = thumbnailUrl; }
 
-    public List<String> getMediaUrls() { return mediaUrls; }
+public List<String> getMediaUrls() { return mediaUrls; }
     public void setMediaUrls(List<String> mediaUrls) { this.mediaUrls = mediaUrls != null ? mediaUrls : new ArrayList<>(); }
+
+    public Long getSoundId() { return soundId; }
+    public void setSoundId(Long soundId) { this.soundId = soundId; }
 
     public String getMusicTitle() { return musicTitle; }
     public void setMusicTitle(String musicTitle) { this.musicTitle = musicTitle; }
+
+    @JsonProperty("musicName")
+    public String getMusicName() { return musicTitle; }
+    public void setMusicName(String musicName) { this.musicTitle = musicName; }
+
+    public String getMusicArtist() { return musicArtist; }
+    public void setMusicArtist(String musicArtist) { this.musicArtist = musicArtist; }
+
+    public String getAudioUrl() { return audioUrl; }
+    public void setAudioUrl(String audioUrl) { this.audioUrl = audioUrl; }
 
     public Long getViewCount() { return viewCount; }
     public void setViewCount(Long viewCount) { this.viewCount = viewCount; }
@@ -281,6 +300,8 @@ public class VideoResponse {
         private String videoUrl;
         private String thumbnailUrl;
         private String musicTitle;
+        private String musicArtist;
+        private String audioUrl;
         private Long viewCount = 0L;
         private Long likeCount = 0L;
         private Long commentCount = 0L;
@@ -304,6 +325,9 @@ public class VideoResponse {
         public Builder videoUrl(String videoUrl) { this.videoUrl = videoUrl; return this; }
         public Builder thumbnailUrl(String thumbnailUrl) { this.thumbnailUrl = thumbnailUrl; return this; }
         public Builder musicTitle(String musicTitle) { this.musicTitle = musicTitle; return this; }
+        public Builder musicName(String musicName) { this.musicTitle = musicName; return this; }
+        public Builder musicArtist(String musicArtist) { this.musicArtist = musicArtist; return this; }
+        public Builder audioUrl(String audioUrl) { this.audioUrl = audioUrl; return this; }
         public Builder viewCount(Long viewCount) { this.viewCount = viewCount; return this; }
         public Builder likeCount(Long likeCount) { this.likeCount = likeCount; return this; }
         public Builder commentCount(Long commentCount) { this.commentCount = commentCount; return this; }
@@ -325,6 +349,8 @@ public class VideoResponse {
             resp.setIsFollowing(isFollowing);
             resp.setIsMe(isMe);
             resp.setMusicTitle(musicTitle != null ? musicTitle : "Original Sound - " + (displayName != null ? displayName : username));
+            resp.setMusicArtist(musicArtist != null ? musicArtist : (displayName != null ? displayName : username));
+            resp.setAudioUrl(audioUrl);
             return resp;
         }
     }

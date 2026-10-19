@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../../../../core/network/api_client.dart';
 import '../../../auth/data/datasources/token_storage.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
+import '../../../profile/presentation/mock/profile_mock_data.dart';
 import '../models/comment_model.dart';
 import '../models/video_model.dart';
 
@@ -240,8 +241,12 @@ class FeedRemoteDataSource {
 
   Future<List<VideoModel>> _fetchUserVideosFromNetwork(String clean) async {
     try {
-      final endpoint = '/videos/user/$clean';
-      final response = await _client.get(endpoint, requireAuth: false);
+      dynamic response;
+      try {
+        response = await _client.get('/users/$clean/videos', requireAuth: false);
+      } catch (_) {
+        response = await _client.get('/videos/user/$clean', requireAuth: false);
+      }
 
       List<dynamic>? list;
       if (response is List) {
@@ -308,6 +313,7 @@ class FeedRemoteDataSource {
     final data = (response is Map && response['data'] is Map)
         ? response['data'] as Map<String, dynamic>
         : (response is Map ? response : <String, dynamic>{});
+    ProfileSyncService.instance.notifyInteraction();
     return {
       'isLiked': data['isLiked'] ?? !currentlyLiked,
       'likeCount': (data['likeCount'] as num?)?.toInt() ?? 0,
@@ -329,6 +335,7 @@ class FeedRemoteDataSource {
     final data = (response is Map && response['data'] is Map)
         ? response['data'] as Map<String, dynamic>
         : (response is Map ? response : <String, dynamic>{});
+    ProfileSyncService.instance.notifyInteraction();
     return {
       'isSaved': data['isSaved'] ?? !currentlySaved,
       'saveCount': (data['saveCount'] as num?)?.toInt() ?? 0,
@@ -459,9 +466,234 @@ class FeedRemoteDataSource {
     return CommentModel.fromJson(data);
   }
 
+  /// Delete a comment (author or video creator only)
+  Future<bool> deleteComment(int videoId, int commentId) async {
+    try {
+      await _client.delete(
+        '/videos/$videoId/comments/$commentId',
+        requireAuth: true,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Delete comment error: $e');
+      return false;
+    }
+  }
+
+  /// Fetch current user's posted videos
+  Future<List<VideoModel>> getMyVideos() async {
+    try {
+      final response = await _client.get('/videos/my-videos', requireAuth: true);
+      List<dynamic>? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map && response['data'] is List) {
+        list = response['data'] as List;
+      } else if (response is Map && response['videos'] is List) {
+        list = response['videos'] as List;
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => VideoModel.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get my videos error: $e');
+    }
+    return [];
+  }
+
+
+  /// Fetch specific user's liked videos
+  Future<List<VideoModel>> getUserLikedVideos(dynamic identifier) async {
+    final clean = identifier.toString().replaceAll('@', '').trim();
+    try {
+      final response = await _client.get('/users/$clean/liked', requireAuth: true);
+      List<dynamic>? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map && response['data'] is List) {
+        list = response['data'] as List;
+      } else if (response is Map && response['videos'] is List) {
+        list = response['videos'] as List;
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => VideoModel.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get user liked videos error: $e');
+    }
+    return [];
+  }
+
+
+  /// Fetch specific user's bookmarked/saved videos
+  Future<List<VideoModel>> getUserSavedVideos(dynamic identifier) async {
+    final clean = identifier.toString().replaceAll('@', '').trim();
+    try {
+      final response = await _client.get('/users/$clean/saved', requireAuth: true);
+      List<dynamic>? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map && response['data'] is List) {
+        list = response['data'] as List;
+      } else if (response is Map && response['videos'] is List) {
+        list = response['videos'] as List;
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => VideoModel.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get user saved videos error: $e');
+    }
+    return [];
+  }
+
+  /// Fetch all available sounds for upload picker
+  Future<List<SoundTrack>> getSounds() async {
+    try {
+      final response = await _client.get('/sounds', requireAuth: false);
+      List<dynamic>? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map && response['data'] is List) {
+        list = response['data'] as List;
+      } else if (response is Map && response['sounds'] is List) {
+        list = response['sounds'] as List;
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => SoundTrack.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get sounds error: $e');
+    }
+    return [];
+  }
+
+  /// Fetch current user's uploaded sounds
+  Future<List<SoundTrack>> getMySounds() async {
+    try {
+      final response = await _client.get('/videos/my-sounds', requireAuth: true);
+      List<dynamic>? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map && response['data'] is List) {
+        list = response['data'] as List;
+      } else if (response is Map && response['sounds'] is List) {
+        list = response['sounds'] as List;
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => SoundTrack.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get my sounds error: $e');
+    }
+    return [];
+  }
+
+  /// Fetch specific user's uploaded sounds
+  Future<List<SoundTrack>> getUserSounds(dynamic identifier) async {
+    final clean = identifier.toString().replaceAll('@', '').trim();
+    try {
+      final response = await _client.get('/users/$clean/sounds', requireAuth: false);
+      List<dynamic>? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map && response['data'] is List) {
+        list = response['data'] as List;
+      } else if (response is Map && response['sounds'] is List) {
+        list = response['sounds'] as List;
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => SoundTrack.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get user sounds error: $e');
+    }
+    return [];
+  }
+
+  /// Fetch sound details and videos using this sound
+  Future<Map<String, dynamic>> getSoundDetails(dynamic soundId) async {
+    try {
+      final response = await _client.get('/sounds/$soundId/videos', requireAuth: false);
+      if (response is Map) {
+        final rawSound = response['sound'] ?? response['soundTrack'] ?? response;
+        final rawVideos = response['videos'] ?? (response['data'] is Map ? response['data']['videos'] : null);
+        final sound = rawSound is Map<String, dynamic> ? SoundTrack.fromJson(rawSound) : null;
+        final videos = (rawVideos is List)
+            ? rawVideos.whereType<Map<String, dynamic>>().map((v) => VideoModel.fromJson(v)).toList()
+            : <VideoModel>[];
+        return {
+          'sound': sound,
+          'videos': videos,
+        };
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get sound details error: $e');
+    }
+    return {'sound': null, 'videos': <VideoModel>[]};
+  }
+
+  /// Fetch videos featuring a specific sound track
+  Future<List<VideoModel>> getVideosBySound(String musicName) async {
+    try {
+      final endpoint = '/videos/by-sound?musicName=${Uri.encodeComponent(musicName)}';
+      final response = await _client.get(endpoint, requireAuth: false);
+      List<dynamic>? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map && response['data'] is List) {
+        list = response['data'] as List;
+      } else if (response is Map && response['videos'] is List) {
+        list = response['videos'] as List;
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => VideoModel.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get videos by sound error: $e');
+    }
+    return [];
+  }
+
   /// Multipart video upload
   Future<VideoModel> uploadVideo({
     required String caption,
+    int? soundId,
+    String? musicTitle,
+    String? musicName,
+    String? musicArtist,
+    String? audioUrl,
+    String? audioPath,
+    List<int>? audioBytes,
+    String audioFilename = 'music.mp3',
     String? videoPath,
     List<int>? videoBytes,
     String videoFilename = 'upload.mp4',
@@ -482,6 +714,66 @@ class FeedRemoteDataSource {
     }
 
     request.fields['caption'] = caption;
+
+    if (soundId != null && soundId > 0) {
+      request.fields['soundId'] = soundId.toString();
+    }
+
+    final soundTitle = (musicTitle != null && musicTitle.trim().isNotEmpty)
+        ? musicTitle.trim()
+        : (musicName != null && musicName.trim().isNotEmpty ? musicName.trim() : null);
+    if (soundTitle != null) {
+      request.fields['musicTitle'] = soundTitle;
+      request.fields['musicName'] = soundTitle;
+    }
+    if (musicArtist != null && musicArtist.trim().isNotEmpty) {
+      request.fields['musicArtist'] = musicArtist.trim();
+    }
+    if (audioUrl != null && audioUrl.trim().isNotEmpty) {
+      request.fields['audioUrl'] = audioUrl.trim();
+    }
+
+    // Audio file payload (optional uploaded music)
+    if (audioPath != null && audioPath.trim().isNotEmpty) {
+      final audioOnDisk = File(audioPath.trim());
+      if (audioOnDisk.existsSync()) {
+        try {
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              'audioFile',
+              audioOnDisk.path,
+              filename: audioFilename.isNotEmpty ? audioFilename : audioOnDisk.path.split(Platform.pathSeparator).last,
+            ),
+          );
+        } catch (e) {
+          debugPrint('[FeedRemoteDataSource] Audio fromPath failed: $e');
+          final bytes = await audioOnDisk.readAsBytes();
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'audioFile',
+              bytes,
+              filename: audioFilename,
+            ),
+          );
+        }
+      } else if (audioBytes != null && audioBytes.isNotEmpty) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'audioFile',
+            audioBytes,
+            filename: audioFilename,
+          ),
+        );
+      }
+    } else if (audioBytes != null && audioBytes.isNotEmpty) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'audioFile',
+          audioBytes,
+          filename: audioFilename,
+        ),
+      );
+    }
 
     // Handle tags (normalize, strip leading #, join by comma)
     final tagsList = <String>[];
@@ -659,7 +951,7 @@ class FeedRemoteDataSource {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final json = jsonDecode(response.body);
       final data = json['data'] ?? json;
-      final newVideo = VideoModel.fromJson(data as Map<String, dynamic>);
+final newVideo = VideoModel.fromJson(data as Map<String, dynamic>);
 
       // Prepend to creator's caches for instant profile grid display
       if (newVideo.creatorId > 0) {
@@ -668,7 +960,7 @@ class FeedRemoteDataSource {
       if (newVideo.username.isNotEmpty) {
         prependUserVideo(newVideo.username, newVideo);
       }
-
+      ProfileSyncService.instance.notifyInteraction();
       return newVideo;
     } else {
       String errorMessage = 'Failed to upload video (${response.statusCode})';

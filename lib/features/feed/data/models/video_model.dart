@@ -12,7 +12,10 @@ class VideoModel {
   final String caption;
   final String videoUrl;
   final String? _thumbnailUrl;
+  final int? soundId;
   final String musicTitle;
+  final String? musicArtist;
+  final String? audioUrl;
   final int viewCount;
   final int likeCount;
   final int commentCount;
@@ -38,7 +41,10 @@ class VideoModel {
     required this.caption,
     required this.videoUrl,
     String? thumbnailUrl,
+    this.soundId,
     this.musicTitle = 'Original Sound',
+    this.musicArtist,
+    this.audioUrl,
     this.viewCount = 0,
     this.likeCount = 0,
     this.commentCount = 0,
@@ -180,7 +186,10 @@ class VideoModel {
       caption: json['caption']?.toString() ?? '',
       videoUrl: resolvedVideoUrl,
       thumbnailUrl: resolvedThumbUrl,
-      musicTitle: json['musicTitle']?.toString() ?? 'Original Sound',
+      soundId: (json['soundId'] as num?)?.toInt(),
+      musicTitle: json['musicName']?.toString() ?? json['musicTitle']?.toString() ?? 'Original Sound',
+      musicArtist: json['musicArtist']?.toString(),
+      audioUrl: json['audioUrl']?.toString(),
       viewCount: (json['viewCount'] as num?)?.toInt() ?? 0,
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
       commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
@@ -211,7 +220,11 @@ class VideoModel {
       'caption': caption,
       'videoUrl': videoUrl,
       'thumbnailUrl': thumbnailUrl,
+      'soundId': soundId,
       'musicTitle': musicTitle,
+      'musicName': musicTitle,
+      'musicArtist': musicArtist,
+      'audioUrl': audioUrl,
       'viewCount': viewCount,
       'likeCount': likeCount,
       'commentCount': commentCount,
@@ -239,7 +252,11 @@ class VideoModel {
     String? caption,
     String? videoUrl,
     String? thumbnailUrl,
+    int? soundId,
     String? musicTitle,
+    String? musicName,
+    String? musicArtist,
+    String? audioUrl,
     int? viewCount,
     int? likeCount,
     int? commentCount,
@@ -272,7 +289,10 @@ class VideoModel {
       caption: caption ?? this.caption,
       videoUrl: videoUrl ?? this.videoUrl,
       thumbnailUrl: thumbnailUrl ?? _thumbnailUrl,
-      musicTitle: musicTitle ?? this.musicTitle,
+      soundId: soundId ?? this.soundId,
+      musicTitle: musicTitle ?? musicName ?? this.musicTitle,
+      musicArtist: musicArtist ?? this.musicArtist,
+      audioUrl: audioUrl ?? this.audioUrl,
       viewCount: viewCount ?? this.viewCount,
       likeCount: nextLikeCount,
       commentCount: nextCommentCount,
@@ -289,6 +309,8 @@ class VideoModel {
       formattedSaves: formattedSaves ?? (saveCount != null ? null : (saves ?? _formattedSaves)),
     );
   }
+
+  String get musicName => musicTitle;
 
   String get likes => formattedLikes;
   String get comments => formattedComments;

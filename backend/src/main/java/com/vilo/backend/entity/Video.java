@@ -34,8 +34,17 @@ public class Video {
     @Column(name = "thumbnail_url", length = 1000)
     private String thumbnailUrl;
 
+    @Column(name = "sound_id")
+    private Long soundId;
+
     @Column(name = "music_title")
     private String musicTitle;
+
+    @Column(name = "music_artist")
+    private String musicArtist;
+
+    @Column(name = "audio_url", length = 1000)
+    private String audioUrl;
 
     @Column(name = "views_count")
     private Long viewCount = 0L;
@@ -81,8 +90,17 @@ public class Video {
         if (this.description == null && this.caption != null) {
             this.description = this.caption;
         }
-        if (this.musicTitle == null) {
-            this.musicTitle = "Original Sound";
+        if (this.musicTitle == null || this.musicTitle.isBlank()) {
+            String creatorHandle = (this.creator != null && this.creator.getUsername() != null)
+                    ? this.creator.getUsername().replace("@", "")
+                    : "creator";
+            this.musicTitle = "Original Sound - @" + creatorHandle;
+        }
+        if (this.musicArtist == null || this.musicArtist.isBlank()) {
+            String creatorHandle = (this.creator != null && this.creator.getUsername() != null)
+                    ? this.creator.getUsername()
+                    : "@creator";
+            this.musicArtist = creatorHandle.startsWith("@") ? creatorHandle : "@" + creatorHandle;
         }
     }
 
@@ -150,6 +168,15 @@ public class Video {
     public String getMusicTitle() { return musicTitle; }
     public void setMusicTitle(String musicTitle) { this.musicTitle = musicTitle; }
 
+    public String getMusicName() { return musicTitle; }
+    public void setMusicName(String musicName) { this.musicTitle = musicName; }
+
+    public String getMusicArtist() { return musicArtist; }
+    public void setMusicArtist(String musicArtist) { this.musicArtist = musicArtist; }
+
+    public String getAudioUrl() { return audioUrl; }
+    public void setAudioUrl(String audioUrl) { this.audioUrl = audioUrl; }
+
     public Long getViewCount() { return viewCount; }
     public void setViewCount(Long viewCount) { this.viewCount = viewCount; }
 
@@ -179,6 +206,9 @@ public class Video {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public Long getSoundId() { return soundId; }
+    public void setSoundId(Long soundId) { this.soundId = soundId; }
 
     public List<VideoTag> getTags() { return tags; }
     public void setTags(List<VideoTag> tags) { this.tags = tags; }

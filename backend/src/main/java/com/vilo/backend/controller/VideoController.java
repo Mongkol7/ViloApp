@@ -35,13 +35,16 @@ public class VideoController {
     private final VideoService videoService;
     private final CommentService commentService;
     private final UserRepository userRepository;
+    private final com.vilo.backend.service.SoundService soundService;
 
     public VideoController(VideoService videoService,
                            CommentService commentService,
-                           UserRepository userRepository) {
+                           UserRepository userRepository,
+                           com.vilo.backend.service.SoundService soundService) {
         this.videoService = videoService;
         this.commentService = commentService;
         this.userRepository = userRepository;
+        this.soundService = soundService;
     }
 
     /**
@@ -144,6 +147,52 @@ public class VideoController {
     }
 
     /**
+     * GET /api/v1/videos/my-videos
+     * Retrieves all videos posted by the currently authenticated user.
+     */
+    @GetMapping("/my-videos")
+    @Operation(summary = "Get my uploaded videos", description = "Retrieves all videos uploaded by the currently authenticated user")
+    public ResponseEntity<ApiResponse<List<VideoResponse>>> getMyVideos(
+            @AuthenticationPrincipal User currentUser
+    ) {
+        if (currentUser == null) {
+            throw new AccessDeniedException("Authentication required to view your videos");
+        }
+        List<VideoResponse> videos = videoService.getUserVideos(String.valueOf(currentUser.getId()), currentUser);
+        return ResponseEntity.ok(ApiResponse.ok("My videos fetched successfully", videos));
+    }
+
+    /**
+     * GET /api/v1/videos/my-sounds
+     * Retrieves all sound tracks created/uploaded by the currently authenticated user.
+     */
+    @GetMapping("/my-sounds")
+    @Operation(summary = "Get my uploaded sounds", description = "Retrieves all music/sound tracks uploaded by the currently authenticated user")
+    public ResponseEntity<ApiResponse<List<com.vilo.backend.dto.SoundResponse>>> getMySounds(
+            @AuthenticationPrincipal User currentUser
+    ) {
+        if (currentUser == null) {
+            throw new AccessDeniedException("Authentication required to view your sounds");
+        }
+        List<com.vilo.backend.dto.SoundResponse> sounds = soundService.getUserSounds(currentUser.getId(), currentUser.getUsername());
+        return ResponseEntity.ok(ApiResponse.ok("My sounds fetched successfully", sounds));
+    }
+
+    /**
+     * GET /api/v1/videos/by-sound
+     * Retrieves all videos using a specific track or sound title.
+     */
+    @GetMapping("/by-sound")
+    @Operation(summary = "Get videos by sound", description = "Retrieves all videos using a specific sound title")
+    public ResponseEntity<ApiResponse<List<VideoResponse>>> getVideosBySound(
+            @RequestParam String musicName,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        List<VideoResponse> videos = videoService.getVideosBySound(musicName, currentUser);
+        return ResponseEntity.ok(ApiResponse.ok("Videos by sound fetched successfully", videos));
+    }
+
+    /**
      * GET /api/v1/videos/{id}
      * Single video details with creator profile and interaction flags.
      */
@@ -179,6 +228,13 @@ public class VideoController {
             @RequestParam(value = "title", required = false) String title,
             @RequestParam(value = "description", required = false) String description,
             @RequestParam(value = "caption", required = false) String caption,
+            @RequestParam(value = "soundId", required = false) Long soundId,
+            @RequestParam(value = "audioFile", required = false) MultipartFile audioFile,
+            @RequestParam(value = "audio", required = false) MultipartFile audio,
+            @RequestParam(value = "musicTitle", required = false) String musicTitle,
+            @RequestParam(value = "musicName", required = false) String musicName,
+            @RequestParam(value = "musicArtist", required = false) String musicArtist,
+            @RequestParam(value = "audioUrl", required = false) String audioUrl,
             @RequestParam(value = "tags", required = false) List<String> tags,
             @AuthenticationPrincipal User currentUser
     ) {
@@ -188,6 +244,7 @@ public class VideoController {
 
         MultipartFile effectiveVideoFile = (video != null && !video.isEmpty()) ? video : videoFile;
         MultipartFile effectiveThumbnailFile = (thumbnail != null && !thumbnail.isEmpty()) ? thumbnail : thumbnailFile;
+        MultipartFile effectiveAudioFile = (audioFile != null && !audioFile.isEmpty()) ? audioFile : audio;
 
         List<MultipartFile> effectiveMediaFiles = (photos != null && !photos.isEmpty()) ? photos
                 : ((videoFiles != null && !videoFiles.isEmpty()) ? videoFiles : files);
@@ -208,6 +265,10 @@ public class VideoController {
                 ? caption.trim()
                 : ((title != null ? title : "") + (description != null && !description.isBlank() ? " " + description : "")).trim();
 
+        String effectiveMusicTitle = (musicTitle != null && !musicTitle.isBlank())
+                ? musicTitle.trim()
+                : (musicName != null && !musicName.isBlank() ? musicName.trim() : null);
+
         Video savedVideo = videoService.createVideo(
                 currentUser.getId(),
                 title,
@@ -218,6 +279,11 @@ public class VideoController {
                 directPath,
                 effectiveThumbnailFile,
                 thumbnailPath,
+                soundId,
+                effectiveAudioFile,
+                effectiveMusicTitle,
+                musicArtist,
+                audioUrl,
                 tags
         );
         VideoResponse response = mapToVideoResponse(savedVideo, currentUser.getId());
@@ -412,6 +478,31 @@ public class VideoController {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Comment posted successfully", response));
+    }
+
+    /**
+     * DELETE /api/v1/videos/{videoId}/comments/{commentId}
+     * Delete comment (author or video creator only).
+     */
+    @DeleteMapping("/{videoId}/comments/{commentId}")
+    @Operation(summary = "Delete comment", description = "Deletes a comment. Only the comment author or the video owner can delete it.")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> deleteComment(
+            @PathVariable Long videoId,
+            @PathVariable Long commentId,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        if (currentUser == null) {
+            throw new AccessDeniedException("Authentication required to delete comments");
+        }
+
+        commentService.deleteComment(videoId, commentId, currentUser.getId());
+        Video video = videoService.getVideoById(videoId);
+
+        Map<String, Object> data = Map.of(
+                "deletedCommentId", commentId,
+                "commentCount", video.getCommentCount() != null ? video.getCommentCount() : 0L
+        );
+        return ResponseEntity.ok(ApiResponse.ok("Comment deleted successfully", data));
     }
 
     /**

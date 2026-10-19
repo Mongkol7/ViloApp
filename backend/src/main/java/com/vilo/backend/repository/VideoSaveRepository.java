@@ -13,4 +13,5 @@ public interface VideoSaveRepository extends JpaRepository<VideoSave, Long> {
     void deleteByUserIdAndVideoId(Long userId, Long videoId);
     void deleteByVideoId(Long videoId);
     java.util.List<VideoSave> findByUserIdOrderByCreatedAtDesc(Long userId);
+    long countByVideoId(Long videoId);
 }

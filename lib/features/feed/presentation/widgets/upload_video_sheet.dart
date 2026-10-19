@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../auth/data/datasources/auth_remote_data_source.dart';
 import '../../../auth/data/datasources/token_storage.dart';
+import '../../../profile/presentation/mock/profile_mock_data.dart';
 import '../../data/datasources/feed_remote_data_source.dart';
 import '../../data/models/video_model.dart';
 import '../controllers/video_feed_manager.dart';
@@ -54,9 +55,14 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   PlatformFile? _selectedFile;
   List<PlatformFile> _selectedFiles = [];
   PlatformFile? _selectedThumbnail;
+  PlatformFile? _selectedAudioFile;
+  String _selectedSound = 'None';
+  int? _selectedSoundId;
+  List<SoundTrack> _availableSounds = [];
 
   final TextEditingController _captionController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
+  final TextEditingController _customSoundController = TextEditingController();
 
   bool _isUploading = false;
   bool _isLoggingIn = false;
@@ -80,6 +86,20 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
       _selectedThumbnail = widget.initialThumbnail;
     }
     _checkAuthStatus();
+    _loadAvailableSounds();
+  }
+
+  Future<void> _loadAvailableSounds() async {
+    try {
+      final sounds = await _feedDataSource.getSounds();
+      if (mounted && sounds.isNotEmpty) {
+        setState(() {
+          _availableSounds = sounds;
+        });
+      }
+    } catch (e) {
+      debugPrint('[UploadVideoSheet] Load sounds error: $e');
+    }
   }
 
   @override
@@ -107,7 +127,29 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   void dispose() {
     _captionController.dispose();
     _tagsController.dispose();
+    _customSoundController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickAudioFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'wav', 'aac', 'm4a', 'ogg'],
+        allowMultiple: false,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final picked = result.files.first;
+        setState(() {
+          _selectedAudioFile = picked;
+          _selectedSound = picked.name;
+          _selectedSoundId = null;
+          _customSoundController.text = picked.name;
+        });
+      }
+    } catch (e) {
+      debugPrint('[UploadVideoSheet] Pick audio error: $e');
+    }
   }
 
   Future<void> _checkAuthStatus() async {
@@ -547,8 +589,19 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
         }
       }
 
+      int? soundIdToSend = _selectedSoundId;
+      String? musicTitleToSend;
+      if (_selectedSound != 'None' && _selectedSound.trim().isNotEmpty) {
+        musicTitleToSend = _selectedSound.trim();
+      }
+
       final newVideo = await _feedDataSource.uploadVideo(
-        caption: finalCaption,
+caption: finalCaption,
+        soundId: soundIdToSend,
+        musicTitle: musicTitleToSend,
+        audioPath: _selectedAudioFile?.path,
+        audioBytes: _selectedAudioFile?.bytes,
+        audioFilename: _selectedAudioFile?.name ?? 'music.mp3',
         videoPath: currentFile.path,
         videoBytes: videoBytes,
         videoFilename: currentFile.name,
@@ -1294,6 +1347,222 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                     ),
                   ],
                 ],
+
+                const SizedBox(height: 18),
+
+                // Music / Sound Section (Optional)
+                const Text(
+                  'MUSIC / SOUND (OPTIONAL)',
+                  style: TextStyle(
+                    color: Color(0xFF8E8E93),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    // Option 1: None (Default)
+                    () {
+                      final isSelected = _selectedSound == 'None' || _selectedSound.isEmpty;
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () {
+                          setState(() {
+                            _selectedSound = 'None';
+                            _selectedSoundId = null;
+                            _customSoundController.clear();
+                            _selectedAudioFile = null;
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: isSelected ? Colors.white : const Color(0xFF1E1E24),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isSelected ? Colors.white : const Color(0xFF323238),
+                              width: 1.0,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.music_off_rounded,
+                                size: 14,
+                                color: isSelected ? Colors.black : Colors.white70,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'None',
+                                style: TextStyle(
+                                  color: isSelected ? Colors.black : Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }(),
+
+                    // Option 2: Dynamic Available Sounds from DB
+                    if (_availableSounds.isNotEmpty)
+                      ..._availableSounds.map((sound) {
+                        final isSelected = _selectedSoundId == sound.id ||
+                            (_selectedSound.toLowerCase() == sound.title.toLowerCase() && _selectedSound != 'None');
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () {
+                            setState(() {
+                              _selectedSound = sound.title;
+                              _selectedSoundId = sound.id;
+                              _customSoundController.clear();
+                              _selectedAudioFile = null;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: isSelected ? Colors.white : const Color(0xFF1E1E24),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isSelected ? Colors.white : const Color(0xFF323238),
+                                width: 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.music_note_rounded,
+                                  size: 14,
+                                  color: isSelected ? Colors.black : Colors.white70,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  sound.title,
+                                  style: TextStyle(
+                                    color: isSelected ? Colors.black : Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      })
+                    else
+                      ...[
+                        'Phnom Penh Sunset Lo-Fi',
+                        'Seven7 Team Anthem',
+                        'Obsidian Pulse Beat',
+                        'Lo-Fi Chill',
+                      ].map((sound) {
+                        final isSelected = _selectedSound == sound;
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () {
+                            setState(() {
+                              _selectedSound = sound;
+                              _selectedSoundId = null;
+                              _customSoundController.clear();
+                              _selectedAudioFile = null;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: isSelected ? Colors.white : const Color(0xFF1E1E24),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isSelected ? Colors.white : const Color(0xFF323238),
+                                width: 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.music_note_rounded,
+                                  size: 14,
+                                  color: isSelected ? Colors.black : Colors.white70,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  sound,
+                                  style: TextStyle(
+                                    color: isSelected ? Colors.black : Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        key: const Key('upload_custom_sound_field'),
+                        controller: _customSoundController,
+                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                        decoration: InputDecoration(
+                          hintText: 'Or enter custom sound title...',
+                          hintStyle: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13),
+                          filled: true,
+                          fillColor: const Color(0xFF1E1E24),
+                          prefixIcon: const Icon(Icons.audiotrack_rounded, color: Colors.white70, size: 18),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: Color(0xFF323238), width: 1.0),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: Colors.white, width: 1.5),
+                          ),
+                        ),
+                        onChanged: (val) {
+                          setState(() {
+                            if (val.trim().isNotEmpty) {
+                              _selectedSound = val.trim();
+                              _selectedSoundId = null;
+                            } else {
+                              _selectedSound = 'None';
+                              _selectedSoundId = null;
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Pick audio file from device',
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xFF1E1E24),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: const BorderSide(color: Color(0xFF323238), width: 1.0),
+                        ),
+                        padding: const EdgeInsets.all(12),
+                      ),
+                      icon: const Icon(Icons.file_upload_outlined, color: Colors.white, size: 20),
+                      onPressed: _pickAudioFile,
+                    ),
+                  ],
+                ),
 
                 const SizedBox(height: 18),
 

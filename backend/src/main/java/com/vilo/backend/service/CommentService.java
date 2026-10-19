@@ -43,4 +43,30 @@ public class CommentService {
 
         return savedComment;
     }
+
+    @Transactional
+    public void deleteComment(Long videoId, Long commentId, Long userId) {
+        Video video = videoRepository.findById(videoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Video not found with id: " + videoId));
+
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + commentId));
+
+        if (!comment.getVideoId().equals(videoId)) {
+            throw new IllegalArgumentException("Comment does not belong to the specified video");
+        }
+
+        boolean isAuthor = comment.getUserId().equals(userId);
+        boolean isVideoOwner = video.getCreatorId() != null && video.getCreatorId().equals(userId);
+
+        if (!isAuthor && !isVideoOwner) {
+            throw new SecurityException("Unauthorized: You can only delete your own comments or comments on your video.");
+        }
+
+        commentRepository.delete(comment);
+
+        long currentCount = video.getCommentCount() != null ? video.getCommentCount() : 0L;
+        video.setCommentCount(Math.max(0L, currentCount - 1));
+        videoRepository.save(video);
+    }
 }

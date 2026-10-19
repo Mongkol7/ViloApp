@@ -8,17 +8,51 @@ class ProfileStat {
 
 /// A track shown in the "Sounds" tab.
 class SoundTrack {
+  final int? id;
   final String coverUrl;
   final String title;
   final String usedByLabel; // pre-formatted, e.g. "260.1K"
+  final String? artist;
+  final String? audioUrl;
+  final int? creatorId;
+  final String? creatorUsername;
   final int similarCount;
 
   const SoundTrack({
+    this.id,
     required this.coverUrl,
     required this.title,
     required this.usedByLabel,
+    this.artist,
+    this.audioUrl,
+    this.creatorId,
+    this.creatorUsername,
     this.similarCount = 0,
   });
+
+  factory SoundTrack.fromJson(Map<String, dynamic> json) {
+    final rawUsage = json['usageCount'] ?? json['usage_count'];
+    String formatted = json['usedByLabel'] ?? json['formattedUsageCount'] ?? '';
+    if (formatted.isEmpty && rawUsage != null) {
+      final count = rawUsage is int ? rawUsage : int.tryParse(rawUsage.toString()) ?? 0;
+      formatted = count >= 1000 ? '${(count / 1000).toStringAsFixed(1)}K' : '$count videos';
+    }
+    return SoundTrack(
+      id: json['id'] is int ? json['id'] : int.tryParse(json['id']?.toString() ?? ''),
+      coverUrl: (json['coverUrl'] != null && json['coverUrl'].toString().isNotEmpty)
+          ? json['coverUrl'].toString()
+          : ((json['albumArtUrl'] != null && json['albumArtUrl'].toString().isNotEmpty)
+              ? json['albumArtUrl'].toString()
+              : 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200'),
+      title: json['title']?.toString() ?? 'Original Sound',
+      usedByLabel: formatted.isNotEmpty ? formatted : '1 video',
+      artist: json['artist']?.toString() ?? json['creatorUsername']?.toString(),
+      audioUrl: json['audioUrl']?.toString(),
+      creatorId: json['creatorId'] is int ? json['creatorId'] : int.tryParse(json['creatorId']?.toString() ?? ''),
+      creatorUsername: json['creatorUsername']?.toString() ?? json['artist']?.toString(),
+      similarCount: 0,
+    );
+  }
 }
 
 /// A product shown in the "Shop" tab.

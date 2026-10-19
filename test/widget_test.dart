@@ -16,6 +16,9 @@ import 'package:viloapp/features/feed/presentation/pages/home_feed_page.dart';
 import 'package:viloapp/features/search_discover/presentation/pages/search_screen.dart';
 import 'package:viloapp/features/feed/presentation/pages/sound_detail_page.dart';
 import 'package:viloapp/features/feed/presentation/pages/video_feed_page.dart';
+import 'package:viloapp/features/auth/data/datasources/token_storage.dart';
+import 'package:viloapp/features/profile/data/datasources/profile_sync_service.dart';
+import 'package:viloapp/features/profile/data/datasources/profile_remote_data_source.dart';
 
 Widget _buildTestApp({required Widget child}) {
   return MaterialApp(
@@ -26,8 +29,11 @@ Widget _buildTestApp({required Widget child}) {
 }
 
 void main() {
-  setUp(() {
+  setUp(() async {
     ThoughtStoryManager.instance.deleteStory();
+    await TokenStorage.instance.clear();
+    ProfileSyncService.instance.clear();
+    ProfileRemoteDataSource.instance.clearCache();
   });
 
   testWidgets('ViloFloatingBottomBar renders navigation icons and action plus button', (WidgetTester tester) async {
