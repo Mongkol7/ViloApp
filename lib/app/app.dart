@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_theme.dart';
-import '../features/auth/presentation/pages/login_screen.dart';
+import '../features/bottom_nav/presentation/pages/main_navigation_shell.dart';
 
 final RouteObserver<ModalRoute<void>> routeObserver = RouteObserver<ModalRoute<void>>();
 
@@ -14,7 +14,7 @@ class ViloApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       navigatorObservers: [routeObserver],
-      home: const LoginScreen(),
+      home: const MainNavigationShell(initialIndex: 2),
     );
   }
 }

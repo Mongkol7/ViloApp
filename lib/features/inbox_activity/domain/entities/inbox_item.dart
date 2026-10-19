@@ -3,12 +3,20 @@ class StoryItem {
   final String title;
   final String imageUrl;
   final bool isCreate;
+  final String? message;
+  final String? musicTitle;
+  final String? musicArtist;
+  final String? timestamp;
 
   const StoryItem({
     required this.id,
     required this.title,
     required this.imageUrl,
     this.isCreate = false,
+    this.message,
+    this.musicTitle,
+    this.musicArtist,
+    this.timestamp,
   });
 }
 

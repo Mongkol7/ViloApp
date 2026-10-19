@@ -1,22 +1,25 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../data/datasources/static_story_viewers_data.dart';
+import '../../data/datasources/story_remote_data_source.dart';
 import '../../domain/entities/shared_thought_story.dart';
 
 class StoryViewersBottomSheet extends StatefulWidget {
   final int viewCount;
+  final String? storyId;
 
   const StoryViewersBottomSheet({
     super.key,
     this.viewCount = 418,
+    this.storyId,
   });
 
-  static Future<void> show(BuildContext context, {int viewCount = 418}) {
+  static Future<void> show(BuildContext context, {int viewCount = 418, String? storyId}) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => StoryViewersBottomSheet(viewCount: viewCount),
+      builder: (_) => StoryViewersBottomSheet(viewCount: viewCount, storyId: storyId),
     );
   }
 
@@ -31,6 +34,18 @@ class _StoryViewersBottomSheetState extends State<StoryViewersBottomSheet> {
   void initState() {
     super.initState();
     _viewers = List.from(StaticStoryViewersData.viewers);
+    _loadLiveViewers();
+  }
+
+  Future<void> _loadLiveViewers() async {
+    if (widget.storyId != null) {
+      final liveViewers = await StoryRemoteDataSource.instance.getStoryViewers(widget.storyId!);
+      if (mounted && liveViewers.isNotEmpty) {
+        setState(() {
+          _viewers = liveViewers;
+        });
+      }
+    }
   }
 
   void _toggleAction(int index) {

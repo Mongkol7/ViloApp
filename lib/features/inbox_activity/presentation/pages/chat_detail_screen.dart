@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../data/datasources/chat_manager.dart';
+import '../../data/datasources/chat_remote_data_source.dart';
+import '../../data/datasources/chat_stomp_service.dart';
 import '../../domain/entities/inbox_item.dart';
 
 class ChatDetailScreen extends StatefulWidget {
@@ -17,35 +20,98 @@ class ChatDetailScreen extends StatefulWidget {
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final TextEditingController _messageController = TextEditingController();
   late List<ChatMessage> _messages;
+  final ScrollController _scrollController = ScrollController();
+  bool _canSend = false;
 
   @override
   void initState() {
     super.initState();
-    _messages = List.from(widget.thread.messages);
+    final savedMessages = ChatManager.instance.getMessages(widget.thread.id);
+    _messages = savedMessages.isNotEmpty
+        ? savedMessages
+        : List.from(widget.thread.messages);
+    _messageController.addListener(() {
+      final canSend = _messageController.text.trim().isNotEmpty;
+      if (canSend != _canSend) {
+        setState(() => _canSend = canSend);
+      }
+    });
+    _loadMessages();
+    ChatStompService.instance.addMessageListener(_handleIncomingMessage);
   }
 
   @override
   void dispose() {
+    ChatStompService.instance.removeMessageListener(_handleIncomingMessage);
     _messageController.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadMessages() async {
+    final userId = int.tryParse(widget.thread.id);
+    if (userId != null) {
+      final remoteMessages = await ChatRemoteDataSource.instance.getMessages(userId);
+      if (mounted && remoteMessages.isNotEmpty) {
+        setState(() {
+          _messages = remoteMessages;
+        });
+        _scrollToBottom();
+      }
+    }
+  }
+
+  void _handleIncomingMessage(ChatMessage msg) {
+    if (!mounted) return;
+    setState(() {
+      _messages.add(msg);
+    });
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   void _sendMessage() {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
+    final optimisticMsg = ChatMessage(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      text: text,
+      isMe: true,
+      timestamp: 'Just now',
+      status: 'Sent',
+    );
+
     setState(() {
-      _messages.add(
-        ChatMessage(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          text: text,
-          isMe: true,
-          timestamp: 'Just now',
-          status: 'Sent',
-        ),
-      );
+      _messages.add(optimisticMsg);
       _messageController.clear();
+      _canSend = false;
     });
+    _scrollToBottom();
+
+    // Persist and handle live simulation + backend dispatch
+    ChatManager.instance.sendMessage(
+      threadId: widget.thread.id,
+      text: text,
+      onAutoReply: (replyMsg) {
+        if (!mounted) return;
+        setState(() {
+          _messages.add(replyMsg);
+        });
+        _scrollToBottom();
+      },
+    );
   }
 
   @override
@@ -150,6 +216,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           // 1. Message Bubble Timeline
           Expanded(
             child: ListView(
+              controller: _scrollController,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               physics: const BouncingScrollPhysics(),
               children: [
@@ -230,6 +297,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     ),
                     child: TextField(
                       controller: _messageController,
+                      textInputAction: TextInputAction.send,
                       style: const TextStyle(
                         fontFamily: 'Inter',
                         color: Colors.white,
@@ -262,9 +330,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
                 // Send Button
                 IconButton(
-                  icon: const Icon(
+                  tooltip: 'Send',
+                  icon: Icon(
                     Icons.send_rounded,
-                    color: Colors.white,
+                    color: _canSend ? const Color(0xFF2F80ED) : Colors.white,
                     size: 22,
                   ),
                   onPressed: _sendMessage,

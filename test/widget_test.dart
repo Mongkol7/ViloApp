@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viloapp/core/theme/app_theme.dart';
 import 'package:viloapp/features/bottom_nav/presentation/widgets/vilo_floating_bottom_bar.dart';
+import 'package:viloapp/features/inbox_activity/data/datasources/chat_manager.dart';
 import 'package:viloapp/features/inbox_activity/data/datasources/thought_story_manager.dart';
 import 'package:viloapp/features/inbox_activity/presentation/pages/inbox_screen.dart';
 import 'package:viloapp/features/profile/presentation/pages/people_screen.dart';
@@ -18,6 +19,8 @@ Widget _buildTestApp({required Widget child}) {
 void main() {
   setUp(() {
     ThoughtStoryManager.instance.deleteStory();
+    ChatManager.instance.reset();
+    ChatManager.immediateRepliesForTesting = true;
   });
 
   testWidgets('ViloFloatingBottomBar renders navigation icons and action plus button', (WidgetTester tester) async {
@@ -182,5 +185,199 @@ void main() {
     // Verify story was removed from ProfileScreen and ThoughtStoryManager
     expect(find.text('Share a thought...'), findsOneWidget);
     expect(ThoughtStoryManager.instance.currentStory, isNull);
+  });
+
+  testWidgets('Interactive Chat: Send message in ChatDetailScreen and verify thread persistence', (WidgetTester tester) async {
+    await tester.pumpWidget(_buildTestApp(child: const InboxScreen()));
+
+    // Tap FashionHub message thread
+    await tester.tap(find.text('FashionHub'));
+    await tester.pumpAndSettle();
+
+    // Enter message
+    final inputFinder = find.byType(TextField);
+    expect(inputFinder, findsOneWidget);
+    await tester.enterText(inputFinder, 'Is shipping to California available?');
+    await tester.pump();
+
+    // Tap send button
+    final sendButtonFinder = find.byTooltip('Send');
+    expect(sendButtonFinder, findsOneWidget);
+    await tester.tap(sendButtonFinder);
+    await tester.pumpAndSettle();
+
+    // Verify sent bubble appears
+    expect(find.text('Is shipping to California available?'), findsOneWidget);
+
+    // Verify message was recorded in ChatManager
+    expect(
+      ChatManager.instance.getMessages('t0').any((m) => m.text == 'Is shipping to California available?'),
+      isTrue,
+    );
+
+    // Pop back to Inbox
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
+    await tester.pumpAndSettle();
+
+    // Verify back on Inbox and thread exists
+    expect(find.text('FashionHub'), findsOneWidget);
+    expect(find.text('MESSAGES'), findsOneWidget);
+  });
+
+  testWidgets('View Another Post/Story: Tap other user story from stories tray and verify viewer and reactions', (WidgetTester tester) async {
+    await tester.pumpWidget(_buildTestApp(child: const InboxScreen()));
+
+    // Tap another user's story in the tray (.uzi07)
+    final otherStoryFinder = find.text('.uzi07');
+    expect(otherStoryFinder, findsOneWidget);
+    await tester.tap(otherStoryFinder);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Verify StoryViewerScreen opens with author name and thought message
+    expect(find.text('.uzi07'), findsAtLeastNWidgets(1));
+    expect(find.text('Late night studio sessions 🎧🎹'), findsOneWidget);
+    expect(find.text('Starboy • The Weeknd'), findsOneWidget);
+    expect(find.text('Reply to .uzi07...'), findsOneWidget);
+
+    // Tap heart reaction in StoryViewerScreen
+    await tester.tap(find.byIcon(Icons.favorite_rounded).last);
+    await tester.pump();
+
+    // Close story viewer
+    await tester.tap(find.byIcon(Icons.close_rounded));
+    await tester.pumpAndSettle();
+
+    // Verify back on Inbox
+    expect(find.text('Inbox'), findsOneWidget);
+  });
+
+  testWidgets('Sequential Story Navigation: Tap right screen to advance story A -> B -> C and tap left to go back', (WidgetTester tester) async {
+    await tester.pumpWidget(_buildTestApp(child: const InboxScreen()));
+
+    // Tap first story in tray: "On this day" (Story A)
+    await tester.tap(find.text('On this day'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Verify we are on Story A
+    expect(find.text('1 year ago today in Tokyo! 🗼🌸'), findsOneWidget);
+    expect(find.text('Memories • Maroon 5'), findsOneWidget);
+
+    // Tap on right screen area to advance to Story B (.uzi07)
+    final rightTapZone = find.byKey(const Key('story_right_tap_zone'));
+    expect(rightTapZone, findsOneWidget);
+    await tester.tap(rightTapZone);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Verify we advanced to Story B
+    expect(find.text('Late night studio sessions 🎧🎹'), findsOneWidget);
+    expect(find.text('Starboy • The Weeknd'), findsOneWidget);
+
+    // Tap on right screen area again to advance to Story C (Tin)
+    await tester.tap(rightTapZone);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Verify we advanced to Story C
+    expect(find.text('Weekend coffee run ☕🥐'), findsOneWidget);
+    expect(find.text('Espresso • Sabrina Carpenter'), findsOneWidget);
+
+    // Tap on left screen area to navigate back to Story B (.uzi07)
+    final leftTapZone = find.byKey(const Key('story_left_tap_zone'));
+    expect(leftTapZone, findsOneWidget);
+    await tester.tap(leftTapZone);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Verify we returned to Story B
+    expect(find.text('Late night studio sessions 🎧🎹'), findsOneWidget);
+    expect(find.text('Starboy • The Weeknd'), findsOneWidget);
+
+    // Close story viewer
+    await tester.tap(find.byIcon(Icons.close_rounded));
+    await tester.pumpAndSettle();
+
+    // Verify back on Inbox
+    expect(find.text('Inbox'), findsOneWidget);
+  });
+
+  testWidgets('Notifications Hub: Tap New followers, Activity, and System notifications to open dedicated views and clear badges', (WidgetTester tester) async {
+    await tester.pumpWidget(_buildTestApp(child: const InboxScreen()));
+
+    // 1. Test New followers navigation & interaction
+    expect(find.text('New followers'), findsOneWidget);
+    await tester.tap(find.text('New followers'));
+    await tester.pumpAndSettle();
+
+    // Verify NewFollowersScreen is open
+    expect(find.text('13 new followers this week'), findsOneWidget);
+    expect(find.text('R.DRR'), findsOneWidget);
+    expect(find.text('@rdrr_official'), findsOneWidget);
+
+    // Tap "Follow back" button on first follower
+    final followBackFinder = find.text('Follow back').first;
+    await tester.tap(followBackFinder);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // Verify button state toggled to "Following"
+    expect(find.text('Following'), findsAtLeastNWidgets(1));
+
+    // Pop back to Inbox
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
+    await tester.pumpAndSettle();
+
+    // 2. Test Activity navigation & filter chips
+    expect(find.text('Activity'), findsOneWidget);
+    await tester.tap(find.text('Activity'));
+    await tester.pumpAndSettle();
+
+    // Verify ActivityScreen is open
+    expect(find.text('Activity'), findsOneWidget);
+    expect(find.textContaining('Junta'), findsOneWidget);
+    expect(find.textContaining('liked your photos.'), findsOneWidget);
+    expect(find.text('Likes ❤️'), findsOneWidget);
+    expect(find.text('Comments 💬'), findsOneWidget);
+
+    // Filter by Comments
+    await tester.tap(find.text('Comments 💬'));
+    await tester.pump();
+
+    // Verify comment activity item is shown
+    expect(find.textContaining('Sarah Jenkins'), findsOneWidget);
+
+    // Pop back to Inbox
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
+    await tester.pumpAndSettle();
+
+    // 3. Test System notifications navigation
+    expect(find.text('System notifications'), findsOneWidget);
+    await tester.tap(find.text('System notifications'));
+    await tester.pumpAndSettle();
+
+    // Verify SystemNotificationsScreen is open
+    expect(find.text('Weekly Screen Time Report'), findsOneWidget);
+    expect(find.text('Security Alert: New Login'), findsOneWidget);
+
+    // Tap weekly screen time to inspect chart modal
+    await tester.tap(find.text('Weekly Screen Time Report'));
+    await tester.pumpAndSettle();
+
+    // Verify chart modal
+    expect(find.text('Weekly Screen Time'), findsAtLeastNWidgets(1));
+    expect(find.text('Daily average: 2h 15m (Within healthy goal)'), findsOneWidget);
+
+    // Close modal
+    await tester.tap(find.text('Got it'));
+    await tester.pumpAndSettle();
+
+    // Pop back to Inbox
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
+    await tester.pumpAndSettle();
+
+    // Verify back on Inbox
+    expect(find.text('Inbox'), findsOneWidget);
   });
 }
