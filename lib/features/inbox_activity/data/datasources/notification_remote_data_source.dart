@@ -11,7 +11,7 @@ class NotificationRemoteDataSource {
     try {
       final response = await ApiClient.instance.get('/notifications');
       if (response is List) {
-        return response.map<NotificationItem>((item) {
+        final rawList = response.map<NotificationItem>((item) {
           final id = item['id']?.toString() ?? '';
           final title = item['title'] ?? 'Notification';
           final subtitle = item['body'] ?? '';
@@ -96,6 +96,21 @@ class NotificationRemoteDataSource {
             timeAgo: 'Recently',
           );
         }).toList();
+
+        // Deduplicate: Keep only the latest notification per actor & type
+        final List<NotificationItem> deduplicated = [];
+        final Set<String> seen = {};
+        for (final item in rawList) {
+          final actorKey = (item.actorUsername != null && item.actorUsername!.isNotEmpty)
+              ? item.actorUsername!.toLowerCase().trim()
+              : (item.actorId != null ? item.actorId.toString() : item.title.toLowerCase().trim());
+          final key = '${item.type}_$actorKey';
+          if (!seen.contains(key)) {
+            seen.add(key);
+            deduplicated.add(item);
+          }
+        }
+        return deduplicated;
       }
     } catch (_) {}
 

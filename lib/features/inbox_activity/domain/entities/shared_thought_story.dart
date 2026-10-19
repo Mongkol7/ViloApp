@@ -36,7 +36,7 @@ class SharedThoughtStory {
     if (mediaType.toUpperCase() == 'VIDEO') return true;
     if (mediaUrl != null && mediaUrl!.isNotEmpty) {
       final lower = mediaUrl!.toLowerCase();
-      if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.avi') || lower.endsWith('.mkv')) {
+      if (lower.contains('.mp4') || lower.contains('.mov') || lower.contains('.avi') || lower.contains('.mkv') || lower.contains('/video/')) {
         return true;
       }
     }

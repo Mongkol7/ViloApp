@@ -15,6 +15,8 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 
     List<Notification> findByRecipientOrderByCreatedAtDesc(User recipient);
 
+    List<Notification> findByRecipientAndActorAndType(User recipient, User actor, com.vilo.backend.entity.NotificationType type);
+
     long countByRecipientAndIsReadFalse(User recipient);
 
     @Modifying

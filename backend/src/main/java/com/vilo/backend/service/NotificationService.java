@@ -29,8 +29,14 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public List<NotificationResponse> getNotifications(User currentUser) {
-        return notificationRepository.findByRecipientOrderByCreatedAtDesc(currentUser)
-                .stream()
+        List<Notification> raw = notificationRepository.findByRecipientOrderByCreatedAtDesc(currentUser);
+        java.util.Map<String, Notification> uniqueMap = new java.util.LinkedHashMap<>();
+        for (Notification n : raw) {
+            String actorKey = n.getActor() != null ? String.valueOf(n.getActor().getId()) : (n.getEntityId() != null ? n.getEntityId() : "system");
+            String key = n.getType() + "_" + actorKey;
+            uniqueMap.putIfAbsent(key, n);
+        }
+        return uniqueMap.values().stream()
                 .map(this::mapToResponse)
                 .toList();
     }
@@ -74,16 +80,30 @@ public class NotificationService {
             return null;
         }
 
-        Notification notification = Notification.builder()
-                .recipient(recipient)
-                .actor(actor)
-                .type(type)
-                .title(title)
-                .body(body)
-                .entityId(entityId)
-                .entityType(entityType)
-                .isRead(false)
-                .build();
+        Notification notification;
+        List<Notification> existing = (actor != null)
+                ? notificationRepository.findByRecipientAndActorAndType(recipient, actor, type)
+                : java.util.Collections.emptyList();
+
+        if (!existing.isEmpty()) {
+            notification = existing.get(0);
+            notification.setTitle(title);
+            notification.setBody(body);
+            notification.setEntityId(entityId);
+            notification.setEntityType(entityType);
+            notification.setIsRead(false);
+        } else {
+            notification = Notification.builder()
+                    .recipient(recipient)
+                    .actor(actor)
+                    .type(type)
+                    .title(title)
+                    .body(body)
+                    .entityId(entityId)
+                    .entityType(entityType)
+                    .isRead(false)
+                    .build();
+        }
 
         Notification saved = notificationRepository.save(notification);
         NotificationResponse response = mapToResponse(saved);

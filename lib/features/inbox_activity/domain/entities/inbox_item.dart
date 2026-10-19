@@ -30,6 +30,23 @@ class StoryItem {
     this.isMyStory = false,
     this.authorUsername,
   });
+
+  bool get isVideo {
+    if (mediaType.toUpperCase() == 'VIDEO') return true;
+    if (mediaUrl != null && mediaUrl!.isNotEmpty) {
+      final lower = mediaUrl!.toLowerCase();
+      if (lower.contains('.mp4') || lower.contains('.mov') || lower.contains('.avi') || lower.contains('.mkv')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool get isImage {
+    if (isVideo) return false;
+    if (mediaType.toUpperCase() == 'IMAGE') return true;
+    return mediaUrl != null && mediaUrl!.isNotEmpty;
+  }
 }
 
 class NotificationItem {

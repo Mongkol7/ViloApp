@@ -124,12 +124,21 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   void _initVideoPlayer(String url) {
     try {
-      if (File(url).existsSync()) {
-        _videoPlayerController = VideoPlayerController.file(File(url));
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(url));
       } else if (url.startsWith('assets/')) {
         _videoPlayerController = VideoPlayerController.asset(url);
       } else {
-        _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(url));
+        try {
+          final file = File(url);
+          if (file.existsSync()) {
+            _videoPlayerController = VideoPlayerController.file(file);
+          } else {
+            _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(url));
+          }
+        } catch (_) {
+          _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(url));
+        }
       }
 
       _videoPlayerController!.initialize().then((_) {
@@ -141,6 +150,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         });
       }).catchError((err) {
         debugPrint('[StoryViewer] Video player initialization error: $err');
+        if (mounted) {
+          setState(() {
+            _isVideoInitialized = false;
+          });
+        }
       });
     } catch (e) {
       debugPrint('[StoryViewer] Error starting video controller: $e');
@@ -1078,28 +1092,37 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   }
 
   Widget _buildImageWidget(String url, Color fallbackColor) {
-    try {
-      if (File(url).existsSync()) {
-        return Image.file(
-          File(url),
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(color: fallbackColor),
-        );
-      }
-    } catch (_) {}
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return Image.network(
+        url,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Container(color: fallbackColor),
+      );
+    }
 
     if (url.startsWith('assets/')) {
       return Image.asset(
         url,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Container(color: fallbackColor),
+        errorBuilder: (context, error, stackTrace) => Container(color: fallbackColor),
       );
     }
+
+    try {
+      final file = File(url);
+      if (file.existsSync()) {
+        return Image.file(
+          file,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => Container(color: fallbackColor),
+        );
+      }
+    } catch (_) {}
 
     return Image.network(
       url,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => Container(color: fallbackColor),
+      errorBuilder: (context, error, stackTrace) => Container(color: fallbackColor),
     );
   }
 }

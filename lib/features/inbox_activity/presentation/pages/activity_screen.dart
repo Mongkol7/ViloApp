@@ -149,7 +149,8 @@ class _ActivityScreenState extends State<ActivityScreen> {
       final isDemo = TokenStorage.instance.isDemoUserSync;
       if (!isDemo && mounted) {
         setState(() {
-          _activities = notifications.map((n) {
+          final Map<String, ActivityModel> uniqueMap = {};
+          for (final n in notifications) {
             final lowerTitle = n.title.toLowerCase();
             final lowerBody = n.subtitle.toLowerCase();
             final typeUpper = n.type.toUpperCase();
@@ -188,24 +189,28 @@ class _ActivityScreenState extends State<ActivityScreen> {
               text = 'started following you';
             }
 
-            return ActivityModel(
-              id: n.id,
-              userName: userName,
-              userHandle: n.actorUsername ?? userName.toLowerCase().replaceAll(' ', '_'),
-              userAvatarUrl: n.actorAvatarUrl ?? (userName.toLowerCase() == 'liza'
-                  ? 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80'
-                  : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80'),
-              type: type,
-              text: text,
-              timeAgo: n.timeAgo ?? 'Recently',
-              mediaThumbnailUrl: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=150',
-              videoIndex: 0,
-              isRead: !n.hasDot,
-              actorId: n.actorId,
-              actorUsername: n.actorUsername ?? (userName.isNotEmpty ? userName : null),
-              entityId: n.entityId,
-            );
-          }).toList();
+            final key = '${type}_${userName.toLowerCase()}_${n.entityId ?? ""}';
+            if (!uniqueMap.containsKey(key)) {
+              uniqueMap[key] = ActivityModel(
+                id: n.id,
+                userName: userName,
+                userHandle: n.actorUsername ?? userName.toLowerCase().replaceAll(' ', '_'),
+                userAvatarUrl: n.actorAvatarUrl ?? (userName.toLowerCase() == 'liza'
+                    ? 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80'
+                    : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80'),
+                type: type,
+                text: text,
+                timeAgo: n.timeAgo ?? 'Recently',
+                mediaThumbnailUrl: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=150',
+                videoIndex: 0,
+                isRead: !n.hasDot,
+                actorId: n.actorId,
+                actorUsername: n.actorUsername ?? (userName.isNotEmpty ? userName : null),
+                entityId: n.entityId,
+              );
+            }
+          }
+          _activities = uniqueMap.values.toList();
         });
       }
     } catch (_) {}

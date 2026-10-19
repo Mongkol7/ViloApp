@@ -24,6 +24,7 @@ import 'system_notifications_screen.dart';
 import '../../../profile/presentation/screens/public_profile_screen.dart';
 import '../../../feed/presentation/pages/video_feed_page.dart';
 import '../widgets/story_viewers_bottom_sheet.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -85,6 +86,7 @@ class _InboxScreenState extends State<InboxScreen> {
           story: myStory,
           isOwner: true,
           authorName: 'Your Story',
+          authorAvatarUrl: myStory.authorAvatarUrl ?? ProfileSyncService.instance.currentUserAvatar,
         ),
       );
     }
@@ -172,6 +174,37 @@ class _InboxScreenState extends State<InboxScreen> {
       }
     }
     return tray;
+  }
+
+  List<NotificationItem> get _consolidatedNotifications {
+    final List<NotificationItem> list = [];
+    final Set<String> seenKeys = {};
+
+    for (final item in _notifications) {
+      final typeUpper = item.type.toUpperCase();
+      final titleLower = item.title.toLowerCase();
+      final subLower = item.subtitle.toLowerCase();
+
+      // In the main Inbox screen, direct messages are already prominently shown
+      // right below in the MESSAGES section. Exclude redundant message notifications here.
+      final isMessage = typeUpper == 'MESSAGE' ||
+          item.iconType == 'message' ||
+          titleLower.contains('message') ||
+          subLower.contains('hi sak') ||
+          subLower.contains('me liza');
+      if (isMessage) continue;
+
+      final actorKey = (item.actorUsername != null && item.actorUsername!.isNotEmpty)
+          ? item.actorUsername!.toLowerCase().trim()
+          : (item.actorId != null ? item.actorId.toString() : item.title.toLowerCase().trim());
+      final key = '${item.type}_$actorKey';
+
+      if (!seenKeys.contains(key)) {
+        seenKeys.add(key);
+        list.add(item);
+      }
+    }
+    return list;
   }
 
   void _openOtherUserStory(StoryItem story) {
@@ -444,7 +477,9 @@ class _InboxScreenState extends State<InboxScreen> {
 
     if (result != null && mounted) {
       ThoughtStoryManager.instance.setStory(result);
-      _loadAllData();
+      setState(() {});
+      await _loadAllData();
+      if (mounted) setState(() {});
     }
   }
 
@@ -564,8 +599,8 @@ class _InboxScreenState extends State<InboxScreen> {
             const SizedBox(height: 8),
 
             // 2. Notification Hub Items
-            ...List.generate(_notifications.length, (index) {
-              final notification = _notifications[index];
+            ...List.generate(_consolidatedNotifications.length, (index) {
+              final notification = _consolidatedNotifications[index];
               return _buildNotificationTile(notification);
             }),
 
@@ -825,17 +860,24 @@ class _InboxScreenState extends State<InboxScreen> {
                           child: Container(
                             decoration: const BoxDecoration(
                               shape: BoxShape.circle,
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [Color(0xFF56CCF2), Color(0xFF2F80ED)],
-                              ),
+                              color: Colors.black,
                             ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.cloud_rounded,
-                                color: Colors.white,
-                                size: 26,
+                            padding: const EdgeInsets.all(2.0),
+                            child: ClipOval(
+                              child: Image.network(
+                                (myStory?.authorAvatarUrl != null && myStory!.authorAvatarUrl!.isNotEmpty)
+                                    ? myStory.authorAvatarUrl!
+                                    : ProfileSyncService.instance.currentUserAvatar,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: LinearGradient(
+                                      colors: [Color(0xFF56CCF2), Color(0xFF2F80ED)],
+                                    ),
+                                  ),
+                                  child: const Icon(Icons.person, color: Colors.white, size: 24),
+                                ),
                               ),
                             ),
                           ),

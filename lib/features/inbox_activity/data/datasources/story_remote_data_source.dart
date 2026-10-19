@@ -6,6 +6,7 @@ import '../../domain/entities/music_track.dart';
 import '../../domain/entities/shared_thought_story.dart';
 import 'static_inbox_data.dart';
 import 'thought_story_manager.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
 
 class StoryRemoteDataSource {
   StoryRemoteDataSource._();
@@ -134,7 +135,7 @@ class StoryRemoteDataSource {
       );
 
       if (response is Map) {
-        return SharedThoughtStory(
+        final story = SharedThoughtStory(
           id: response['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
           message: response['message'] ?? (message ?? ''),
           mediaUrl: response['mediaUrl'] ?? mediaUrl,
@@ -145,11 +146,16 @@ class StoryRemoteDataSource {
           timestamp: 'Just now',
           viewCount: response['viewCount'] ?? 0,
           isOwner: true,
+          authorAvatarUrl: response['avatarUrl'] ?? ProfileSyncService.instance.currentUserAvatar,
+          authorName: response['displayName'] ?? ProfileSyncService.instance.currentUserDisplayName,
+          authorUsername: response['username'] ?? ProfileSyncService.instance.currentUsername,
         );
+        ThoughtStoryManager.instance.setStory(story);
+        return story;
       }
     } catch (_) {}
 
-    return SharedThoughtStory(
+    final fallbackStory = SharedThoughtStory(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       message: message ?? '',
       mediaUrl: mediaUrl,
@@ -160,7 +166,12 @@ class StoryRemoteDataSource {
       timestamp: 'Just now',
       viewCount: 0,
       isOwner: true,
+      authorAvatarUrl: ProfileSyncService.instance.currentUserAvatar,
+      authorName: ProfileSyncService.instance.currentUserDisplayName,
+      authorUsername: ProfileSyncService.instance.currentUsername,
     );
+    ThoughtStoryManager.instance.setStory(fallbackStory);
+    return fallbackStory;
   }
 
   Future<void> recordView(String storyId) async {
