@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../feed/data/models/video_model.dart';
 import '../../../feed/presentation/pages/home_feed_page.dart';
+import '../../../feed/presentation/widgets/create_action_sheet.dart';
 import '../../../feed/presentation/widgets/upload_video_sheet.dart';
 import '../../../inbox_activity/presentation/pages/inbox_screen.dart';
 import '../../../profile/presentation/pages/people_screen.dart';
@@ -58,14 +59,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       _isAddActive = true;
     });
 
-    final createdVideo = await showModalBottomSheet<VideoModel>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black87,
-      builder: (ctx) => const UploadVideoSheet(),
-    );
+    final createdVideo = await CreateActionSheet.show(context);
 
     if (mounted) {
       setState(() {

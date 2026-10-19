@@ -4,10 +4,29 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:viloapp/core/theme/app_theme.dart';
 import 'package:viloapp/features/bottom_nav/presentation/pages/main_navigation_shell.dart';
 import 'package:viloapp/features/feed/data/models/video_model.dart';
+import 'package:viloapp/features/feed/presentation/widgets/create_action_sheet.dart';
 import 'package:viloapp/features/feed/presentation/widgets/upload_video_sheet.dart';
+
+class _FakeImagePicker extends Fake implements ImagePicker {
+  final XFile? xFile;
+  _FakeImagePicker(this.xFile);
+
+  @override
+  Future<XFile?> pickImage({
+    required ImageSource source,
+    double? maxWidth,
+    double? maxHeight,
+    int? imageQuality,
+    CameraDevice preferredCameraDevice = CameraDevice.rear,
+    bool requestFullMetadata = true,
+  }) async {
+    return xFile;
+  }
+}
 
 class _MockHttpOverrides extends HttpOverrides {
   @override
@@ -82,7 +101,7 @@ void main() {
     HttpOverrides.global = _MockHttpOverrides();
   });
 
-  testWidgets('Tapping + button in MainNavigationShell opens UploadVideoSheet with native video picker button', (WidgetTester tester) async {
+  testWidgets('Tapping + button in MainNavigationShell opens Split Action Modal and navigating to UploadVideoSheet', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.0;
     addTearDown(() {
@@ -111,14 +130,29 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    // 2. Verify UploadVideoSheet header renders visibly with non-zero size
+    // 2. Verify Split Action Modal appears with Camera and Upload cards
+    final cameraBtnFinder = find.byKey(const Key('create_camera_option_button'));
+    final uploadBtnFinder = find.byKey(const Key('create_upload_option_button'));
+    expect(cameraBtnFinder, findsOneWidget);
+    expect(uploadBtnFinder, findsOneWidget);
+    expect(find.text('Camera'), findsOneWidget);
+    expect(find.text('Take a photo to post directly'), findsOneWidget);
+    expect(find.text('Upload Video or Photo'), findsOneWidget);
+    expect(find.text('Choose media from your device files'), findsOneWidget);
+
+    // 3. Tap "Upload Video or Photo" to open UploadVideoSheet
+    await tester.tap(uploadBtnFinder);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // 4. Verify UploadVideoSheet header renders visibly with non-zero size
     final titleFinder = find.text('Upload Video');
     expect(titleFinder, findsOneWidget);
     final titleRenderBox = tester.renderObject<RenderBox>(titleFinder);
     expect(titleRenderBox.size.width, greaterThan(0));
     expect(titleRenderBox.size.height, greaterThan(0));
 
-    // 3. Verify Native Media Picker Button renders visibly with non-zero size
+    // 5. Verify Native Media Picker Button renders visibly with non-zero size
     final pickButtonFinder = find.byKey(const Key('upload_pick_video_button'));
     expect(pickButtonFinder, findsOneWidget);
     final pickButtonRenderBox = tester.renderObject<RenderBox>(pickButtonFinder);
@@ -127,7 +161,7 @@ void main() {
     expect(find.text('Choose Video or Photo'), findsOneWidget);
     expect(find.text('Pick an .mp4, .mov, .jpg, or .png from your device'), findsOneWidget);
 
-    // 4. Verify Thumbnail Picker Button renders visibly with non-zero size
+    // 6. Verify Thumbnail Picker Button renders visibly with non-zero size
     final thumbButtonFinder = find.byKey(const Key('upload_pick_thumbnail_button'));
     expect(thumbButtonFinder, findsOneWidget);
     final thumbButtonRenderBox = tester.renderObject<RenderBox>(thumbButtonFinder);
@@ -135,25 +169,25 @@ void main() {
     expect(thumbButtonRenderBox.size.height, greaterThan(0));
     expect(find.text('Choose Thumbnail Image'), findsOneWidget);
 
-    // 5. Verify Caption TextField renders visibly with non-zero size
+    // 7. Verify Caption TextField renders visibly with non-zero size
     final captionFieldFinder = find.byKey(const Key('upload_caption_field'));
     expect(captionFieldFinder, findsOneWidget);
     final captionRenderBox = tester.renderObject<RenderBox>(captionFieldFinder);
     expect(captionRenderBox.size.width, greaterThan(0));
     expect(captionRenderBox.size.height, greaterThan(0));
 
-    // 6. Verify Tags TextField renders visibly with non-zero size
+    // 8. Verify Tags TextField renders visibly with non-zero size
     final tagsFieldFinder = find.byKey(const Key('upload_tags_field'));
     expect(tagsFieldFinder, findsOneWidget);
     final tagsRenderBox = tester.renderObject<RenderBox>(tagsFieldFinder);
     expect(tagsRenderBox.size.width, greaterThan(0));
     expect(tagsRenderBox.size.height, greaterThan(0));
 
-    // 7. Verify Quick Hashtag chips render
+    // 9. Verify Quick Hashtag chips render
     expect(find.text('#vilo'), findsOneWidget);
     expect(find.text('#trending'), findsOneWidget);
 
-    // 8. Verify Post Video button renders visibly with non-zero size
+    // 10. Verify Post Video button renders visibly with non-zero size
     final postButtonFinder = find.byKey(const Key('upload_post_video_button'));
     expect(postButtonFinder, findsOneWidget);
     final postButtonRenderBox = tester.renderObject<RenderBox>(postButtonFinder);
@@ -322,5 +356,57 @@ void main() {
 
     expect(videoModel.isImagePost, isFalse);
     expect(videoModel.thumbnailUrl, isNull);
+  });
+
+  testWidgets('CreateActionSheet Camera handoff captures photo and pre-populates UploadVideoSheet', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final fakeImagePicker = _FakeImagePicker(
+      XFile.fromData(
+        Uint8List.fromList(_transparentImage),
+        name: 'camera_capture.jpg',
+        path: 'camera_capture.jpg',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () => CreateActionSheet.show(context, imagePicker: fakeImagePicker),
+                child: const Text('Open Create'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.tap(find.text('Open Create'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Tap Camera option in split chooser
+    expect(find.byKey(const Key('create_camera_option_button')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('create_camera_option_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Verify UploadVideoSheet automatically opens with the captured camera photo pre-selected
+    expect(find.byKey(const Key('upload_selected_video_tile')), findsOneWidget);
+    expect(find.text('camera_capture.jpg'), findsOneWidget);
+
+    // Verify thumbnail picker is hidden for photo post and post button reflects Photo
+    expect(find.byKey(const Key('upload_pick_thumbnail_button')), findsNothing);
+    expect(find.text('Post Photo'), findsOneWidget);
   });
 }
