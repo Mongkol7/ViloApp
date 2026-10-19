@@ -48,6 +48,46 @@ class ChatManager {
     _loadFromLocalDisk();
   }
 
+  bool _isSamePerson(DirectMessageThread a, DirectMessageThread b) {
+    if (a.userId != null && b.userId != null && a.userId! > 0 && b.userId! > 0) {
+      if (a.userId == b.userId) return true;
+    }
+    if (a.id.isNotEmpty && b.id.isNotEmpty && a.id == b.id) return true;
+    final uA = a.username.replaceAll('@', '').toLowerCase().trim();
+    final uB = b.username.replaceAll('@', '').toLowerCase().trim();
+    if (uA.isNotEmpty && uB.isNotEmpty && uA == uB) return true;
+    return false;
+  }
+
+  List<DirectMessageThread> _consolidateThreads(List<DirectMessageThread> list) {
+    final List<DirectMessageThread> result = [];
+    for (final thread in list) {
+      final existingIndex = result.indexWhere((t) => _isSamePerson(t, thread));
+      if (existingIndex == -1) {
+        result.add(thread);
+      } else {
+        final existing = result[existingIndex];
+        final combinedMessages = List<ChatMessage>.from(existing.messages);
+        for (final m in thread.messages) {
+          if (!combinedMessages.any((cm) => cm.id == m.id || (cm.text == m.text && cm.timestamp == m.timestamp))) {
+            combinedMessages.add(m);
+          }
+        }
+        result[existingIndex] = existing.copyWith(
+          userId: existing.userId ?? thread.userId,
+          avatarUrl: existing.avatarUrl.isNotEmpty ? existing.avatarUrl : thread.avatarUrl,
+          lastMessage: thread.lastMessage.isNotEmpty ? thread.lastMessage : existing.lastMessage,
+          timeAgo: (thread.timeAgo.isNotEmpty && thread.timeAgo != 'Just now') ? thread.timeAgo : existing.timeAgo,
+          isFollowing: existing.isFollowing || thread.isFollowing,
+          followsYou: existing.followsYou || thread.followsYou,
+          isVerified: existing.isVerified || thread.isVerified,
+          messages: combinedMessages,
+        );
+      }
+    }
+    return result;
+  }
+
   void clear() {
     _threadsNotifier.value = [];
   }
@@ -103,7 +143,7 @@ class ChatManager {
         }).toList();
 
         if (loaded.isNotEmpty) {
-          _threadsNotifier.value = loaded;
+          _threadsNotifier.value = _consolidateThreads(loaded);
           return;
         }
       }
@@ -116,7 +156,7 @@ class ChatManager {
       _threadsNotifier.value = [];
       return;
     }
-    _threadsNotifier.value = List.from(StaticInboxData.threads);
+    _threadsNotifier.value = _consolidateThreads(List.from(StaticInboxData.threads));
   }
 
   void _persistToLocalDisk() {
@@ -156,40 +196,49 @@ class ChatManager {
 
   void init(List<DirectMessageThread> remoteThreads) {
     if (remoteThreads.isNotEmpty) {
-      final merged = <DirectMessageThread>[];
       final current = _threadsNotifier.value;
+      final merged = <DirectMessageThread>[];
 
       for (final remote in remoteThreads) {
-        final existing = current.firstWhere(
-          (t) => t.id == remote.id || (remote.userId != null && t.userId == remote.userId),
-          orElse: () => remote,
+        final existing = current.cast<DirectMessageThread?>().firstWhere(
+          (t) => t != null && _isSamePerson(t, remote),
+          orElse: () => null,
         );
-        // Keep any local messages if available
-        merged.add(
-          DirectMessageThread(
-            id: remote.id,
-            userId: remote.userId ?? existing.userId,
-            username: remote.username,
-            avatarUrl: remote.avatarUrl,
-            lastMessage: existing.lastMessage.isNotEmpty ? existing.lastMessage : remote.lastMessage,
-            timeAgo: existing.timeAgo.isNotEmpty ? existing.timeAgo : remote.timeAgo,
-            isVerified: remote.isVerified,
-            followersCount: remote.followersCount,
-            isFollowing: remote.isFollowing,
-            followsYou: remote.followsYou,
-            messages: existing.messages.isNotEmpty ? existing.messages : remote.messages,
-          ),
-        );
+        if (existing != null) {
+          final combinedMsgs = List<ChatMessage>.from(existing.messages);
+          for (final m in remote.messages) {
+            if (!combinedMsgs.any((cm) => cm.id == m.id || (cm.text == m.text && cm.timestamp == m.timestamp))) {
+              combinedMsgs.add(m);
+            }
+          }
+          merged.add(
+            DirectMessageThread(
+              id: remote.id,
+              userId: remote.userId ?? existing.userId,
+              username: remote.username,
+              avatarUrl: remote.avatarUrl.isNotEmpty ? remote.avatarUrl : existing.avatarUrl,
+              lastMessage: existing.lastMessage.isNotEmpty ? existing.lastMessage : remote.lastMessage,
+              timeAgo: existing.timeAgo.isNotEmpty ? existing.timeAgo : remote.timeAgo,
+              isVerified: remote.isVerified || existing.isVerified,
+              followersCount: remote.followersCount.isNotEmpty ? remote.followersCount : existing.followersCount,
+              isFollowing: remote.isFollowing || existing.isFollowing,
+              followsYou: remote.followsYou || existing.followsYou,
+              messages: combinedMsgs,
+            ),
+          );
+        } else {
+          merged.add(remote);
+        }
       }
 
       // Add any local threads not in remote
       for (final local in current) {
-        if (!merged.any((t) => t.id == local.id || (local.userId != null && t.userId == local.userId))) {
+        if (!merged.any((t) => _isSamePerson(t, local))) {
           merged.add(local);
         }
       }
 
-      _threadsNotifier.value = merged;
+      _threadsNotifier.value = _consolidateThreads(merged);
       _persistToLocalDisk();
     }
   }
@@ -205,22 +254,25 @@ class ChatManager {
   }) {
     final list = List<DirectMessageThread>.from(_threadsNotifier.value);
     final idStr = userId.toString();
-    int idx = list.indexWhere((t) => t.id == idStr);
-    if (idx == -1) {
-      idx = list.indexWhere((t) => t.username.toLowerCase() == username.toLowerCase());
-    }
-    if (idx == -1) {
-      idx = list.indexWhere((t) => t.userId == userId);
-    }
+    final cleanUsername = username.replaceAll('@', '').toLowerCase().trim();
+
+    int idx = list.indexWhere((t) {
+      if (t.userId != null && t.userId == userId) return true;
+      if (t.id == idStr) return true;
+      final tUser = t.username.replaceAll('@', '').toLowerCase().trim();
+      return tUser.isNotEmpty && tUser == cleanUsername;
+    });
 
     if (idx != -1) {
       final existing = list[idx];
       final updated = existing.copyWith(
-        isFollowing: isFollowing,
-        followsYou: followsYou,
+        userId: userId,
+        avatarUrl: existing.avatarUrl.isNotEmpty ? existing.avatarUrl : avatarUrl,
+        isFollowing: isFollowing || existing.isFollowing,
+        followsYou: followsYou || existing.followsYou,
       );
       list[idx] = updated;
-      _threadsNotifier.value = list;
+      _threadsNotifier.value = _consolidateThreads(list);
       return updated;
     }
 
@@ -239,7 +291,7 @@ class ChatManager {
     );
 
     list.insert(0, newThread);
-    _threadsNotifier.value = list;
+    _threadsNotifier.value = _consolidateThreads(list);
     _persistToLocalDisk();
     return newThread;
   }
@@ -349,9 +401,22 @@ class ChatManager {
     );
 
     final currentList = List<DirectMessageThread>.from(_threadsNotifier.value);
-    final index = currentList.indexWhere(
-      (t) => t.id == threadId || (t.userId != null && t.userId.toString() == threadId),
-    );
+    final cleanThreadId = threadId.toLowerCase().trim();
+    final parsedUid = int.tryParse(threadId);
+
+    int index = currentList.indexWhere((t) {
+      if (t.id.toLowerCase().trim() == cleanThreadId) return true;
+      if (parsedUid != null && t.userId == parsedUid) return true;
+      if (t.userId != null && t.userId.toString() == cleanThreadId) return true;
+      return false;
+    });
+
+    if (index == -1) {
+      final resolvedUid = _resolveUserId(threadId, 'User');
+      if (resolvedUid != null) {
+        index = currentList.indexWhere((t) => t.userId == resolvedUid || t.id == resolvedUid.toString());
+      }
+    }
 
     String recipientName = 'User';
     if (index != -1) {
@@ -367,7 +432,7 @@ class ChatManager {
 
       currentList.removeAt(index);
       currentList.insert(0, updatedThread);
-      _threadsNotifier.value = currentList;
+      _threadsNotifier.value = _consolidateThreads(currentList);
       _persistToLocalDisk();
     } else {
       final newThread = DirectMessageThread(
@@ -380,7 +445,7 @@ class ChatManager {
         messages: [newMsg],
       );
       currentList.insert(0, newThread);
-      _threadsNotifier.value = currentList;
+      _threadsNotifier.value = _consolidateThreads(currentList);
       _persistToLocalDisk();
     }
 

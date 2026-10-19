@@ -150,19 +150,122 @@ class _InboxScreenState extends State<InboxScreen> {
     return items;
   }
 
+  List<StoryItem> get _uniqueTrayStories {
+    final List<StoryItem> tray = [];
+    final Set<String> seenAuthors = {};
+
+    for (final s in _stories) {
+      if (s.isCreate) {
+        tray.add(s);
+        continue;
+      }
+      if (s.isMyStory) {
+        continue;
+      }
+      final authorKey = (s.authorUsername != null && s.authorUsername!.isNotEmpty)
+          ? s.authorUsername!.toLowerCase().trim()
+          : s.title.toLowerCase().trim();
+
+      if (!seenAuthors.contains(authorKey)) {
+        seenAuthors.add(authorKey);
+        tray.add(s);
+      }
+    }
+    return tray;
+  }
+
   void _openOtherUserStory(StoryItem story) {
-    final items = _buildStoryViewerList();
-    int targetIndex = items.indexWhere((it) => it.story.id == story.id);
-    if (targetIndex < 0) targetIndex = 0;
+    final authorKey = (story.authorUsername != null && story.authorUsername!.isNotEmpty)
+        ? story.authorUsername!.toLowerCase().trim()
+        : story.title.toLowerCase().trim();
+
+    // Group all stories belonging to this specific user so they can be viewed in 1 viewer
+    final authorStories = _stories.where((s) {
+      if (s.isCreate || s.isMyStory) return false;
+      final k = (s.authorUsername != null && s.authorUsername!.isNotEmpty)
+          ? s.authorUsername!.toLowerCase().trim()
+          : s.title.toLowerCase().trim();
+      return k == authorKey;
+    }).toList();
+
+    if (authorStories.isEmpty) {
+      authorStories.add(story);
+    }
+
+    final items = authorStories.map((s) => StoryViewerItem(
+      story: SharedThoughtStory(
+        id: s.id,
+        message: s.message ?? "Living the moment ✨",
+        mediaUrl: s.mediaUrl,
+        mediaType: (s.mediaType.isNotEmpty && s.mediaType != 'TEXT')
+            ? s.mediaType
+            : ((s.mediaUrl != null &&
+                    (s.mediaUrl!.toLowerCase().endsWith('.mp4') ||
+                        s.mediaUrl!.toLowerCase().endsWith('.mov')))
+                ? 'VIDEO'
+                : (s.mediaUrl != null && s.mediaUrl!.isNotEmpty ? 'IMAGE' : 'TEXT')),
+        privacy: s.privacy,
+        musicTrack: s.musicTitle != null
+            ? MusicTrack(
+                id: 'm_${s.id}',
+                title: s.musicTitle!,
+                artist: s.musicArtist ?? 'Unknown Artist',
+                albumArtUrl: s.imageUrl,
+                duration: '0:30',
+              )
+            : null,
+        timestamp: s.timestamp ?? 'Recently',
+        viewCount: s.viewCount,
+        backgroundColor: const Color(0xFF141416),
+        authorUsername: s.authorUsername,
+        authorName: s.title,
+      ),
+      isOwner: false,
+      authorName: s.title,
+      authorAvatarUrl: s.imageUrl,
+    )).toList();
 
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => StoryViewerScreen(
           stories: items,
-          initialIndex: targetIndex,
+          initialIndex: 0,
         ),
       ),
     );
+  }
+
+  List<DirectMessageThread> _deduplicateThreads(List<DirectMessageThread> threads) {
+    final List<DirectMessageThread> result = [];
+    for (final t in threads) {
+      final existingIdx = result.indexWhere((it) {
+        if (it.userId != null && t.userId != null && it.userId! > 0 && t.userId! > 0) {
+          if (it.userId == t.userId) return true;
+        }
+        if (it.id.isNotEmpty && t.id.isNotEmpty && it.id == t.id) return true;
+        final uA = it.username.replaceAll('@', '').toLowerCase().trim();
+        final uB = t.username.replaceAll('@', '').toLowerCase().trim();
+        return uA.isNotEmpty && uB.isNotEmpty && uA == uB;
+      });
+
+      if (existingIdx == -1) {
+        result.add(t);
+      } else {
+        final existing = result[existingIdx];
+        final combined = List<ChatMessage>.from(existing.messages);
+        for (final m in t.messages) {
+          if (!combined.any((cm) => cm.id == m.id || (cm.text == m.text && cm.timestamp == m.timestamp))) {
+            combined.add(m);
+          }
+        }
+        result[existingIdx] = existing.copyWith(
+          lastMessage: t.lastMessage.isNotEmpty ? t.lastMessage : existing.lastMessage,
+          timeAgo: (t.timeAgo.isNotEmpty && t.timeAgo != 'Just now') ? t.timeAgo : existing.timeAgo,
+          messages: combined,
+        );
+      }
+    }
+    return result;
   }
 
   Future<void> _openNotificationHub(NotificationItem item) async {
@@ -440,15 +543,20 @@ class _InboxScreenState extends State<InboxScreen> {
             // 1. Stories / Memories Horizontal Row
             SizedBox(
               height: 124,
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                itemCount: _stories.length,
-                separatorBuilder: (context, index) => const SizedBox(width: 14),
-                itemBuilder: (context, index) {
-                  final story = _stories[index];
-                  return _buildStoryCircle(context, story);
+              child: Builder(
+                builder: (context) {
+                  final trayStories = _uniqueTrayStories;
+                  return ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: trayStories.length,
+                    separatorBuilder: (context, index) => const SizedBox(width: 14),
+                    itemBuilder: (context, index) {
+                      final story = trayStories[index];
+                      return _buildStoryCircle(context, story);
+                    },
+                  );
                 },
               ),
             ),
@@ -546,9 +654,10 @@ class _InboxScreenState extends State<InboxScreen> {
                 final sourceThreads = activeThreads.isNotEmpty
                     ? activeThreads
                     : (_threads.isNotEmpty ? _threads : (isDemo ? StaticInboxData.threads : const <DirectMessageThread>[]));
-                final displayThreads = _messageFilter == 'friends'
+                final filteredThreads = _messageFilter == 'friends'
                     ? sourceThreads.where((t) => t.isFriend).toList()
                     : sourceThreads;
+                final displayThreads = _deduplicateThreads(filteredThreads);
 
                 if (displayThreads.isEmpty) {
                   return Container(

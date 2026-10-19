@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 import '../../data/datasources/story_remote_data_source.dart';
 import '../../domain/entities/shared_thought_story.dart';
 import '../widgets/story_viewers_bottom_sheet.dart';
@@ -49,6 +51,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   late List<StoryViewerItem> _activeStories;
   late int _currentIndex;
 
+  VideoPlayerController? _videoPlayerController;
+  bool _isVideoInitialized = false;
+
   StoryViewerItem get _currentItem => _activeStories[_currentIndex];
 
   @override
@@ -75,6 +80,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
     if (_activeStories.isNotEmpty) {
       StoryRemoteDataSource.instance.recordView(_currentItem.story.id);
+      _setupMediaForCurrentStory();
     }
 
     _progressController = AnimationController(
@@ -97,8 +103,53 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     }
   }
 
+  void _setupMediaForCurrentStory() {
+    _disposeVideoPlayer();
+    if (_activeStories.isEmpty) return;
+
+    final story = _currentItem.story;
+    if (story.isVideo && story.mediaUrl != null && story.mediaUrl!.isNotEmpty) {
+      _initVideoPlayer(story.mediaUrl!);
+    }
+  }
+
+  void _disposeVideoPlayer() {
+    try {
+      _videoPlayerController?.pause();
+      _videoPlayerController?.dispose();
+    } catch (_) {}
+    _videoPlayerController = null;
+    _isVideoInitialized = false;
+  }
+
+  void _initVideoPlayer(String url) {
+    try {
+      if (File(url).existsSync()) {
+        _videoPlayerController = VideoPlayerController.file(File(url));
+      } else if (url.startsWith('assets/')) {
+        _videoPlayerController = VideoPlayerController.asset(url);
+      } else {
+        _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(url));
+      }
+
+      _videoPlayerController!.initialize().then((_) {
+        if (!mounted) return;
+        _videoPlayerController!.setLooping(true);
+        _videoPlayerController!.play();
+        setState(() {
+          _isVideoInitialized = true;
+        });
+      }).catchError((err) {
+        debugPrint('[StoryViewer] Video player initialization error: $err');
+      });
+    } catch (e) {
+      debugPrint('[StoryViewer] Error starting video controller: $e');
+    }
+  }
+
   @override
   void dispose() {
+    _disposeVideoPlayer();
     _progressController.dispose();
     _replyController.dispose();
     super.dispose();
@@ -111,6 +162,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         _currentIndex++;
       });
       StoryRemoteDataSource.instance.recordView(_currentItem.story.id);
+      _setupMediaForCurrentStory();
       _replyController.clear();
       _progressController.reset();
       _progressController.forward();
@@ -126,6 +178,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         _currentIndex--;
       });
       StoryRemoteDataSource.instance.recordView(_currentItem.story.id);
+      _setupMediaForCurrentStory();
       _replyController.clear();
       _progressController.reset();
       _progressController.forward();
@@ -137,19 +190,24 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   void _openViewersSheet() {
     _progressController.stop();
+    _videoPlayerController?.pause();
     StoryViewersBottomSheet.show(
       context,
       viewCount: _currentItem.story.viewCount,
       storyId: _currentItem.story.id,
+      authorId: _currentItem.story.authorUsername,
+      authorUsername: _currentItem.story.authorUsername ?? _currentItem.authorName,
     ).then((_) {
       if (mounted && _progressController.status != AnimationStatus.completed) {
         _progressController.forward();
+        _videoPlayerController?.play();
       }
     });
   }
 
   void _showStoryOptionsMenu() {
     _progressController.stop();
+    _videoPlayerController?.pause();
 
     showModalBottomSheet(
       context: context,
@@ -337,6 +395,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     ).then((_) {
       if (mounted && _progressController.status != AnimationStatus.completed) {
         _progressController.forward();
+        _videoPlayerController?.play();
       }
     });
   }
@@ -370,10 +429,14 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                       key: const Key('story_left_tap_zone'),
                       behavior: HitTestBehavior.translucent,
                       onTap: _previousStory,
-                      onLongPressStart: (_) => _progressController.stop(),
+                      onLongPressStart: (_) {
+                        _progressController.stop();
+                        _videoPlayerController?.pause();
+                      },
                       onLongPressEnd: (_) {
                         if (mounted && _progressController.status != AnimationStatus.completed) {
                           _progressController.forward();
+                          _videoPlayerController?.play();
                         }
                       },
                       onVerticalDragEnd: (details) {
@@ -391,10 +454,14 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                       key: const Key('story_right_tap_zone'),
                       behavior: HitTestBehavior.translucent,
                       onTap: _nextStory,
-                      onLongPressStart: (_) => _progressController.stop(),
+                      onLongPressStart: (_) {
+                        _progressController.stop();
+                        _videoPlayerController?.pause();
+                      },
                       onLongPressEnd: (_) {
                         if (mounted && _progressController.status != AnimationStatus.completed) {
                           _progressController.forward();
+                          _videoPlayerController?.play();
                         }
                       },
                       onVerticalDragEnd: (details) {
@@ -919,25 +986,62 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   }
 
   Widget _buildStoryMediaBackground(SharedThoughtStory story) {
-    if (story.isImage && story.mediaUrl != null && story.mediaUrl!.isNotEmpty) {
+    final mediaUrl = story.mediaUrl;
+    final isVid = story.isVideo ||
+        (mediaUrl != null &&
+            (mediaUrl.toLowerCase().endsWith('.mp4') ||
+                mediaUrl.toLowerCase().endsWith('.mov') ||
+                mediaUrl.toLowerCase().endsWith('.mkv')));
+
+    if (isVid && mediaUrl != null && mediaUrl.isNotEmpty) {
       return Stack(
         fit: StackFit.expand,
         children: [
-          Image.network(
-            story.mediaUrl!,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(color: story.backgroundColor),
-          ),
+          Container(color: Colors.black),
+          if (_videoPlayerController != null && _isVideoInitialized)
+            Center(
+              child: SizedBox.expand(
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width: _videoPlayerController!.value.size.width,
+                    height: _videoPlayerController!.value.size.height,
+                    child: VideoPlayer(_videoPlayerController!),
+                  ),
+                ),
+              ),
+            )
+          else
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    color: Colors.white70,
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'Loading video...',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 13,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withValues(alpha: 0.7),
+                  Colors.black.withValues(alpha: 0.65),
                   Colors.transparent,
                   Colors.transparent,
-                  Colors.black.withValues(alpha: 0.85),
+                  Colors.black.withValues(alpha: 0.8),
                 ],
                 stops: const [0.0, 0.22, 0.65, 1.0],
               ),
@@ -945,48 +1049,24 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           ),
         ],
       );
-    } else if (story.isVideo && story.mediaUrl != null && story.mediaUrl!.isNotEmpty) {
+    } else if (mediaUrl != null && mediaUrl.isNotEmpty) {
+      // Photo / Image Background (Local File, Asset, or Network)
       return Stack(
         fit: StackFit.expand,
         children: [
-          Image.network(
-            story.mediaUrl!,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              color: const Color(0xFF0F172A),
-              child: const Center(
-                child: Icon(Icons.movie_creation_outlined, color: Colors.white24, size: 70),
-              ),
-            ),
-          ),
+          _buildImageWidget(mediaUrl, story.backgroundColor),
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withValues(alpha: 0.7),
+                  Colors.black.withValues(alpha: 0.65),
                   Colors.transparent,
                   Colors.transparent,
                   Colors.black.withValues(alpha: 0.85),
                 ],
                 stops: const [0.0, 0.22, 0.65, 1.0],
-              ),
-            ),
-          ),
-          Center(
-            child: Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.45),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white38, width: 2.0),
-              ),
-              child: const Icon(
-                Icons.play_arrow_rounded,
-                color: Colors.white,
-                size: 40,
               ),
             ),
           ),
@@ -995,6 +1075,32 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     }
 
     return Container(color: story.backgroundColor);
+  }
+
+  Widget _buildImageWidget(String url, Color fallbackColor) {
+    try {
+      if (File(url).existsSync()) {
+        return Image.file(
+          File(url),
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(color: fallbackColor),
+        );
+      }
+    } catch (_) {}
+
+    if (url.startsWith('assets/')) {
+      return Image.asset(
+        url,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(color: fallbackColor),
+      );
+    }
+
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => Container(color: fallbackColor),
+    );
   }
 }
 

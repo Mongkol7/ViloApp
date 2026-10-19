@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../auth/data/datasources/token_storage.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../data/datasources/story_remote_data_source.dart';
 import '../../domain/entities/shared_thought_story.dart';
@@ -7,19 +8,34 @@ import '../../../profile/presentation/screens/public_profile_screen.dart';
 class StoryViewersBottomSheet extends StatefulWidget {
   final int viewCount;
   final String? storyId;
+  final String? authorId;
+  final String? authorUsername;
 
   const StoryViewersBottomSheet({
     super.key,
     this.viewCount = 0,
     this.storyId,
+    this.authorId,
+    this.authorUsername,
   });
 
-  static Future<void> show(BuildContext context, {int viewCount = 0, String? storyId}) {
+  static Future<void> show(
+    BuildContext context, {
+    int viewCount = 0,
+    String? storyId,
+    String? authorId,
+    String? authorUsername,
+  }) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => StoryViewersBottomSheet(viewCount: viewCount, storyId: storyId),
+      builder: (_) => StoryViewersBottomSheet(
+        viewCount: viewCount,
+        storyId: storyId,
+        authorId: authorId,
+        authorUsername: authorUsername,
+      ),
     );
   }
 
@@ -40,9 +56,24 @@ class _StoryViewersBottomSheetState extends State<StoryViewersBottomSheet> {
   Future<void> _loadLiveViewers() async {
     if (widget.storyId != null) {
       final liveViewers = await StoryRemoteDataSource.instance.getStoryViewers(widget.storyId!);
+      final myUid = TokenStorage.instance.currentUserIdSync?.toString();
+      final myUsername = TokenStorage.instance.currentUsernameSync?.toLowerCase();
+      final authId = widget.authorId?.toString();
+      final authName = widget.authorUsername?.toLowerCase();
+
+      final filtered = liveViewers.where((v) {
+        final vId = v.id;
+        final vName = v.username.replaceAll('@', '').toLowerCase();
+        if (myUid != null && vId == myUid) return false;
+        if (myUsername != null && (vName == myUsername || vName == 'me' || vName == 'you')) return false;
+        if (authId != null && vId == authId) return false;
+        if (authName != null && (vName == authName || v.fullName.toLowerCase() == authName)) return false;
+        return true;
+      }).toList();
+
       if (mounted) {
         setState(() {
-          _viewers = liveViewers;
+          _viewers = filtered;
           _isLoading = false;
         });
         return;

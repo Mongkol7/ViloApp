@@ -177,15 +177,26 @@ class StoryRemoteDataSource {
       try {
         final response = await ApiClient.instance.get('/stories/$id/viewers');
         if (response is List) {
-          return response.map<StoryViewer>((item) {
+          final myUid = TokenStorage.instance.currentUserIdSync?.toString();
+          final myUsername = TokenStorage.instance.currentUsernameSync?.toLowerCase();
+          final List<StoryViewer> viewers = [];
+
+          for (final item in response) {
+            if (item is! Map) continue;
             final viewerId = item['userId']?.toString() ?? item['id']?.toString() ?? '';
-            final username = item['username'] ?? 'viewer';
+            final username = item['username']?.toString() ?? 'viewer';
+            final cleanUser = username.replaceAll('@', '').toLowerCase();
+
+            // Exclude own account from viewing list
+            if (myUid != null && viewerId == myUid) continue;
+            if (myUsername != null && (cleanUser == myUsername || cleanUser == 'me' || cleanUser == 'you')) continue;
+
             final fullName = item['displayName'] ?? username;
             final avatarUrl = (item['avatarUrl'] != null && item['avatarUrl'].toString().isNotEmpty)
                 ? item['avatarUrl']
                 : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
 
-            return StoryViewer(
+            viewers.add(StoryViewer(
               id: viewerId,
               username: '@$username',
               fullName: fullName,
@@ -193,8 +204,9 @@ class StoryRemoteDataSource {
               hasStoryRing: true,
               actionType: 'following',
               timeAgo: 'Recently',
-            );
-          }).toList();
+            ));
+          }
+          return viewers;
         }
       } catch (_) {}
     }

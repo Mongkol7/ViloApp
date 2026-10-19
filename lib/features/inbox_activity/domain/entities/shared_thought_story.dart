@@ -32,9 +32,27 @@ class SharedThoughtStory {
     this.isOwner = true,
   });
 
-  bool get isImage => mediaType == 'IMAGE' && mediaUrl != null && mediaUrl!.isNotEmpty;
-  bool get isVideo => mediaType == 'VIDEO' && mediaUrl != null && mediaUrl!.isNotEmpty;
-  bool get isText => mediaType == 'TEXT' || mediaUrl == null || mediaUrl!.isEmpty;
+  bool get isVideo {
+    if (mediaType.toUpperCase() == 'VIDEO') return true;
+    if (mediaUrl != null && mediaUrl!.isNotEmpty) {
+      final lower = mediaUrl!.toLowerCase();
+      if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.avi') || lower.endsWith('.mkv')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool get isImage {
+    if (isVideo) return false;
+    if (mediaType.toUpperCase() == 'IMAGE') return true;
+    if (mediaUrl != null && mediaUrl!.isNotEmpty) {
+      return true;
+    }
+    return false;
+  }
+
+  bool get isText => !isImage && !isVideo;
 }
 
 class StoryViewer {

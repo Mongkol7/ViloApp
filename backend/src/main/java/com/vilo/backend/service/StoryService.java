@@ -173,6 +173,7 @@ public class StoryService {
 
         return storyViewRepository.findByStoryOrderByViewedAtDesc(story)
                 .stream()
+                .filter(v -> !v.getViewer().getId().equals(story.getUser().getId()))
                 .map(v -> StoryViewerResponse.builder()
                         .id(v.getId())
                         .userId(v.getViewer().getId())
