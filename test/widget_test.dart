@@ -360,12 +360,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
 
-    // Top category shows Accounts section header and user
+    // Top category shows Accounts section header and user with You indicator
     expect(find.text('Accounts'), findsOneWidget);
     expect(find.text('Thoeung Sereymongkol'), findsOneWidget);
-    expect(find.text('@mongkol • 1.2M followers'), findsOneWidget);
+    expect(find.text('@mongkol • You'), findsOneWidget);
     expect(find.byIcon(Icons.verified_rounded), findsWidgets);
-    expect(find.text('Follow'), findsOneWidget);
+    expect(find.text('You'), findsOneWidget);
   });
 
   testWidgets('SearchScreen Top category shows all matching entities together', (WidgetTester tester) async {
@@ -380,6 +380,8 @@ void main() {
     // Top category shows all matching categories together
     expect(find.text('Accounts'), findsOneWidget);
     expect(find.text('Noir Pulse'), findsOneWidget);
+    await tester.drag(find.byType(ListView).last, const Offset(0, -300));
+    await tester.pumpAndSettle();
     expect(find.text('Sounds'), findsWidgets);
     expect(find.text('Pulse Bass Drop (Original)'), findsOneWidget);
   });

@@ -38,11 +38,11 @@ class ShopProduct {
 class ProfileMockData {
   ProfileMockData._();
 
-  static const String name = 'Alex Rivera';
-  static const String username = '@alex.codes';
+  static const String name = 'Thoeung Sereymongkol';
+  static const String username = 'mongkol';
   static const String bio =
-      'Full-stack dev turned creator 🚀 Building in public · Flutter & Dart tips daily';
-  static const String avatarUrl = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80';
+      'Flutter & Spring Boot Engineer | Vilo Core Team 🚀 Building in public';
+  static const String avatarUrl = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80';
   static const bool isVerified = true;
 
   static const List<ProfileStat> stats = [

@@ -5,6 +5,7 @@ import '../../../bottom_nav/presentation/pages/main_navigation_shell.dart';
 import '../../data/datasources/profile_remote_data_source.dart';
 import '../../data/datasources/profile_sync_service.dart';
 import '../mock/profile_mock_data.dart';
+import '../pages/edit_profile_screen.dart';
 import '../pages/followers_following_screen.dart';
 import '../style/pulse_tokens.dart';
 import '../widgets/profile_tab_content.dart';
@@ -264,29 +265,91 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
                   ),
                   const SizedBox(height: 20),
                   // Action Buttons
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildPillButton(
-                        _isFollowing ? 'Following' : 'Follow',
-                        isPrimary: !_isFollowing,
-                        onTap: _handleToggleFollow,
-                      ),
-                      const SizedBox(width: 8),
-                      _buildPillButton(
-                        'Message',
-                        isPrimary: false,
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Direct message with @$username coming soon!'),
-                              backgroundColor: const Color(0xFF2A2A30),
-                              duration: const Duration(seconds: 2),
+                  Builder(
+                    builder: (context) {
+                      final isMe = ProfileSyncService.instance.isCurrentUser(
+                        username: username,
+                        id: _loadedUser?.id.toString() ?? widget.userId?.toString(),
+                      );
+
+                      if (isMe) {
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _buildPillButton(
+                              'Edit Profile',
+                              isPrimary: false,
+                              onTap: () {
+                                final userModel = _loadedUser ??
+                                    UserModel(
+                                      id: widget.userId ?? 1,
+                                      username: username,
+                                      email: 'mongkol@vilo.app',
+                                      displayName: displayName,
+                                      bio: bio,
+                                      avatarUrl: avatarUrl,
+                                      isVerified: isVerified,
+                                      followersCount: _followersCount,
+                                      followingCount: ProfileSyncService.instance.mockFollowingCount,
+                                    );
+                                Navigator.of(context).push<UserModel>(
+                                  MaterialPageRoute(
+                                    builder: (_) => EditProfileScreen(user: userModel),
+                                  ),
+                                ).then((updated) {
+                                  if (updated != null && mounted) {
+                                    setState(() {
+                                      _loadedUser = updated;
+                                    });
+                                  }
+                                });
+                              },
                             ),
-                          );
-                        },
-                      ),
-                    ],
+                            const SizedBox(width: 8),
+                            _buildPillButton(
+                              'Share Profile',
+                              isPrimary: false,
+                              onTap: () {
+                                HapticFeedback.lightImpact();
+                                Clipboard.setData(ClipboardData(text: 'https://vilo.app/@$username'));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Profile link copied to clipboard!'),
+                                    backgroundColor: Color(0xFF2F80ED),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildPillButton(
+                            _isFollowing ? 'Following' : 'Follow',
+                            isPrimary: !_isFollowing,
+                            onTap: _handleToggleFollow,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildPillButton(
+                            'Message',
+                            isPrimary: false,
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Direct message with @$username coming soon!'),
+                                  backgroundColor: const Color(0xFF2A2A30),
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 20),
                   // Bio

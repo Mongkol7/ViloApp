@@ -3,12 +3,18 @@ class TrendingVideo {
   final String thumbnailUrl;
   final String views;
   final String title;
+  final String authorUsername;
+  final String authorName;
+  final List<String> tags;
 
   const TrendingVideo({
     required this.id,
     required this.thumbnailUrl,
     required this.views,
     this.title = '',
+    this.authorUsername = '',
+    this.authorName = '',
+    this.tags = const [],
   });
 }
 

@@ -89,12 +89,13 @@ class _SearchScreenState extends State<SearchScreen> {
         _sounds = result['sounds'] ?? [];
         _trendingVideos = result['trendingVideos'] ?? [];
         _hashtags = result['hashtags'] ?? [];
-        if (!_recentSearches.contains(query.trim())) {
-          _recentSearches.insert(0, query.trim());
-          if (_recentSearches.length > 8) {
-            _recentSearches.removeLast();
-          }
+        final term = query.trim();
+        _recentSearches.remove(term);
+        _recentSearches.insert(0, term);
+        if (_recentSearches.length > 8) {
+          _recentSearches.removeLast();
         }
+        _dataSource.addSearchHistory(term);
         _isLoading = false;
       });
     }
@@ -120,15 +121,16 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _onSelectHashtag(String tag) {
-    final query = tag.replaceAll('#', '');
-    _searchController.text = query;
-    _executeSearch(query);
+    final cleanTag = tag.startsWith('#') ? tag : '#$tag';
+    _searchController.text = cleanTag;
+    _executeSearch(cleanTag);
   }
 
   void _removeHistoryItem(String item) {
     setState(() {
       _recentSearches.remove(item);
     });
+    _dataSource.removeSearchHistory(item);
   }
 
   void _clearAllHistory() {
@@ -294,40 +296,54 @@ class _SearchScreenState extends State<SearchScreen> {
                             spacing: 8,
                             runSpacing: 8,
                             children: _recentSearches.map((term) {
-                              return Container(
-                                padding: const EdgeInsets.only(left: 12, right: 6, top: 4, bottom: 4),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF202024),
+                              return Material(
+                                color: Colors.transparent,
+                                child: InkWell(
                                   borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: AppColors.surfaceStroke, width: 0.8),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    GestureDetector(
-                                      onTap: () {
-                                        _searchController.text = term;
-                                        _executeSearch(term);
-                                      },
-                                      child: Text(
-                                        term,
-                                        style: const TextStyle(
-                                          fontFamily: 'Inter',
-                                          color: Colors.white70,
-                                          fontSize: 13,
+                                  onTap: () {
+                                    _searchController.text = term;
+                                    _executeSearch(term);
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.only(left: 10, right: 6, top: 5, bottom: 5),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF202024),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: AppColors.surfaceStroke, width: 0.8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          term.startsWith('#') ? Icons.tag_rounded : Icons.history_rounded,
+                                          size: 14,
+                                          color: AppColors.outline,
                                         ),
-                                      ),
+                                        const SizedBox(width: 5),
+                                        Text(
+                                          term,
+                                          style: const TextStyle(
+                                            fontFamily: 'Inter',
+                                            color: Colors.white70,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: () => _removeHistoryItem(term),
+                                          child: const Padding(
+                                            padding: EdgeInsets.all(2),
+                                            child: Icon(
+                                              Icons.close_rounded,
+                                              size: 15,
+                                              color: AppColors.outline,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 4),
-                                    GestureDetector(
-                                      onTap: () => _removeHistoryItem(term),
-                                      child: const Icon(
-                                        Icons.close_rounded,
-                                        size: 16,
-                                        color: AppColors.outline,
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               );
                             }).toList(),
@@ -346,9 +362,13 @@ class _SearchScreenState extends State<SearchScreen> {
                               const SizedBox(height: 24),
                             ],
 
-                            // 2. Videos matching query
+                            // 2. Videos matching query (including author's videos if searching user account)
                             if (_trendingVideos.isNotEmpty) ...[
-                              _buildSectionHeader('Videos'),
+                              _buildSectionHeader(
+                                (_accounts.length == 1 && _accounts.first.username.isNotEmpty)
+                                    ? 'Videos from ${_accounts.first.displayName.isNotEmpty ? _accounts.first.displayName : _accounts.first.username}'
+                                    : 'Videos',
+                              ),
                               const SizedBox(height: 12),
                               _buildTrendingGrid(),
                               const SizedBox(height: 28),
@@ -475,59 +495,91 @@ class _SearchScreenState extends State<SearchScreen> {
       itemCount: _trendingVideos.length,
       itemBuilder: (context, index) {
         final video = _trendingVideos[index];
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.network(
-                video.thumbnailUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: AppColors.surface,
-                  child: const Icon(Icons.movie_outlined, color: AppColors.outline),
+        return GestureDetector(
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  video.title.isNotEmpty
+                      ? '${video.title} (${video.authorUsername})'
+                      : 'Playing video by ${video.authorUsername}',
                 ),
+                backgroundColor: const Color(0xFF202024),
+                duration: const Duration(seconds: 1),
               ),
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.75),
-                      ],
-                      stops: const [0.6, 1.0],
+            );
+          },
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.network(
+                  video.thumbnailUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: AppColors.surface,
+                    child: const Icon(Icons.movie_outlined, color: AppColors.outline),
+                  ),
+                ),
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.8),
+                        ],
+                        stops: const [0.55, 1.0],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              Positioned(
-                left: 6,
-                bottom: 6,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.play_arrow_rounded,
-                      color: Colors.white,
-                      size: 14,
-                    ),
-                    const SizedBox(width: 2),
-                    Text(
-                      video.views,
+                if (video.title.isNotEmpty)
+                  Positioned(
+                    left: 6,
+                    right: 6,
+                    bottom: 22,
+                    child: Text(
+                      video.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontFamily: 'Inter',
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
                         color: Colors.white,
                       ),
                     ),
-                  ],
+                  ),
+                Positioned(
+                  left: 6,
+                  bottom: 6,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        video.views,
+                        style: const TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -537,7 +589,16 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _buildAccountItem(int index) {
     final account = _accounts[index];
     final cleanUsername = account.username.replaceAll('@', '');
-    final effectiveDisplayName = account.displayName.isNotEmpty ? account.displayName : cleanUsername;
+    final isMe = ProfileSyncService.instance.isCurrentUser(
+      username: account.username,
+      id: account.id,
+    );
+    final effectiveDisplayName = isMe
+        ? ProfileSyncService.instance.currentUserDisplayName
+        : (account.displayName.isNotEmpty ? account.displayName : cleanUsername);
+    final effectiveAvatarUrl = isMe
+        ? ProfileSyncService.instance.currentUserAvatar
+        : account.avatarUrl;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -552,7 +613,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     userId: int.tryParse(account.id),
                     username: cleanUsername,
                     displayName: effectiveDisplayName,
-                    avatarUrl: account.avatarUrl,
+                    avatarUrl: effectiveAvatarUrl,
                   ),
                 ),
               );
@@ -563,13 +624,15 @@ class _SearchScreenState extends State<SearchScreen> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  width: 1.0,
+                  color: isMe
+                      ? AppColors.primary
+                      : Colors.white.withValues(alpha: 0.15),
+                  width: isMe ? 1.5 : 1.0,
                 ),
               ),
               child: ClipOval(
                 child: Image.network(
-                  account.avatarUrl,
+                  effectiveAvatarUrl,
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) => Container(
                     color: AppColors.surface,
@@ -591,7 +654,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       userId: int.tryParse(account.id),
                       username: cleanUsername,
                       displayName: effectiveDisplayName,
-                      avatarUrl: account.avatarUrl,
+                      avatarUrl: effectiveAvatarUrl,
                     ),
                   ),
                 );
@@ -615,7 +678,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           ),
                         ),
                       ),
-                      if (account.isVerified) ...[
+                      if (account.isVerified || isMe) ...[
                         const SizedBox(width: 4),
                         const Icon(
                           Icons.verified_rounded,
@@ -627,16 +690,18 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    account.displayName.isNotEmpty
-                        ? '@$cleanUsername • ${account.followersCount}'
-                        : account.followersCount,
+                    isMe
+                        ? '@$cleanUsername • You'
+                        : (account.displayName.isNotEmpty
+                            ? '@$cleanUsername • ${account.followersCount}'
+                            : account.followersCount),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'Inter',
                       fontSize: 13,
                       fontWeight: FontWeight.w400,
-                      color: AppColors.outline,
+                      color: isMe ? Colors.white60 : AppColors.outline,
                     ),
                   ),
                 ],
@@ -644,38 +709,58 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
 
-          // Follow Button
-          GestureDetector(
-            onTap: () => _toggleFollow(index),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
+          // Follow Button or You Indicator
+          if (isMe)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
               decoration: BoxDecoration(
-                color: account.isFollowed ? AppColors.surface : Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                border: account.isFollowed
-                    ? Border.all(color: AppColors.surfaceStroke, width: 1.0)
-                    : null,
-                boxShadow: account.isFollowed
-                    ? null
-                    : [
-                        BoxShadow(
-                          color: Colors.white.withValues(alpha: 0.25),
-                          blurRadius: 12,
-                          spreadRadius: 0.5,
-                        ),
-                      ],
+                color: const Color(0xFF242428),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white24, width: 0.8),
               ),
-              child: Text(
-                account.isFollowed ? 'Following' : 'Follow',
+              child: const Text(
+                'You',
                 style: TextStyle(
                   fontFamily: 'Inter',
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: account.isFollowed ? Colors.white : Colors.black,
+                  color: Colors.white70,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            )
+          else
+            GestureDetector(
+              onTap: () => _toggleFollow(index),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
+                decoration: BoxDecoration(
+                  color: account.isFollowed ? AppColors.surface : Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: account.isFollowed
+                      ? Border.all(color: AppColors.surfaceStroke, width: 1.0)
+                      : null,
+                  boxShadow: account.isFollowed
+                      ? null
+                      : [
+                          BoxShadow(
+                            color: Colors.white.withValues(alpha: 0.25),
+                            blurRadius: 12,
+                            spreadRadius: 0.5,
+                          ),
+                        ],
+                ),
+                child: Text(
+                  account.isFollowed ? 'Following' : 'Follow',
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: account.isFollowed ? Colors.white : Colors.black,
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -686,23 +771,31 @@ class _SearchScreenState extends State<SearchScreen> {
       spacing: 8,
       runSpacing: 8,
       children: _hashtags.map((tag) {
+        final formattedTag = tag.startsWith('#') ? tag : '#$tag';
         return GestureDetector(
-          onTap: () => _onSelectHashtag(tag),
+          onTap: () => _onSelectHashtag(formattedTag),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
               color: const Color(0xFF28282D),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.white12, width: 0.8),
             ),
-            child: Text(
-              tag,
-              style: const TextStyle(
-                fontFamily: 'Inter',
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.tag_rounded, size: 14, color: Color(0xFF20D5EC)),
+                const SizedBox(width: 4),
+                Text(
+                  formattedTag.replaceAll('#', ''),
+                  style: const TextStyle(
+                    fontFamily: 'Inter',
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
         );

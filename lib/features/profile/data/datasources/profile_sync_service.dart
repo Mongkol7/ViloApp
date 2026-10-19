@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../../../auth/data/models/user_model.dart';
+import '../../presentation/mock/profile_mock_data.dart';
 
 class FollowChangeEvent {
   final int targetUserId;
@@ -31,6 +32,49 @@ class ProfileSyncService {
 
   int mockFollowersCount = 4;
   int mockFollowingCount = 3;
+
+  /// Returns the current active user's avatar URL
+  String get currentUserAvatar {
+    final cached = cachedMyProfile?.avatarUrl;
+    if (cached != null && cached.trim().isNotEmpty) {
+      return cached.trim();
+    }
+    return ProfileMockData.avatarUrl;
+  }
+
+  /// Returns the current active user's display name
+  String get currentUserDisplayName {
+    final cached = cachedMyProfile?.displayName;
+    if (cached != null && cached.trim().isNotEmpty) {
+      return cached.trim();
+    }
+    return ProfileMockData.name;
+  }
+
+  /// Returns the current active user's clean username (without @)
+  String get currentUsername {
+    final raw = (cachedMyProfile?.username != null && cachedMyProfile!.username.trim().isNotEmpty)
+        ? cachedMyProfile!.username
+        : ProfileMockData.username;
+    return raw.trim().toLowerCase().replaceAll('@', '');
+  }
+
+  /// Returns true if the given username or ID belongs to the current user
+  bool isCurrentUser({String? username, String? id}) {
+    if (id != null && id.isNotEmpty) {
+      if (cachedMyProfile != null && cachedMyProfile!.id.toString() == id) return true;
+      if (id == '1') return true;
+    }
+
+    if (username != null && username.isNotEmpty) {
+      final clean = username.trim().toLowerCase().replaceAll('@', '');
+      final myUser = currentUsername;
+      if (clean == myUser) return true;
+      if (clean == 'mongkol') return true;
+    }
+
+    return false;
+  }
 
   void notifyFollowChanged({required int targetUserId, required bool isFollowing, UserModel? targetUser}) {
     final delta = isFollowing ? 1 : -1;

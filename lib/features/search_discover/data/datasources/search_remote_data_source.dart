@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../domain/entities/search_results.dart';
 import 'static_search_data.dart';
 
@@ -9,14 +10,28 @@ class SearchRemoteDataSource {
 
   final ApiClient _client = ApiClient.instance;
 
+  final List<String> _localHistory = [
+    'neon aesthetic',
+    'tokyo cyberpunk',
+    'flutter ui',
+    'seven7',
+  ];
+
   Future<Map<String, dynamic>> search(String query, {String type = 'ALL'}) async {
-    final cleanQuery = query.trim().replaceAll(RegExp(r'^@+'), '');
+    final cleanQuery = query.trim().replaceAll(RegExp(r'^[@#]+'), '');
+    addSearchHistory(query.trim());
     try {
       final endpoint = '/search?q=${Uri.encodeComponent(cleanQuery)}&type=${Uri.encodeComponent(type)}';
       final response = await _client.get(endpoint, requireAuth: false);
 
       if (response != null && response['success'] == true && response['data'] != null) {
-        return _parseSearchSummary(response['data'], isSearch: true);
+        final parsed = _parseSearchSummary(response['data'], isSearch: true);
+        final List<TrendingVideo> remoteVideos = (parsed['trendingVideos'] as List?)?.cast<TrendingVideo>() ?? [];
+        if (remoteVideos.isEmpty) {
+          final local = _fallbackLocalSearch(query, type);
+          parsed['trendingVideos'] = local['trendingVideos'];
+        }
+        return parsed;
       }
     } catch (e) {
       debugPrint('[SearchRemoteDataSource] Live search error, falling back to local: $e');
@@ -37,7 +52,7 @@ class SearchRemoteDataSource {
 
     return {
       'trendingVideos': StaticSearchData.trendingVideos,
-      'accounts': StaticSearchData.accounts,
+      'accounts': _getSynchronizedAccounts(),
       'sounds': StaticSearchData.sounds,
       'hashtags': StaticSearchData.hashtags,
     };
@@ -47,23 +62,56 @@ class SearchRemoteDataSource {
     try {
       final response = await _client.get('/search/history', requireAuth: true);
       if (response != null && response['success'] == true && response['data'] is List) {
-        return (response['data'] as List)
+        final remote = (response['data'] as List)
             .map((item) => item['query']?.toString() ?? '')
             .where((q) => q.isNotEmpty)
             .toList();
+        if (remote.isNotEmpty) {
+          return remote;
+        }
       }
     } catch (e) {
       debugPrint('[SearchRemoteDataSource] History error: $e');
     }
-    return ['neon aesthetic', 'tokyo cyberpunk', 'flutter ui', 'seven7'];
+    return List<String>.from(_localHistory);
+  }
+
+  void addSearchHistory(String term) {
+    final trimmed = term.trim();
+    if (trimmed.isEmpty) return;
+    _localHistory.remove(trimmed);
+    _localHistory.insert(0, trimmed);
+    if (_localHistory.length > 12) {
+      _localHistory.removeLast();
+    }
+  }
+
+  void removeSearchHistory(String term) {
+    _localHistory.remove(term.trim());
   }
 
   Future<void> clearSearchHistory() async {
+    _localHistory.clear();
     try {
       await _client.delete('/search/history', requireAuth: true);
     } catch (e) {
       debugPrint('[SearchRemoteDataSource] Clear history error: $e');
     }
+  }
+
+  List<SearchAccount> _getSynchronizedAccounts() {
+    final currentAvatar = ProfileSyncService.instance.currentUserAvatar;
+    final currentDisplayName = ProfileSyncService.instance.currentUserDisplayName;
+
+    return StaticSearchData.accounts.map((acc) {
+      if (ProfileSyncService.instance.isCurrentUser(username: acc.username, id: acc.id)) {
+        return acc.copyWith(
+          avatarUrl: currentAvatar,
+          displayName: currentDisplayName,
+        );
+      }
+      return acc;
+    }).toList();
   }
 
   Map<String, dynamic> _parseSearchSummary(Map<String, dynamic> data, {bool isSearch = false}) {
@@ -77,13 +125,26 @@ class SearchRemoteDataSource {
             ? '${u['followersCount']} followers'
             : (u['followerCountFormatted']?.toString() ?? '12.4K followers');
 
+        final isMe = ProfileSyncService.instance.isCurrentUser(
+          username: username,
+          id: u['id']?.toString(),
+        );
+        final effectiveAvatar = isMe
+            ? ProfileSyncService.instance.currentUserAvatar
+            : ((u['avatarUrl'] != null && u['avatarUrl'].toString().isNotEmpty)
+                ? u['avatarUrl'].toString()
+                : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150');
+        final effectiveDisplayName = isMe
+            ? ProfileSyncService.instance.currentUserDisplayName
+            : displayName;
+
         accounts.add(SearchAccount(
           id: u['id']?.toString() ?? '',
           username: username,
-          displayName: displayName,
+          displayName: effectiveDisplayName,
           followersCount: followers,
-          avatarUrl: u['avatarUrl']?.toString() ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-          isFollowed: u['isFollowing'] == true,
+          avatarUrl: effectiveAvatar,
+          isFollowed: isMe ? false : (u['isFollowing'] == true),
           isVerified: u['isVerified'] == true,
         ));
       }
@@ -110,6 +171,8 @@ class SearchRemoteDataSource {
         videos.add(TrendingVideo(
           id: v['id']?.toString() ?? '',
           title: v['title']?.toString() ?? '',
+          authorUsername: v['authorUsername']?.toString() ?? '',
+          authorName: v['authorName']?.toString() ?? '',
           thumbnailUrl: v['thumbnailUrl']?.toString() ?? '',
           views: v['views']?.toString() ?? '1.2M',
         ));
@@ -133,23 +196,51 @@ class SearchRemoteDataSource {
     }
 
     return {
-      'accounts': accounts.isNotEmpty ? accounts : StaticSearchData.accounts,
+      'accounts': accounts.isNotEmpty ? accounts : _getSynchronizedAccounts(),
       'sounds': sounds.isNotEmpty ? sounds : StaticSearchData.sounds,
       'trendingVideos': videos.isNotEmpty ? videos : StaticSearchData.trendingVideos,
       'hashtags': hashtags.isNotEmpty ? hashtags : StaticSearchData.hashtags,
     };
   }
 
+  /// Forgiving fuzzy matcher: handles partial words, substrings, tokens, and ignores symbols
+  bool _matchesFuzzy(String target, String query) {
+    if (query.isEmpty) return true;
+    final t = target.toLowerCase();
+    final q = query.toLowerCase();
+    if (t.contains(q)) return true;
+
+    final normT = t.replaceAll(RegExp(r'[@#_\.\-\s]+'), '');
+    final normQ = q.replaceAll(RegExp(r'[@#_\.\-\s]+'), '');
+    if (normQ.isNotEmpty && normT.contains(normQ)) return true;
+
+    final tokens = q.split(RegExp(r'[\s_.\-]+')).where((tok) => tok.isNotEmpty).toList();
+    if (tokens.isNotEmpty && tokens.every((tok) => t.contains(tok) || normT.contains(tok))) {
+      return true;
+    }
+
+    // Match if any token is a prefix of any word in target
+    final words = t.split(RegExp(r'[\s_.\-]+')).where((w) => w.isNotEmpty);
+    for (final tok in tokens) {
+      if (words.any((w) => w.startsWith(tok) || tok.startsWith(w))) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   Map<String, dynamic> _fallbackLocalSearch(String query, String type) {
     final cleanQ = query.trim().toLowerCase().replaceAll(RegExp(r'^[@#]+'), '');
+    final synchronizedAccounts = _getSynchronizedAccounts();
 
-    // 1. Match Accounts (by username without @, or by displayName)
+    // 1. Match Accounts (flexible search by username or displayName)
     List<SearchAccount> filteredAccounts = [];
     if (type == 'ALL' || type == 'USERS') {
-      filteredAccounts = StaticSearchData.accounts.where((a) {
+      filteredAccounts = synchronizedAccounts.where((a) {
         final u = a.username.toLowerCase().replaceAll('@', '');
         final d = a.displayName.toLowerCase();
-        return u.contains(cleanQ) || d.contains(cleanQ);
+        return _matchesFuzzy(u, cleanQ) || _matchesFuzzy(d, cleanQ);
       }).toList();
     }
 
@@ -157,9 +248,7 @@ class SearchRemoteDataSource {
     List<SearchSound> filteredSounds = [];
     if (type == 'ALL' || type == 'SOUNDS') {
       filteredSounds = StaticSearchData.sounds.where((s) {
-        final t = s.title.toLowerCase();
-        final a = s.artist.toLowerCase();
-        return t.contains(cleanQ) || a.contains(cleanQ);
+        return _matchesFuzzy(s.title, cleanQ) || _matchesFuzzy(s.artist, cleanQ);
       }).toList();
     }
 
@@ -167,16 +256,31 @@ class SearchRemoteDataSource {
     List<String> filteredHashtags = [];
     if (type == 'ALL') {
       filteredHashtags = StaticSearchData.hashtags.where((tag) {
-        return tag.toLowerCase().replaceAll('#', '').contains(cleanQ);
+        return _matchesFuzzy(tag, cleanQ) || cleanQ.isEmpty;
       }).toList();
     }
 
-    // 4. Match Videos (by title or show sample if generic)
+    // 4. Match Videos:
+    // - by title
+    // - by author username or author display name (shows videos from that person if searching that user account!)
+    // - by hashtag tags
+    // - if an account was found, include all public videos authored by that person
+    final matchedUsernames = filteredAccounts
+        .map((a) => a.username.toLowerCase().replaceAll('@', ''))
+        .toSet();
+
     List<TrendingVideo> filteredVideos = [];
     if (type == 'ALL' || type == 'VIDEOS') {
       filteredVideos = StaticSearchData.trendingVideos.where((v) {
-        final t = v.title.toLowerCase();
-        return t.contains(cleanQ);
+        final vAuthor = v.authorUsername.toLowerCase().replaceAll('@', '');
+        final vAuthorName = v.authorName.toLowerCase();
+
+        if (matchedUsernames.contains(vAuthor)) return true;
+        if (_matchesFuzzy(v.title, cleanQ)) return true;
+        if (v.authorUsername.isNotEmpty && _matchesFuzzy(vAuthor, cleanQ)) return true;
+        if (v.authorName.isNotEmpty && _matchesFuzzy(vAuthorName, cleanQ)) return true;
+        if (v.tags.any((tag) => _matchesFuzzy(tag, cleanQ))) return true;
+        return false;
       }).toList();
     }
 
