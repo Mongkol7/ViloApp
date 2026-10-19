@@ -42,6 +42,13 @@
    - Enhanced Flutter `TrendingVideo` with full playback metadata and `toVideoModel()`, turning search grid cards into click-to-play viewers via `VideoFeedPage`.
    - Empowered client-side `_fallbackLocalSearch` to search `FeedRemoteDataSource.getAllCachedVideos()` for offline and local responsiveness.
 
+8. **Purged Mock Video Data & Artificial Counters**:
+   - Removed all 37 pre-seeded mock videos with inflated fake like counts (thousands "K" / millions "M") from the PostgreSQL database (`videos`).
+   - Cleaned `DataInitializer.java` to prevent auto-seeding mock videos with artificial counts and added startup purge routines for any legacy mock rows.
+   - Initialized new entity `Video.viewCount` to `0L` instead of synthetic `1000L` offset.
+   - Cleared `StaticSearchData.trendingVideos` mockup data and removed hardcoded `"2.4M"`, `"940K"` fallback lists from `SearchService.java`.
+   - Reset client fallback feed counters in `FeedRemoteDataSource._getFallbackFeed` and `ProfileMockData` to authentic baseline `0`.
+
 ---
 
 ## [v1.1.0] — Full-Stack Media Upload & Profile Sync

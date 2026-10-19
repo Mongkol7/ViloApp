@@ -105,7 +105,7 @@ public class Video {
         this.likeCount = likesCount != null ? likesCount : 0L;
         this.commentCount = commentsCount != null ? commentsCount : 0L;
         this.saveCount = savesCount != null ? savesCount : 0L;
-        this.viewCount = (this.likeCount * 3) + 1000L;
+        this.viewCount = 0L;
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }

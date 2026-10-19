@@ -151,12 +151,7 @@ public class SearchService {
                 }
             }
 
-            // Fallback or augment with sample videos if empty
-            if (!videoDtos.isEmpty()) {
-                response.setTrendingVideos(videoDtos);
-            } else {
-                response.setTrendingVideos(getSampleMatchingVideos(videoQuery));
-            }
+            response.setTrendingVideos(videoDtos);
         }
 
         return response;
@@ -180,7 +175,7 @@ public class SearchService {
         }
         summary.setSounds(trendingSounds.stream().map(SoundResponse::fromEntity).collect(Collectors.toList()));
 
-        // Trending video grid (prefer real database videos, fallback to sample videos)
+        // Trending video grid (real database videos only)
         List<Video> latestDbVideos = videoRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 20)).getContent();
         if (!latestDbVideos.isEmpty()) {
             List<Map<String, Object>> exploreVideos = latestDbVideos.stream()
@@ -188,7 +183,7 @@ public class SearchService {
                     .collect(Collectors.toList());
             summary.setTrendingVideos(exploreVideos);
         } else {
-            summary.setTrendingVideos(getDefaultTrendingVideos());
+            summary.setTrendingVideos(Collections.emptyList());
         }
 
         return summary;
@@ -313,80 +308,4 @@ public class SearchService {
         }
     }
 
-    private List<Map<String, Object>> getDefaultTrendingVideos() {
-        List<Map<String, Object>> videos = new ArrayList<>();
-        String[] thumbs = {
-                "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=80",
-                "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=500&auto=format&fit=crop&q=80",
-                "https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=80",
-                "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80",
-                "https://images.unsplash.com/photo-1514565131-fce0801e5785?w=500&auto=format&fit=crop&q=80",
-                "https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=500&auto=format&fit=crop&q=80",
-                "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80",
-                "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=500&auto=format&fit=crop&q=80"
-        };
-        String[] views = {"2.4M", "940K", "1.1M", "482K", "1.7M", "820K", "280K", "195K"};
-        String[] titles = {
-                "Tokyo Cyberpunk Night",
-                "Retro Synth Wave",
-                "Flutter 3.x Liquid Glass",
-                "Urban Flow Beats",
-                "Future Neon Horizon",
-                "Lo-Fi Coding Session",
-                "Aesthetic Morning Routine & Studio Vlog",
-                "Minimalist Architecture Walk"
-        };
-        String[] authors = {"noir_pulse", "bunheng", "mongkol", "rithysak", "mongkol", "mongkol", "kimliza", "trenmono"};
-        String[] authorNames = {
-                "Noir Pulse",
-                "Lim Bunheng",
-                "Thoeung Sereymongkol",
-                "Chhuon Rithysak",
-                "Thoeung Sereymongkol",
-                "Thoeung Sereymongkol",
-                "Kim Liza",
-                "Tren Mono"
-        };
-
-        for (int i = 0; i < thumbs.length; i++) {
-            Map<String, Object> map = new HashMap<>();
-            map.put("id", "trend_" + (i + 1));
-            map.put("thumbnailUrl", thumbs[i]);
-            map.put("views", views[i]);
-            map.put("title", titles[i]);
-            map.put("authorUsername", "@" + authors[i]);
-            map.put("authorName", authorNames[i]);
-            videos.add(map);
-        }
-        return videos;
-    }
-
-    private List<Map<String, Object>> getSampleMatchingVideos(String query) {
-        String clean = query.replaceAll("^[#@]+", "").trim().toLowerCase();
-        if (clean.isEmpty()) return getDefaultTrendingVideos();
-
-        String cleanNorm = clean.replaceAll("[^a-z0-9]", "");
-        String[] tokens = clean.split("[\\s_.-]+");
-        List<Map<String, Object>> all = getDefaultTrendingVideos();
-
-        return all.stream()
-                .filter(v -> {
-                    String title = String.valueOf(v.get("title")).toLowerCase();
-                    String author = String.valueOf(v.getOrDefault("authorUsername", "")).toLowerCase().replaceAll("^@", "");
-                    String authorName = String.valueOf(v.getOrDefault("authorName", "")).toLowerCase();
-                    String combined = (title + " " + author + " " + authorName).toLowerCase();
-                    String combinedNorm = combined.replaceAll("[^a-z0-9]", "");
-
-                    if (combined.contains(clean) || (cleanNorm.length() >= 2 && combinedNorm.contains(cleanNorm))) {
-                        return true;
-                    }
-                    for (String token : tokens) {
-                        if (!token.isEmpty() && (combined.contains(token) || combinedNorm.contains(token))) {
-                            return true;
-                        }
-                    }
-                    return false;
-                })
-                .collect(Collectors.toList());
-    }
 }
