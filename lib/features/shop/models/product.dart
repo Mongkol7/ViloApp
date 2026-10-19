@@ -162,6 +162,29 @@ class Product {
   @override
   int get hashCode => id.hashCode;
 
+  String get fallbackImageUrl {
+    switch (id) {
+      case 'ts-1':
+        return 'https://images.unsplash.com/photo-1544233726-9f1d2b27be8b?w=600';
+      case 'ts-2':
+        return 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=600';
+      case 'ts-3':
+        return 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=600';
+      case 'ts-4':
+        return 'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=600';
+      case 'feed-1':
+        return 'https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?w=800';
+      case 'feed-2':
+        return 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800';
+      case 'feed-3':
+        return 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=800';
+      case 'feed-4':
+        return 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800';
+      default:
+        return 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600';
+    }
+  }
+
   /// Top Sellers matching exact mobile design screenshot
   static const List<Product> screenshotTopSellers = [
     Product(
@@ -176,7 +199,7 @@ class Product {
       rating: 4.9,
       soldCount: 12000,
       description: 'Smart fuzzy logic electric rice cooker and food steamer with non-stick ceramic pot.',
-      imageUrl: 'https://images.unsplash.com/photo-1544233726-9f1d2b27be8b?w=600',
+      imageUrl: 'assets/images/mini_rice_cooker.jpg',
     ),
     Product(
       id: 'ts-2',
@@ -190,7 +213,7 @@ class Product {
       rating: 4.8,
       soldCount: 8500,
       description: 'Anodized aluminum compact power bank with 65W fast charge USB-C PD.',
-      imageUrl: 'https://images.unsplash.com/photo-1609592424109-dd9892f1b177?w=600',
+      imageUrl: 'assets/images/power_bank.jpg',
     ),
     Product(
       id: 'ts-3',
@@ -204,7 +227,7 @@ class Product {
       rating: 4.9,
       soldCount: 6700,
       description: 'Compact 60% RGB mechanical keyboard with smooth hot-swappable red switches.',
-      imageUrl: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=600',
+      imageUrl: 'assets/images/keyboard.jpg',
     ),
     Product(
       id: 'ts-4',
@@ -218,7 +241,7 @@ class Product {
       rating: 5.0,
       soldCount: 4300,
       description: 'Brand new in box flagship smartphone with titanium finish and charger.',
-      imageUrl: 'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=600',
+      imageUrl: 'assets/images/iphone_deal.jpg',
     ),
   ];
 
@@ -226,7 +249,7 @@ class Product {
   static const List<Product> screenshotFeedProducts = [
     Product(
       id: 'feed-1',
-      name: 'High-Performance Flagship Titanium Phone',
+      name: 'iPhone 17 Pro Max Case & Flagship Titanium',
       categoryId: 'cat-tech',
       category: 'Mall',
       price: 124.50,
@@ -235,12 +258,12 @@ class Product {
       seller: 'TechPro Official',
       rating: 4.8,
       soldCount: 1400,
-      description: 'Titanium flagship smartphone featuring Super Retina XDR OLED display and advanced triple lens.',
-      imageUrl: 'https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?w=800',
+      description: 'Titanium flagship smartphone case and housing featuring Super Retina XDR display protection.',
+      imageUrl: 'assets/images/iphone_17_pro_max_case.jpg',
     ),
     Product(
       id: 'feed-2',
-      name: 'Ultra Rugged Smartwatch Titanium GPS Monitoring',
+      name: 'V-Watch Ultra Rugged Titanium Smartwatch',
       categoryId: 'cat-tech',
       category: 'Mall',
       price: 89.90,
@@ -250,7 +273,7 @@ class Product {
       rating: 4.9,
       soldCount: 4200,
       description: 'Outdoor titanium GPS smartwatch with sapphire glass, heart rate ECG, and dive-ready water resistance.',
-      imageUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800',
+      imageUrl: 'assets/images/v_watch_ultra.jpg',
     ),
     Product(
       id: 'feed-3',
@@ -264,7 +287,7 @@ class Product {
       rating: 4.7,
       soldCount: 12000,
       description: 'Intense overnight barrier repair serum formulated with multi-weight hyaluronic acid and niacinamide.',
-      imageUrl: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=800',
+      imageUrl: 'assets/images/midnight_hydration_serum.jpg',
     ),
     Product(
       id: 'feed-4',
@@ -278,7 +301,7 @@ class Product {
       rating: 5.0,
       soldCount: 850,
       description: 'Studio grade wireless headphones with high-res audio codec, plush memory foam, and hybrid ANC.',
-      imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800',
+      imageUrl: 'assets/images/v_series_headphones.jpg',
     ),
   ];
 

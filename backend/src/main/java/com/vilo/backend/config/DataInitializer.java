@@ -343,7 +343,7 @@ public class DataInitializer implements CommandLineRunner {
 
             // Storefront Feed Products matching Screenshot
             Product f1 = Product.builder()
-                    .title("High-Performance Flagship Titanium Phone")
+                    .title("iPhone 17 Pro Max Case & Titanium Armor")
                     .description("Super Retina XDR OLED display, A18 Pro chip, and aerospace-grade titanium frame.")
                     .price(new BigDecimal("124.50"))
                     .originalPrice(new BigDecimal("299.00"))
@@ -357,7 +357,7 @@ public class DataInitializer implements CommandLineRunner {
                     .build();
 
             Product f2 = Product.builder()
-                    .title("Ultra Rugged Smartwatch Titanium GPS Monitoring")
+                    .title("V-Watch Ultra Rugged Titanium Smartwatch")
                     .description("Dual-frequency GPS, 100m water resistance, ECG sensor, and ultra-bright 3000 nit display.")
                     .price(new BigDecimal("89.90"))
                     .originalPrice(new BigDecimal("149.00"))

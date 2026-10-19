@@ -446,13 +446,9 @@ class _ShopFeedScreenState extends State<ShopFeedScreen> {
             width: 150,
             child: ClipRRect(
               borderRadius: const BorderRadius.horizontal(right: Radius.circular(16)),
-              child: Image.network(
-                'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=600',
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: const Color(0xFF1F2937),
-                  child: const Icon(Icons.headphones, color: Colors.white24, size: 40),
-                ),
+              child: _buildProductImage(
+                'assets/images/mega_sale_banner.jpg',
+                fallbackUrl: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=600',
               ),
             ),
           ),
@@ -738,13 +734,9 @@ class _ShopFeedScreenState extends State<ShopFeedScreen> {
                   Positioned.fill(
                     child: ClipRRect(
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                      child: Image.network(
+                      child: _buildProductImage(
                         product.imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: const Color(0xFF27272A),
-                          child: const Icon(Icons.shopping_bag, color: Colors.white24, size: 28),
-                        ),
+                        fallbackUrl: product.fallbackImageUrl,
                       ),
                     ),
                   ),
@@ -836,32 +828,9 @@ class _ShopFeedScreenState extends State<ShopFeedScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.network(
-                    product.imageUrl.isNotEmpty
-                        ? product.imageUrl
-                        : 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600',
-                    fit: BoxFit.cover,
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return Container(
-                        color: const Color(0xFF1C1C1E),
-                        child: const Center(
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24),
-                          ),
-                        ),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: const Color(0xFF1C1C1E),
-                        child: const Center(
-                          child: Icon(Icons.image_not_supported_outlined, color: Colors.white24, size: 36),
-                        ),
-                      );
-                    },
+                  _buildProductImage(
+                    product.imageUrl,
+                    fallbackUrl: product.fallbackImageUrl,
                   ),
                   if (product.badge != null)
                     Positioned(
@@ -1000,6 +969,76 @@ class _ShopFeedScreenState extends State<ShopFeedScreen> {
       return const Color(0xFF3B82F6);
     }
     return const Color(0xFF6B7280);
+  }
+
+  /// Image loader that supports local assets with automatic network fallback
+  Widget _buildProductImage(
+    String imagePath, {
+    String? fallbackUrl,
+    BoxFit fit = BoxFit.cover,
+  }) {
+    final fallbackNetwork = fallbackUrl ??
+        'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600';
+
+    if (imagePath.startsWith('assets/')) {
+      return Image.asset(
+        imagePath,
+        fit: fit,
+        errorBuilder: (context, error, stackTrace) {
+          return Image.network(
+            fallbackNetwork,
+            fit: fit,
+            errorBuilder: (context, error, stackTrace) => Container(
+              color: const Color(0xFF1C1C1E),
+              child: const Center(
+                child: Icon(Icons.shopping_bag_outlined, color: Colors.white24, size: 28),
+              ),
+            ),
+          );
+        },
+      );
+    } else if (imagePath.startsWith('http')) {
+      return Image.network(
+        imagePath,
+        fit: fit,
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return Container(
+            color: const Color(0xFF1C1C1E),
+            child: const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24),
+              ),
+            ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) {
+          return Image.network(
+            fallbackNetwork,
+            fit: fit,
+            errorBuilder: (context, error, stackTrace) => Container(
+              color: const Color(0xFF1C1C1E),
+              child: const Center(
+                child: Icon(Icons.shopping_bag_outlined, color: Colors.white24, size: 28),
+              ),
+            ),
+          );
+        },
+      );
+    } else {
+      return Image.network(
+        fallbackNetwork,
+        fit: fit,
+        errorBuilder: (context, error, stackTrace) => Container(
+          color: const Color(0xFF1C1C1E),
+          child: const Center(
+            child: Icon(Icons.shopping_bag_outlined, color: Colors.white24, size: 28),
+          ),
+        ),
+      );
+    }
   }
 
   // ── Skeletons ───────────────────────────────────────────────────
