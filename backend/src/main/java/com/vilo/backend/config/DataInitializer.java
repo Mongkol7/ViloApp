@@ -20,15 +20,18 @@ public class DataInitializer implements CommandLineRunner {
     private final UserRepository userRepository;
     private final com.vilo.backend.repository.SoundRepository soundRepository;
     private final com.vilo.backend.repository.HashtagRepository hashtagRepository;
+    private final com.vilo.backend.repository.SearchHistoryRepository searchHistoryRepository;
     private final PasswordEncoder passwordEncoder;
 
     public DataInitializer(UserRepository userRepository,
                            com.vilo.backend.repository.SoundRepository soundRepository,
                            com.vilo.backend.repository.HashtagRepository hashtagRepository,
+                           com.vilo.backend.repository.SearchHistoryRepository searchHistoryRepository,
                            PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.soundRepository = soundRepository;
         this.hashtagRepository = hashtagRepository;
+        this.searchHistoryRepository = searchHistoryRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -208,6 +211,17 @@ public class DataInitializer implements CommandLineRunner {
             hashtagRepository.save(new com.vilo.backend.entity.Hashtag("uiuxdesign", 620000L, false));
             hashtagRepository.save(new com.vilo.backend.entity.Hashtag("shortvideo", 450000L, false));
             log.info("Hashtags seeded successfully!");
+        }
+
+        if (searchHistoryRepository.count() == 0) {
+            userRepository.findByUsername("mongkol").ifPresent(user -> {
+                log.info("Seeding initial search history for user mongkol...");
+                searchHistoryRepository.save(new com.vilo.backend.entity.SearchHistory(user, "seven7", "ALL"));
+                searchHistoryRepository.save(new com.vilo.backend.entity.SearchHistory(user, "flutter ui", "ALL"));
+                searchHistoryRepository.save(new com.vilo.backend.entity.SearchHistory(user, "tokyo cyberpunk", "ALL"));
+                searchHistoryRepository.save(new com.vilo.backend.entity.SearchHistory(user, "neon aesthetic", "ALL"));
+                log.info("Initial search history seeded!");
+            });
         }
     }
 

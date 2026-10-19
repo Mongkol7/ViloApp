@@ -33,11 +33,9 @@ class ApiClient {
       'Accept': 'application/json',
     };
 
-    if (requireAuth) {
-      final token = await TokenStorage.instance.getAccessToken();
-      if (token != null && token.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $token';
-      }
+    final token = await TokenStorage.instance.getAccessToken();
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
     }
 
     return headers;

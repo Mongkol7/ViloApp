@@ -50,13 +50,32 @@ public class SearchController {
         return ResponseEntity.ok(ApiResponse.ok("Search history fetched successfully", history));
     }
 
-    @DeleteMapping("/search/history")
-    @Operation(summary = "Clear all search history", description = "Clears all search history records for the current user")
-    public ResponseEntity<ApiResponse<Void>> clearSearchHistory(Authentication authentication) {
-        if (authentication != null) {
-            searchService.clearSearchHistory(authentication.getName());
+    @PostMapping("/search/history")
+    @Operation(summary = "Record search history", description = "Explicitly saves a search query in database for the authenticated user")
+    public ResponseEntity<ApiResponse<Void>> addSearchHistory(
+            @RequestBody(required = false) java.util.Map<String, String> body,
+            Authentication authentication) {
+        if (authentication != null && body != null && body.containsKey("query")) {
+            String query = body.get("query");
+            String searchType = body.getOrDefault("type", "ALL");
+            searchService.recordSearchHistory(authentication.getName(), query, searchType);
         }
-        return ResponseEntity.ok(ApiResponse.ok("Search history cleared successfully", null));
+        return ResponseEntity.ok(ApiResponse.ok("Search history recorded successfully", null));
+    }
+
+    @DeleteMapping("/search/history")
+    @Operation(summary = "Clear search history or remove specific query", description = "Deletes all or a specific query from user's history")
+    public ResponseEntity<ApiResponse<Void>> clearSearchHistory(
+            @RequestParam(value = "q", required = false) String query,
+            Authentication authentication) {
+        if (authentication != null) {
+            if (query != null && !query.trim().isEmpty()) {
+                searchService.deleteSearchHistoryByQuery(authentication.getName(), query.trim());
+            } else {
+                searchService.clearSearchHistory(authentication.getName());
+            }
+        }
+        return ResponseEntity.ok(ApiResponse.ok("Search history updated successfully", null));
     }
 
     @DeleteMapping("/search/history/{id}")
