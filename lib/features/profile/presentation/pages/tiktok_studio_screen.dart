@@ -14,7 +14,10 @@ class TikTokStudioScreen extends StatelessWidget {
           icon: const Icon(Icons.chevron_left, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('TikTok Studio', style: TextStyle(color: Colors.white, fontSize: 16)),
+        title: const Text(
+          'TikTok Studio',
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
         centerTitle: true,
         actions: [
           const Icon(Icons.settings_outlined, color: Colors.white),
@@ -38,7 +41,12 @@ class TikTokStudioScreen extends StatelessWidget {
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _AnalyticsItem('POST VIEWS', '477', '+ 155% 7d', Colors.redAccent),
+                  _AnalyticsItem(
+                    'POST VIEWS',
+                    '477',
+                    '+ 155% 7d',
+                    Colors.redAccent,
+                  ),
                   _AnalyticsItem('FOLLOWERS', '0', '0% 7d', Colors.grey),
                   _AnalyticsItem('LIKES', '49', '+ 390% 7d', Colors.redAccent),
                 ],
@@ -53,14 +61,16 @@ class TikTokStudioScreen extends StatelessWidget {
                 children: [
                   _MonetisationCard(
                     title: 'Service+',
-                    desc: 'Build connections with potential clients while you\'re LIVE.',
+                    desc:
+                        'Build connections with potential clients while you\'re LIVE.',
                     color: Colors.cyanAccent,
                     buttonText: 'Join',
                   ),
                   const SizedBox(width: 12),
                   _MonetisationCard(
                     title: 'Subscriptions',
-                    desc: 'Connect more deeply with viewers through exclusive content.',
+                    desc:
+                        'Connect more deeply with viewers through exclusive content.',
                     color: Colors.pinkAccent,
                     buttonText: 'Learn more',
                   ),
@@ -106,7 +116,9 @@ class TikTokStudioScreen extends StatelessWidget {
             backgroundColor: Colors.white,
             foregroundColor: Colors.black,
             minimumSize: const Size(double.infinity, 50),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(25),
+            ),
           ),
         ),
       ),
@@ -119,7 +131,14 @@ class TikTokStudioScreen extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
+          ),
           const Icon(Icons.chevron_right, color: Colors.grey),
         ],
       ),
@@ -139,7 +158,14 @@ class _AnalyticsItem extends StatelessWidget {
       children: [
         Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
         const SizedBox(height: 4),
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 4),
         Text(trend, style: TextStyle(color: trendColor, fontSize: 10)),
       ],
@@ -150,20 +176,38 @@ class _AnalyticsItem extends StatelessWidget {
 class _MonetisationCard extends StatelessWidget {
   final String title, desc, buttonText;
   final Color color;
-  const _MonetisationCard({required this.title, required this.desc, required this.color, required this.buttonText});
+  const _MonetisationCard({
+    required this.title,
+    required this.desc,
+    required this.color,
+    required this.buttonText,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: 250,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 18)),
+          Text(
+            title,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
+          ),
           const SizedBox(height: 8),
-          Text(desc, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          Text(
+            desc,
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
           const SizedBox(height: 16),
           ElevatedButton(
             onPressed: () {},
@@ -188,13 +232,19 @@ class _ToolCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(icon, color: Colors.pinkAccent, size: 20),
           const SizedBox(width: 8),
-          Text(label, style: const TextStyle(color: Colors.white, fontSize: 13)),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+          ),
         ],
       ),
     );

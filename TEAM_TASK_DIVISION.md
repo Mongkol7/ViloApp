@@ -181,6 +181,8 @@ graph TD
 | **Sok Rithysak** | **E-Commerce & Orders** | Products, Categories, Cart, Order Checkout | `products`, `categories`, `cart_items`, `orders` | Shop Tab, Cart, Checkout, Product Detail |
 | **Set Kimliza** | **Chat & Real-Time** | WebSocket/STOMP, 24h Stories, Notifications | `conversations`, `messages`, `stories`, `notifications` | Inbox, Chat Detail, Story Bottom Sheet |
 | **Tren Mono** | **Search, Sounds & DevOps** | Global Search, Sounds, Swagger UI, Global Errors | `sounds`, `hashtags`, `video_hashtags`, `search_history` | Search & Discover, Sound Detail, Music Picker |
+| **Try Phien** | **Creative Media & Assets** | Media Encoding, Audio Sync & Content Pipeline | `videos`, `video_tags` | Camera Studio, Media Upload & Audio Sync |
+| **Nen Seanghai** | **UI/UX & Mobile Layouts** | Responsive Views, Animations & Haptics | `users`, `thought_stories` | Bottom Bar, Feed Overlays, Animated Gestures |
 
 ---
 

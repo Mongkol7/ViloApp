@@ -48,6 +48,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
   List<VideoFeedModel> _savedVideos = [];
   List<VideoFeedModel> _likedVideos = [];
   bool _isLoading = false;
+  final Set<int> _loadingCategories = <int>{};
 
   @override
   void initState() {
@@ -154,6 +155,67 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _refreshCategory(int categoryIndex) async {
+    if (categoryIndex < 0 || categoryIndex > 4 ||
+        _loadingCategories.contains(categoryIndex)) {
+      return;
+    }
+
+    final identifier = (widget.username != null && widget.username!.isNotEmpty)
+        ? widget.username!
+        : widget.userId?.toString();
+    if (identifier == null) return;
+
+    final minimumAnimation = Future<void>.delayed(const Duration(milliseconds: 450));
+    setState(() => _loadingCategories.add(categoryIndex));
+    try {
+      switch (categoryIndex) {
+        case 1:
+          final videos = await FeedRemoteDataSource.instance.getUserVideos(
+            identifier,
+            forceRefresh: true,
+          );
+          if (mounted) setState(() => _userVideos = List.from(videos));
+          break;
+        case 3:
+          if (ProfileSyncService.instance.isCurrentUser(
+            username: widget.username,
+            id: widget.userId?.toString() ?? identifier,
+          )) {
+            final saved = await FeedRemoteDataSource.instance.getSavedVideos();
+            if (mounted) setState(() => _savedVideos = List.from(saved));
+          }
+          break;
+        case 4:
+          final liked = await FeedRemoteDataSource.instance.getLikedVideos(userId: identifier);
+          if (mounted) setState(() => _likedVideos = List.from(liked));
+          break;
+      }
+    } finally {
+      await minimumAnimation;
+      if (mounted) setState(() => _loadingCategories.remove(categoryIndex));
+    }
+  }
+
+  Widget _buildCategoryPage(int categoryIndex, List<Widget> slivers) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: slivers,
+        ),
+        if (_loadingCategories.contains(categoryIndex))
+          const ColoredBox(
+            color: Color(0x66000000),
+            child: Center(
+              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
+            ),
+          ),
+      ],
+    );
   }
 
   @override
@@ -293,9 +355,9 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
     final avatarUrl = _loadedUser?.avatarUrl?.isNotEmpty == true
         ? _loadedUser!.avatarUrl!
         : (widget.avatarUrl?.isNotEmpty == true ? widget.avatarUrl! : ProfileMockData.avatarUrl);
-    final bio = _loadedUser?.bio?.isNotEmpty == true
-        ? _loadedUser!.bio!
-        : (widget.bio?.isNotEmpty == true ? widget.bio! : ProfileMockData.bio);
+    final bio = _loadedUser?.bio != null
+        ? (_loadedUser!.bio!.trim().isNotEmpty ? _loadedUser!.bio!.trim() : 'No bio yet.')
+        : (widget.bio?.isNotEmpty == true ? widget.bio! : 'No bio yet.');
     final isVerified = _loadedUser?.isVerified ?? false;
 
     return Scaffold(
@@ -517,6 +579,7 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
               delegate: _SliverTabBarDelegate(
                 TabBar(
                   controller: _tabController,
+                  onTap: _refreshCategory,
                   indicatorColor: Colors.white,
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.grey,
@@ -535,13 +598,13 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
         body: ViloTabBarView(
           controller: _tabController,
           children: [
-CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(0, userSounds: _userSounds, isLoading: _isLoading),
+            _buildCategoryPage(
+              0,
+              buildProfileTabSlivers(0, userSounds: _userSounds, isLoading: _isLoading),
             ), // Music (Index 0)
-            CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(
+            _buildCategoryPage(
+              1,
+              buildProfileTabSlivers(
                 1,
                 userVideos: _userVideos,
                 isLoading: _isLoading,
@@ -559,16 +622,11 @@ CustomScrollView(
                 },
               ),
             ), // Grid (Index 1)
-            CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(2),
-            ), // Shop
-            CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(
+            _buildCategoryPage(2, buildProfileTabSlivers(2)), // Shop
+            _buildCategoryPage(3, buildProfileTabSlivers(
                 3,
                 savedVideos: _savedVideos,
-                isLoading: _isLoading,
+                isLoading: _isLoading || _loadingCategories.contains(3),
                 isCurrentUser: ProfileSyncService.instance.isCurrentUser(
                   username: username,
                   id: _loadedUser?.id.toString() ?? widget.userId?.toString(),
@@ -586,12 +644,10 @@ CustomScrollView(
                 },
               ),
             ), // Saved
-            CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(
+            _buildCategoryPage(4, buildProfileTabSlivers(
                 4,
                 likedVideos: _likedVideos,
-                isLoading: _isLoading,
+                isLoading: _isLoading || _loadingCategories.contains(4),
                 onLikedVideoTap: (video, index) {
                   Navigator.of(context).push(
                     MaterialPageRoute(

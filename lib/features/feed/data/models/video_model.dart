@@ -182,6 +182,20 @@ class VideoModel {
     return '$host/$clean';
   }
 
+  /// Resolves any media URL (including assets/...) to an absolute backend HTTP streaming URL
+  static String toNetworkMediaUrl(String? url) {
+    if (url == null || url.trim().isEmpty) return '';
+    final clean = url.trim();
+    if (clean.startsWith('http://') || clean.startsWith('https://')) {
+      return clean;
+    }
+    final host = ApiClient.baseUrl.replaceAll('/api/v1', '');
+    if (clean.startsWith('/')) {
+      return '$host$clean';
+    }
+    return '$host/$clean';
+  }
+
   factory VideoModel.fromJson(Map<String, dynamic> json) {
     final rawVideoUrl = json['videoUrl']?.toString() ?? '';
     final rawThumbUrl = json['thumbnailUrl']?.toString();
@@ -396,10 +410,10 @@ class VideoModel {
   String get saves => formattedSaves;
   String get views => formattedViews;
 
-  String get formattedLikes => (likeCount > 0 || _formattedLikes == null) ? _formatCount(likeCount) : _formattedLikes!;
-  String get formattedComments => (commentCount > 0 || _formattedComments == null) ? _formatCount(commentCount) : _formattedComments!;
-  String get formattedSaves => (saveCount > 0 || _formattedSaves == null) ? _formatCount(saveCount) : _formattedSaves!;
-  String get formattedViews => (viewCount > 0 || _formattedViews == null) ? _formatCount(viewCount) : _formattedViews!;
+  String get formattedLikes => (likeCount > 0 || _formattedLikes == null) ? _formatCount(likeCount) : _formattedLikes;
+  String get formattedComments => (commentCount > 0 || _formattedComments == null) ? _formatCount(commentCount) : _formattedComments;
+  String get formattedSaves => (saveCount > 0 || _formattedSaves == null) ? _formatCount(saveCount) : _formattedSaves;
+  String get formattedViews => (viewCount > 0 || _formattedViews == null) ? _formatCount(viewCount) : _formattedViews;
 
   static String _formatCount(int count) {
     if (count >= 1000000) {

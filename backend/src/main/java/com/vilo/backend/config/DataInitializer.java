@@ -1,18 +1,24 @@
 package com.vilo.backend.config;
 
-import com.vilo.backend.entity.*;
-import com.vilo.backend.repository.*;
+import com.vilo.backend.entity.Role;
+import com.vilo.backend.entity.User;
+import com.vilo.backend.entity.Video;
+import com.vilo.backend.repository.UserRepository;
+import com.vilo.backend.repository.VideoRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Component
 public class DataInitializer implements CommandLineRunner {
@@ -20,352 +26,397 @@ public class DataInitializer implements CommandLineRunner {
     private static final Logger log = LoggerFactory.getLogger(DataInitializer.class);
 
     private final UserRepository userRepository;
+    private final com.vilo.backend.repository.SoundRepository soundRepository;
+    private final com.vilo.backend.repository.HashtagRepository hashtagRepository;
+    private final com.vilo.backend.repository.SearchHistoryRepository searchHistoryRepository;
     private final VideoRepository videoRepository;
-    private final SoundRepository soundRepository;
-    private final VideoLikeRepository videoLikeRepository;
-    private final VideoSaveRepository videoSaveRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JdbcTemplate jdbcTemplate;
 
     public DataInitializer(UserRepository userRepository,
+                           com.vilo.backend.repository.SoundRepository soundRepository,
+                           com.vilo.backend.repository.HashtagRepository hashtagRepository,
+                           com.vilo.backend.repository.SearchHistoryRepository searchHistoryRepository,
                            VideoRepository videoRepository,
-                           SoundRepository soundRepository,
-                           VideoLikeRepository videoLikeRepository,
-                           VideoSaveRepository videoSaveRepository,
-                           PasswordEncoder passwordEncoder,
-                           JdbcTemplate jdbcTemplate) {
+                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
-        this.videoRepository = videoRepository;
         this.soundRepository = soundRepository;
-        this.videoLikeRepository = videoLikeRepository;
-        this.videoSaveRepository = videoSaveRepository;
+        this.hashtagRepository = hashtagRepository;
+        this.searchHistoryRepository = searchHistoryRepository;
+        this.videoRepository = videoRepository;
         this.passwordEncoder = passwordEncoder;
-        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
     @Transactional
     public void run(String... args) {
-        log.info("==================================================================");
-        log.info("STEP 1: WIPING DATABASE IN FOREIGN-KEY-SAFE ORDER FOR FRESH START");
-        log.info("==================================================================");
+        log.info("Checking and updating platform users and team creators...");
 
-        try {
-            jdbcTemplate.execute("DELETE FROM video_likes");
-            jdbcTemplate.execute("DELETE FROM video_saves");
-            jdbcTemplate.execute("DELETE FROM comments");
-            jdbcTemplate.execute("DELETE FROM video_tags");
-            jdbcTemplate.execute("DELETE FROM search_history");
-            jdbcTemplate.execute("DELETE FROM videos");
-            jdbcTemplate.execute("DELETE FROM sounds");
-            jdbcTemplate.execute("DELETE FROM refresh_tokens");
-            jdbcTemplate.execute("DELETE FROM followers_following");
-            jdbcTemplate.execute("DELETE FROM user_roles");
-            jdbcTemplate.execute("DELETE FROM users");
-            jdbcTemplate.execute("DELETE FROM hashtags");
-            log.info("All existing tables successfully wiped clean via native SQL in FK-safe order!");
-        } catch (Exception e) {
-            log.warn("Database wipe notice: {}", e.getMessage());
+        // Migrate legacy usernames if present
+        userRepository.findByUsername("mono_t").ifPresent(oldUser -> {
+            oldUser.setUsername("trenmono");
+            oldUser.setDisplayName("Tren Mono");
+            oldUser.setEmail("trenmono@vilo.app");
+            userRepository.save(oldUser);
+        });
+        userRepository.findByUsername("kimliza").ifPresent(oldUser -> {
+            oldUser.setUsername("setkimliza");
+            oldUser.setDisplayName("Set Kimliza");
+            oldUser.setEmail("setkimliza@vilo.app");
+            userRepository.save(oldUser);
+        });
+        userRepository.findByUsername("rithysak").ifPresent(user -> {
+            user.setDisplayName("Sok Rithysak");
+            userRepository.save(user);
+        });
+
+        User mongkol = getOrCreateUser("mongkol", "mongkol@vilo.app", "password123",
+                "Thoeung Sereymongkol", "Flutter & Spring Boot Engineer | Vilo Core Team",
+                "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+        User bunheng = getOrCreateUser("bunheng", "bunheng@vilo.app", "password123",
+                "Lim Bunheng", "Video Engine & Feed Specialist | Vilo Team",
+                "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+        User rithysak = getOrCreateUser("rithysak", "rithysak@vilo.app", "password123",
+                "Sok Rithysak", "Mobile UI/UX Developer & Orders Lead",
+                "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+        User setkimliza = getOrCreateUser("setkimliza", "setkimliza@vilo.app", "password123",
+                "Set Kimliza", "Social Stories & Real-Time Chat Specialist",
+                "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+        User trenmono = getOrCreateUser("trenmono", "trenmono@vilo.app", "password123",
+                "Tren Mono", "Search, Sounds & Discovery Specialist",
+                "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+        User tryphien = getOrCreateUser("tryphien", "tryphien@vilo.app", "password123",
+                "Try Phien", "Creative Media & Visual Direction | Vilo Team",
+                "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+        User nenseanghai = getOrCreateUser("nenseanghai", "nenseanghai@vilo.app", "password123",
+                "Nen Seanghai", "Full-Stack Engineer & Interactive Design",
+                "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+        getOrCreateUser("admin", "admin@vilo.app", "admin123",
+                "Vilo System Admin", "System Administrator",
+                "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_ADMIN));
+
+        User sophia = getOrCreateUser("sophia_art", "sophia@vilo.app", "password123",
+                "Sophia Vance", "Digital Artist & Visual Storyteller",
+                "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+        User alexDancer = getOrCreateUser("alex_dancer", "alex@vilo.app", "password123",
+                "Alex Rivers", "Choreographer & Movement Director",
+                "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=500&auto=format&fit=crop&q=80",
+                false, Set.of(Role.ROLE_USER));
+
+        User lindaTravel = getOrCreateUser("linda_travel", "linda@vilo.app", "password123",
+                "Linda Chen", "Wanderlust | Visiting 40+ countries",
+                "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+        User davi = getOrCreateUser("davi_beats", "davi@vilo.app", "password123",
+                "David Miller", "Lo-fi producer & sound designer",
+                "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+        getOrCreateUser("sarah_fit", "sarah@vilo.app", "password123",
+                "Sarah Connor", "Daily HIIT & Mindful Wellness",
+                "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80",
+                false, Set.of(Role.ROLE_USER));
+
+        getOrCreateUser("michael_vlogs", "michael@vilo.app", "password123",
+                "Michael Scott", "Urban life & cinematic mini-docs",
+                "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=500&auto=format&fit=crop&q=80",
+                false, Set.of(Role.ROLE_USER));
+
+        User emilyChef = getOrCreateUser("emily_chef", "emily@vilo.app", "password123",
+                "Emily Watson", "Pastry arts & sourdough adventures",
+                "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+        getOrCreateUser("johnny_skate", "johnny@vilo.app", "password123",
+                "Johnny Blaze", "Street skate clips & skatepark tours",
+                "https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?w=500&auto=format&fit=crop&q=80",
+                false, Set.of(Role.ROLE_USER));
+
+        User cloeDesign = getOrCreateUser("cloe_design", "cloe@vilo.app", "password123",
+                "Chloe Martin", "Product Designer & 3D Blender enthusiast",
+                "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+        User kevinTech = getOrCreateUser("kevin_tech", "kevin@vilo.app", "password123",
+                "Kevin Zhang", "Next-gen tech breakdown & desk setups",
+                "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+        getOrCreateUser("anna_photo", "anna@vilo.app", "password123",
+                "Anna Petrova", "Film portraits & street photography",
+                "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500&auto=format&fit=crop&q=80",
+                false, Set.of(Role.ROLE_USER));
+
+        getOrCreateUser("lucas_gaming", "lucas@vilo.app", "password123",
+                "Lucas Silva", "Speedrunner & competitive gamer",
+                "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=500&auto=format&fit=crop&q=80",
+                false, Set.of(Role.ROLE_USER));
+
+        User mayaMusic = getOrCreateUser("maya_music", "maya@vilo.app", "password123",
+                "Maya Lin", "Acoustic guitar & indie songwriting",
+                "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
+        getOrCreateUser("ryan_explores", "ryan@vilo.app", "password123",
+                "Ryan Walker", "Wild camping & drone aerial shots",
+                "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80",
+                false, Set.of(Role.ROLE_USER));
+
+        // Set up team follow graph
+        ensureFollow(bunheng, mongkol);
+        ensureFollow(rithysak, mongkol);
+        ensureFollow(setkimliza, mongkol);
+        ensureFollow(trenmono, mongkol);
+        ensureFollow(tryphien, mongkol);
+        ensureFollow(nenseanghai, mongkol);
+        ensureFollow(sophia, mongkol);
+
+        ensureFollow(mongkol, bunheng);
+        ensureFollow(mongkol, rithysak);
+        ensureFollow(mongkol, setkimliza);
+        ensureFollow(mongkol, trenmono);
+        ensureFollow(mongkol, tryphien);
+        ensureFollow(mongkol, nenseanghai);
+        ensureFollow(mongkol, sophia);
+        ensureFollow(mongkol, davi);
+
+        log.info("Platform users and creator team verified successfully!");
+
+        if (soundRepository.count() == 0) {
+            log.info("Seeding popular audio tracks & sounds...");
+            soundRepository.save(new com.vilo.backend.entity.Sound(
+                    "Midnight City Pulse", "Neon Dreams",
+                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+                    "https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=80",
+                    45, 1840000L, true));
+            soundRepository.save(new com.vilo.backend.entity.Sound(
+                    "Cyber Tokyo Bass Drop", "Akira Sound Lab",
+                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+                    "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=500&auto=format&fit=crop&q=80",
+                    30, 952000L, true));
+            soundRepository.save(new com.vilo.backend.entity.Sound(
+                    "Seven7 Team Anthem", "Seven7 Beats",
+                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+                    "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80",
+                    60, 820000L, true));
+            soundRepository.save(new com.vilo.backend.entity.Sound(
+                    "Phnom Penh Sunset Lo-Fi", "Khmer Lo-Fi Crew",
+                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+                    "https://images.unsplash.com/photo-1514565131-fce0801e5785?w=500&auto=format&fit=crop&q=80",
+                    35, 542000L, true));
+            soundRepository.save(new com.vilo.backend.entity.Sound(
+                    "Liquid Glass Motion", "Design Beats",
+                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
+                    "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=80",
+                    25, 310000L, true));
+            soundRepository.save(new com.vilo.backend.entity.Sound(
+                    "Deep Focus Coding", "DevPulse",
+                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3",
+                    "https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=500&auto=format&fit=crop&q=80",
+                    50, 295000L, false));
+            soundRepository.save(new com.vilo.backend.entity.Sound(
+                    "Retro 80s Synth Groove", "Vaporwave Boy",
+                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3",
+                    "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&auto=format&fit=crop&q=80",
+                    40, 180000L, false));
+            soundRepository.save(new com.vilo.backend.entity.Sound(
+                    "Angkor Sunrise Ambient", "Heritage Audio",
+                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
+                    "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=500&auto=format&fit=crop&q=80",
+                    55, 125000L, false));
+            log.info("Sounds seeded successfully!");
         }
 
-        log.info("==================================================================");
-        log.info("STEP 2: SEEDING 5 CORE USERS");
-        log.info("==================================================================");
+        if (hashtagRepository.count() == 0) {
+            log.info("Seeding trending hashtags...");
+            hashtagRepository.save(new com.vilo.backend.entity.Hashtag("viloapp", 3200000L, true));
+            hashtagRepository.save(new com.vilo.backend.entity.Hashtag("flutterdev", 2100000L, true));
+            hashtagRepository.save(new com.vilo.backend.entity.Hashtag("tokyocoding", 1500000L, true));
+            hashtagRepository.save(new com.vilo.backend.entity.Hashtag("springsecurity", 980000L, true));
+            hashtagRepository.save(new com.vilo.backend.entity.Hashtag("cambodiavibes", 850000L, true));
+            hashtagRepository.save(new com.vilo.backend.entity.Hashtag("uiuxdesign", 620000L, false));
+            hashtagRepository.save(new com.vilo.backend.entity.Hashtag("shortvideo", 450000L, false));
+            log.info("Hashtags seeded successfully!");
+        }
 
-        String encodedPass = passwordEncoder.encode("password123");
+        if (searchHistoryRepository.count() == 0) {
+            userRepository.findByUsername("mongkol").ifPresent(user -> {
+                log.info("Seeding initial search history for user mongkol...");
+                searchHistoryRepository.save(new com.vilo.backend.entity.SearchHistory(user, "seven7", "ALL"));
+                searchHistoryRepository.save(new com.vilo.backend.entity.SearchHistory(user, "flutter ui", "ALL"));
+                searchHistoryRepository.save(new com.vilo.backend.entity.SearchHistory(user, "tokyo cyberpunk", "ALL"));
+                searchHistoryRepository.save(new com.vilo.backend.entity.SearchHistory(user, "neon aesthetic", "ALL"));
+                log.info("Initial search history seeded!");
+            });
+        }
 
-        User mongkol = new User.Builder()
-                .username("mongkol")
-                .email("mongkol@vilo.app")
-                .password(encodedPass)
-                .displayName("Thoeung Sereymongkol")
-                .bio("Flutter & Spring Boot Engineer | Vilo Core Team 🚀 Building in public")
-                .avatarUrl("https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80")
-                .isVerified(true)
-                .roles(Set.of(Role.ROLE_USER, Role.ROLE_CREATOR))
-                .build();
-        mongkol = userRepository.save(mongkol);
+        // Clean up any legacy mock videos with inflated fake like counts (> 100)
+        List<Video> legacyMockVideos = videoRepository.findAll().stream()
+                .filter(v -> v.getLikeCount() != null && v.getLikeCount() > 100)
+                .collect(Collectors.toList());
+        if (!legacyMockVideos.isEmpty()) {
+            log.info("Removing {} legacy mock videos with inflated like counts...", legacyMockVideos.size());
+            videoRepository.deleteAll(legacyMockVideos);
+            log.info("Legacy mock videos removed cleanly!");
+        }
 
-        User bunheng = new User.Builder()
-                .username("bunheng")
-                .email("bunheng@vilo.app")
-                .password(encodedPass)
-                .displayName("Lim Bunheng")
-                .bio("Video Engine & Feed Specialist | Vilo Team ⚡ 60fps Smooth")
-                .avatarUrl("https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80")
-                .isVerified(true)
-                .roles(Set.of(Role.ROLE_USER, Role.ROLE_CREATOR))
-                .build();
-        bunheng = userRepository.save(bunheng);
+        // Seed fresh distinct videos from assets/videos/ for each of the 7 creator accounts
+        log.info("Checking and seeding fresh creator videos from assets/videos/...");
 
-        User rithysak = new User.Builder()
-                .username("rithysak")
-                .email("rithysak@vilo.app")
-                .password(encodedPass)
-                .displayName("Chhuon Rithysak")
-                .bio("Mobile UI/UX Developer & Orders Lead 🎨 Crafting clean experiences")
-                .avatarUrl("https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80")
-                .isVerified(true)
-                .roles(Set.of(Role.ROLE_USER, Role.ROLE_CREATOR))
-                .build();
-        rithysak = userRepository.save(rithysak);
+        seedFreshVideo(mongkol, "assets/videos/vid1.mp4", "assets/video_thumbnails/vid1.jpg",
+                "Building responsive Flutter UI with Spring Boot 🚀 #coding #flutterdev #vilo", "Original Sound - Thoeung Sereymongkol");
+        seedFreshVideo(mongkol, "assets/videos/vid2.mp4", "assets/video_thumbnails/vid2.jpg",
+                "Late night coding session & neon vibes 🌃 #developer #tech #viloapp", "Midnight City Pulse - Neon Dreams");
 
-        User kimliza = new User.Builder()
-                .username("kimliza")
-                .email("kimliza@vilo.app")
-                .password(encodedPass)
-                .displayName("Kim Liza")
-                .bio("Social Stories & Real-Time Chat Specialist ☕ Chill vibes & music")
-                .avatarUrl("https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80")
-                .isVerified(true)
-                .roles(Set.of(Role.ROLE_USER, Role.ROLE_CREATOR))
-                .build();
-        kimliza = userRepository.save(kimliza);
+        seedFreshVideo(rithysak, "assets/videos/vid3.mp4", "assets/video_thumbnails/vid3.jpg",
+                "Designing smooth micro-animations in Flutter 🎨 #ui #flutter #animation", "Smooth Motion Beats - Seven7");
+        seedFreshVideo(rithysak, "assets/videos/vid4.mp4", "assets/video_thumbnails/vid4.jpg",
+                "Weekend mountain trail ride 🚴 #nature #adventure #outdoor", "Open Road Acoustic");
 
-        User mono = new User.Builder()
-                .username("mono")
-                .email("mono@vilo.app")
-                .password(encodedPass)
-                .displayName("Mono T")
-                .bio("Search, Sounds & Discovery Specialist 🎧 Next-gen audio algorithms")
-                .avatarUrl("https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop&q=80")
-                .isVerified(true)
-                .roles(Set.of(Role.ROLE_USER, Role.ROLE_CREATOR))
-                .build();
-        mono = userRepository.save(mono);
+        seedFreshVideo(setkimliza, "assets/videos/vid5.mp4", "assets/video_thumbnails/vid5.jpg",
+                "Coffee shop morning aesthetics & Lo-Fi ☕ #coffee #vibes #morning", "Rainy Day Acoustic - LoFi");
+        seedFreshVideo(setkimliza, "assets/videos/vid6.mp4", "assets/video_thumbnails/vid6.jpg",
+                "Golden hour city stroll after rain 🌧️✨ #aesthetic #mood #vilo", "After The Rain - Chillhop");
 
-        // Setup verified follow relationships:
-        // mongkol is followed by bunheng, rithysak, kimliza
-        bunheng.getFollowing().add(mongkol);
-        rithysak.getFollowing().add(mongkol);
-        kimliza.getFollowing().add(mongkol);
-        // mongkol follows bunheng, rithysak
-        mongkol.getFollowing().add(bunheng);
-        mongkol.getFollowing().add(rithysak);
+        seedFreshVideo(trenmono, "assets/videos/vid7.mp4", "assets/video_thumbnails/vid7.jpg",
+                "Analog modular synth jam session in the lab 🎛️ #synth #modular #beats", "Analog Pulse - Tren Mono");
+        seedFreshVideo(trenmono, "assets/videos/vid8.mp4", "assets/video_thumbnails/vid8.jpg",
+                "Minimalist architecture walk in the city 🏢 #architecture #design #minimalism", "Mono Wave Vol 1");
 
-        userRepository.saveAll(List.of(mongkol, bunheng, rithysak, kimliza, mono));
+        seedFreshVideo(bunheng, "assets/videos/vid9.mp4", "assets/video_thumbnails/vid9.jpg",
+                "60fps video engine rendering benchmarks 🚀 #tech #videoengine #performance", "High FPS Pulse - Seven7");
+        seedFreshVideo(bunheng, "assets/videos/vid10.mp4", "assets/video_thumbnails/vid10.jpg",
+                "Cyberpunk neon street walk at night #citylife #neon #cyberpunk", "Cyberpunk Beats - Synthwave");
 
+        seedFreshVideo(tryphien, "assets/videos/vid11.mp4", "assets/video_thumbnails/vid11.jpg",
+                "Next-gen creative setup tour 🖥️ Minimal aesthetic #creativesetup #tech", "Creative Waves - LoFi");
+        seedFreshVideo(tryphien, "assets/videos/vid12.mp4", "assets/video_thumbnails/vid12.jpg",
+                "Exploring neon night streets & cinematic moments 🌆 #cinematic #night #vilo", "Night Drive - Ambient");
+
+        seedFreshVideo(nenseanghai, "assets/videos/vid13.mp4", "assets/video_thumbnails/vid13.jpg",
+                "Designing clean responsive layouts & mobile interactions 📱 #flutterdev #uiux", "Motion Design Beats");
+        seedFreshVideo(nenseanghai, "assets/videos/vid14.mp4", "assets/video_thumbnails/vid14.jpg",
+                "Sunset vibes by the river with acoustic melodies 🌅🎸 #sunset #acoustic #chill", "Sunset Glow - Acoustic");
+
+        // Add the remaining local videos to accounts Mongkol does not follow.
+        seedFreshVideo(lindaTravel, "assets/videos/vid15.mp4", "assets/video_thumbnails/vid15.jpg",
+                "Finding quiet places off the beaten path #travel #wanderlust #vilo", "Open Road Acoustic");
+        seedFreshVideo(emilyChef, "assets/videos/vid16.mp4", "assets/video_thumbnails/vid16.jpg",
+                "A warm pastry morning from kitchen to table #baking #foodie #morning", "Rainy Day Acoustic - LoFi");
+        seedFreshVideo(cloeDesign, "assets/videos/vid17.mp4", "assets/video_thumbnails/vid17.jpg",
+                "Turning a rough idea into a polished 3D concept #design #blender #creative", "Liquid Glass Motion - Design Beats");
+        seedFreshVideo(kevinTech, "assets/videos/vid18.mp4", "assets/video_thumbnails/vid18.jpg",
+                "Desk setup details that make deep work feel better #tech #setup #productivity", "Deep Focus Coding - DevPulse");
+        seedFreshVideo(mayaMusic, "assets/videos/vid19.mp4", "assets/video_thumbnails/vid19.jpg",
+                "An acoustic loop for a slow afternoon #music #acoustic #songwriting", "Seven7 Team Anthem - Seven7 Beats");
+        seedFreshVideo(alexDancer, "assets/videos/vid20.mp4", "assets/video_thumbnails/vid20.jpg",
+                "Movement practice under city lights #dance #movement #performance", "Retro 80s Synth Groove - Vaporwave Boy");
+
+        log.info("Fresh creator videos verified and seeded for all local video assets!");
         ensureSeededMusicFiles();
-
-        log.info("==================================================================");
-        log.info("STEP 3: SEEDING USER-OWNED MUSIC TRACKS");
-        log.info("==================================================================");
-
-        Sound sound1 = new Sound(
-                "Phnom Penh Sunset Lo-Fi",
-                mongkol.getId(),
-                mongkol.getUsername(),
-                "/uploads/music/phnom_penh_sunset.mp3",
-                "https://images.unsplash.com/photo-1514565131-fce0801e5785?w=500&auto=format&fit=crop&q=80",
-                2L // used by 2 videos
-        );
-        sound1 = soundRepository.save(sound1);
-
-        Sound sound2 = new Sound(
-                "Seven7 Team Anthem",
-                bunheng.getId(),
-                bunheng.getUsername(),
-                "/uploads/music/seven7_anthem.mp3",
-                "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80",
-                2L // used by 2 videos
-        );
-        sound2 = soundRepository.save(sound2);
-
-        Sound sound3 = new Sound(
-                "Obsidian Pulse Beat",
-                bunheng.getId(),
-                bunheng.getUsername(),
-                "/uploads/music/obsidian_pulse.mp3",
-                "https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=80",
-                1L // used by 1 video
-        );
-        sound3 = soundRepository.save(sound3);
-
-        log.info("==================================================================");
-        log.info("STEP 4: SEEDING VIDEOS / POSTS LINKED TO USERS & SOUNDS");
-        log.info("==================================================================");
-
-        // Video 1 (by mongkol) -> uses Sound 1
-        Video vid1 = new Video(
-                mongkol,
-                "Building high-performance video engine in Flutter & Spring Boot #coding #flutterdev",
-                "Complete overview of custom PageView and VideoPlayer architecture",
-                "Building high-performance video engine in Flutter & Spring Boot #coding #flutterdev",
-                "/uploads/videos/video1.mp4",
-                "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600"
-        );
-        vid1.setSoundId(sound1.getId());
-        vid1.setMusicTitle(sound1.getTitle());
-        vid1.setMusicArtist(sound1.getArtist());
-        vid1.setAudioUrl(sound1.getAudioUrl());
-        vid1.getTags().add(new VideoTag(vid1, "coding"));
-        vid1.getTags().add(new VideoTag(vid1, "flutterdev"));
-        vid1 = videoRepository.save(vid1);
-
-        // Video 2 (by mongkol) -> optional sound: NO music attached
-        Video vid2 = new Video(
-                mongkol,
-                "Spider robotics simulation test run 🤖 #robotics #tech",
-                "Simulating 8-legged inverse kinematics in 3D physics engine",
-                "Spider robotics simulation test run 🤖 #robotics #tech",
-                "/uploads/videos/spider.mp4",
-                "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=600"
-        );
-        vid2.setSoundId(null);
-        vid2.setMusicTitle(null);
-        vid2.setMusicArtist(null);
-        vid2.setAudioUrl(null);
-        vid2.getTags().add(new VideoTag(vid2, "robotics"));
-        vid2.getTags().add(new VideoTag(vid2, "tech"));
-        vid2 = videoRepository.save(vid2);
-
-        // Video 3 (by bunheng) -> uses Sound 2
-        Video vid3 = new Video(
-                bunheng,
-                "Khmer AI robot dancing to the rhythm 🚀 #khmertech #ai",
-                "Motion capture robotics demo using open source neural models",
-                "Khmer AI robot dancing to the rhythm 🚀 #khmertech #ai",
-                "/uploads/videos/khmer_robot.mp4",
-                "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600"
-        );
-        vid3.setSoundId(sound2.getId());
-        vid3.setMusicTitle(sound2.getTitle());
-        vid3.setMusicArtist(sound2.getArtist());
-        vid3.setAudioUrl(sound2.getAudioUrl());
-        vid3.getTags().add(new VideoTag(vid3, "khmertech"));
-        vid3.getTags().add(new VideoTag(vid3, "ai"));
-        vid3 = videoRepository.save(vid3);
-
-        // Video 4 (by rithysak) -> uses Sound 1
-        Video vid4 = new Video(
-                rithysak,
-                "Smooth micro-animations in Flutter UI #uiux #mobile",
-                "Designing fluid button transitions and glassmorphic cards",
-                "Smooth micro-animations in Flutter UI #uiux #mobile",
-                "/uploads/videos/video1.mp4",
-                "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=600"
-        );
-        vid4.setSoundId(sound1.getId());
-        vid4.setMusicTitle(sound1.getTitle());
-        vid4.setMusicArtist(sound1.getArtist());
-        vid4.setAudioUrl(sound1.getAudioUrl());
-        vid4.getTags().add(new VideoTag(vid4, "uiux"));
-        vid4.getTags().add(new VideoTag(vid4, "mobile"));
-        vid4 = videoRepository.save(vid4);
-
-        // Video 5 (by kimliza) -> uses Sound 2
-        Video vid5 = new Video(
-                kimliza,
-                "Coffee vibes & late night code reviews ☕ #developer #chill",
-                "Aesthetic workspace setup with warm lighting and lo-fi tunes",
-                "Coffee vibes & late night code reviews ☕ #developer #chill",
-                "/uploads/videos/spider.mp4",
-                "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600"
-        );
-        vid5.setSoundId(sound2.getId());
-        vid5.setMusicTitle(sound2.getTitle());
-        vid5.setMusicArtist(sound2.getArtist());
-        vid5.setAudioUrl(sound2.getAudioUrl());
-        vid5.getTags().add(new VideoTag(vid5, "developer"));
-        vid5.getTags().add(new VideoTag(vid5, "chill"));
-        vid5 = videoRepository.save(vid5);
-
-        // Video 6 (by mono) -> uses Sound 3
-        Video vid6 = new Video(
-                mono,
-                "Exploring next-gen audio discovery algorithms 🎧 #music #audio",
-                "Building vector embeddings for musical genre similarities",
-                "Exploring next-gen audio discovery algorithms 🎧 #music #audio",
-                "/uploads/videos/khmer_robot.mp4",
-                "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=600"
-        );
-        vid6.setSoundId(sound3.getId());
-        vid6.setMusicTitle(sound3.getTitle());
-        vid6.setMusicArtist(sound3.getArtist());
-        vid6.setAudioUrl(sound3.getAudioUrl());
-        vid6.getTags().add(new VideoTag(vid6, "music"));
-        vid6.getTags().add(new VideoTag(vid6, "audio"));
-        vid6 = videoRepository.save(vid6);
-
-        log.info("==================================================================");
-        log.info("STEP 5: SEEDING USER SAVES");
-        log.info("==================================================================");
-
-        // mongkol saves vid3, vid4
-        saveVideo(mongkol.getId(), vid3.getId());
-        saveVideo(mongkol.getId(), vid4.getId());
-
-        // bunheng saves vid1, vid5
-        saveVideo(bunheng.getId(), vid1.getId());
-        saveVideo(bunheng.getId(), vid5.getId());
-
-        // rithysak saves vid2, vid6
-        saveVideo(rithysak.getId(), vid2.getId());
-        saveVideo(rithysak.getId(), vid6.getId());
-
-        // kimliza saves vid1, vid3
-        saveVideo(kimliza.getId(), vid1.getId());
-        saveVideo(kimliza.getId(), vid3.getId());
-
-        // mono saves vid1, vid2
-        saveVideo(mono.getId(), vid1.getId());
-        saveVideo(mono.getId(), vid2.getId());
-
-        log.info("==================================================================");
-        log.info("STEP 6: SEEDING EXACTLY 10 LIKES ACROSS USERS AND VIDEOS");
-        log.info("==================================================================");
-
-        // 1. mongkol likes vid3
-        likeVideo(mongkol.getId(), vid3.getId());
-        // 2. mongkol likes vid4
-        likeVideo(mongkol.getId(), vid4.getId());
-        // 3. bunheng likes vid1
-        likeVideo(bunheng.getId(), vid1.getId());
-        // 4. bunheng likes vid5
-        likeVideo(bunheng.getId(), vid5.getId());
-        // 5. rithysak likes vid1
-        likeVideo(rithysak.getId(), vid1.getId());
-        // 6. rithysak likes vid3
-        likeVideo(rithysak.getId(), vid3.getId());
-        // 7. kimliza likes vid1
-        likeVideo(kimliza.getId(), vid1.getId());
-        // 8. kimliza likes vid2
-        likeVideo(kimliza.getId(), vid2.getId());
-        // 9. mono likes vid1
-        likeVideo(mono.getId(), vid1.getId());
-        // 10. mono likes vid6
-        likeVideo(mono.getId(), vid6.getId());
-
-        // Update video count fields to match exact database rows
-        updateVideoCounts(vid1);
-        updateVideoCounts(vid2);
-        updateVideoCounts(vid3);
-        updateVideoCounts(vid4);
-        updateVideoCounts(vid5);
-        updateVideoCounts(vid6);
-
-        log.info("==================================================================");
-        log.info("CLEAN DATABASE RESET & SEEDING COMPLETED SUCCESSFULLY!");
-        log.info("Seeded 5 users, 3 user-owned sounds, 6 videos, 10 saves, and EXACTLY 10 likes.");
-        log.info("==================================================================");
     }
 
-    private void saveVideo(Long userId, Long videoId) {
-        videoSaveRepository.save(new VideoSave(userId, videoId));
-    }
+    private void seedFreshVideo(User creator, String videoUrl, String thumbnailUrl, String caption, String musicTitle) {
+        if (creator == null) return;
+        List<Video> existing = videoRepository.findByCreatorOrderByCreatedAtDesc(creator);
+        for (Video existingVideo : existing) {
+            if (videoUrl.equals(existingVideo.getVideoUrl())) {
+                if (!thumbnailUrl.equals(existingVideo.getThumbnailUrl())) {
+                    existingVideo.setThumbnailUrl(thumbnailUrl);
+                    videoRepository.save(existingVideo);
+                }
+                return;
+            }
+        }
 
-    private void likeVideo(Long userId, Long videoId) {
-        videoLikeRepository.save(new VideoLike(userId, videoId));
-    }
-
-    private void updateVideoCounts(Video video) {
-        long likeCount = videoLikeRepository.countByVideoId(video.getId());
-        long saveCount = videoSaveRepository.countByVideoId(video.getId());
-        video.setLikeCount(likeCount);
-        video.setLikesCount(likeCount);
-        video.setSaveCount(saveCount);
-        video.setSavesCount(saveCount);
+        Video video = new Video(creator, videoUrl, thumbnailUrl, caption, musicTitle, 0L, 0L, 0L);
+        if (caption != null) {
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("#([a-zA-Z0-9_]+)").matcher(caption);
+            while (matcher.find()) {
+                String cleanTag = matcher.group(1).toLowerCase();
+                video.getTags().add(new com.vilo.backend.entity.VideoTag(video, cleanTag));
+            }
+        }
         videoRepository.save(video);
+    }
+
+    private User getOrCreateUser(String username, String email, String password,
+                                 String displayName, String bio, String avatarUrl,
+                                 boolean isVerified, Set<Role> roles) {
+        return userRepository.findByUsername(username)
+                .map(existing -> {
+                    boolean changed = false;
+                    // Only populate initial fields if currently empty. NEVER overwrite user edits!
+                    if ((existing.getDisplayName() == null || existing.getDisplayName().isBlank()) && displayName != null) {
+                        existing.setDisplayName(displayName);
+                        changed = true;
+                    }
+                    if ((existing.getBio() == null || existing.getBio().isBlank()) && bio != null) {
+                        existing.setBio(bio);
+                        changed = true;
+                    }
+                    if ((existing.getAvatarUrl() == null || existing.getAvatarUrl().isBlank()) && avatarUrl != null) {
+                        existing.setAvatarUrl(avatarUrl);
+                        changed = true;
+                    }
+                    if ((existing.getEmail() == null || existing.getEmail().isBlank()) && email != null) {
+                        existing.setEmail(email);
+                        changed = true;
+                    }
+                    if (existing.getRoles() == null || existing.getRoles().isEmpty()) {
+                        existing.setRoles(roles);
+                        changed = true;
+                    }
+                    return changed ? userRepository.save(existing) : existing;
+                })
+                .orElseGet(() -> {
+                    User u = User.builder()
+                            .username(username)
+                            .email(email)
+                            .password(passwordEncoder.encode(password))
+                            .displayName(displayName)
+                            .bio(bio)
+                            .avatarUrl(avatarUrl)
+                            .isVerified(isVerified)
+                            .roles(roles)
+                            .build();
+                    return userRepository.save(u);
+                });
+    }
+
+    private void ensureFollow(User follower, User target) {
+        if (follower == null || target == null || follower.getId().equals(target.getId())) {
+            return;
+        }
+        User reloadedFollower = userRepository.findById(follower.getId()).orElse(follower);
+        User reloadedTarget = userRepository.findById(target.getId()).orElse(target);
+
+        boolean alreadyFollowed = reloadedTarget.getFollowers().stream()
+                .anyMatch(f -> f.getId().equals(reloadedFollower.getId()));
+
+        if (!alreadyFollowed) {
+            reloadedTarget.getFollowers().add(reloadedFollower);
+            reloadedFollower.getFollowing().add(reloadedTarget);
+            userRepository.save(reloadedTarget);
+            userRepository.save(reloadedFollower);
+        }
     }
 
     private void ensureSeededMusicFiles() {

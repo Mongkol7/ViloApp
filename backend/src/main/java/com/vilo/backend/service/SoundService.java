@@ -3,9 +3,13 @@ package com.vilo.backend.service;
 import com.vilo.backend.dto.SoundResponse;
 import com.vilo.backend.dto.VideoResponse;
 import com.vilo.backend.entity.Sound;
+<<<<<<< HEAD
 import com.vilo.backend.entity.User;
 import com.vilo.backend.entity.Video;
 import com.vilo.backend.exception.ForbiddenException;
+=======
+import com.vilo.backend.entity.Video;
+>>>>>>> develop
 import com.vilo.backend.exception.ResourceNotFoundException;
 import com.vilo.backend.repository.SoundRepository;
 import com.vilo.backend.repository.VideoRepository;
@@ -13,9 +17,15 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+<<<<<<< HEAD
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
+=======
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+>>>>>>> develop
 import java.util.stream.Collectors;
 
 @Service
@@ -23,6 +33,7 @@ public class SoundService {
 
     private final SoundRepository soundRepository;
     private final VideoRepository videoRepository;
+<<<<<<< HEAD
     private final FileStorageService fileStorageService;
 
     public SoundService(SoundRepository soundRepository, VideoRepository videoRepository, FileStorageService fileStorageService) {
@@ -41,6 +52,12 @@ public class SoundService {
             }
             return SoundResponse.fromEntity(s);
         }).collect(Collectors.toList());
+=======
+
+    public SoundService(SoundRepository soundRepository, VideoRepository videoRepository) {
+        this.soundRepository = soundRepository;
+        this.videoRepository = videoRepository;
+>>>>>>> develop
     }
 
     @Transactional(readOnly = true)
@@ -96,25 +113,32 @@ public class SoundService {
         Sound sound = soundRepository.findById(soundId)
                 .orElseThrow(() -> new ResourceNotFoundException("Sound not found with id: " + soundId));
 
-        List<Video> videos = videoRepository.findBySoundIdOrderByCreatedAtDesc(soundId);
-        if (videos.isEmpty() && sound.getTitle() != null && !sound.getTitle().isBlank()) {
-            videos = videoRepository.findByMusicTitleContainingIgnoreCase(sound.getTitle());
+        List<Video> matchingVideos = videoRepository.findBySoundIdOrderByCreatedAtDesc(soundId);
+        if (matchingVideos.isEmpty() && sound.getTitle() != null && !sound.getTitle().isBlank()) {
+            matchingVideos = videoRepository.findByMusicTitleContainingIgnoreCaseOrderByCreatedAtDesc(sound.getTitle());
         }
 
-        if (!videos.isEmpty()) {
-            return videos.stream().map(v -> {
-                Map<String, Object> item = new HashMap<>();
-                item.put("id", v.getId().toString());
-                item.put("thumbnailUrl", v.getThumbnailUrl());
-                item.put("videoUrl", v.getVideoUrl());
-                item.put("views", v.getLikeCount() != null ? v.getLikeCount().toString() : "0");
-                item.put("soundId", soundId);
-                item.put("soundTitle", sound.getTitle());
-                return item;
-            }).collect(Collectors.toList());
+        List<Map<String, Object>> videos = new java.util.ArrayList<>();
+        for (Video source : matchingVideos) {
+            Map<String, Object> video = new HashMap<>();
+            video.put("id", source.getId().toString());
+            String thumbnailUrl = source.getThumbnailUrl();
+            if ((thumbnailUrl == null || thumbnailUrl.isBlank())
+                    && source.getVideoUrl() != null
+                    && !source.getVideoUrl().contains(",")) {
+                thumbnailUrl = source.getVideoUrl();
+            }
+            video.put("thumbnailUrl", thumbnailUrl);
+            long views = source.getViewCount() != null ? source.getViewCount() : (source.getLikeCount() != null ? source.getLikeCount() : 0L);
+            video.put("views", formatCount(views));
+            video.put("viewCount", views);
+            video.put("videoUrl", source.getVideoUrl());
+            video.put("soundId", soundId);
+            video.put("soundTitle", sound.getTitle());
+            videos.add(video);
         }
 
-        return Collections.emptyList();
+        return videos;
     }
 
     @Transactional(readOnly = true)
@@ -232,5 +256,11 @@ public class SoundService {
 
         sound = soundRepository.save(sound);
         return SoundResponse.fromEntity(sound);
+    }
+
+    private String formatCount(long count) {
+        if (count >= 1_000_000) return String.format("%.1fM", count / 1_000_000.0);
+        if (count >= 1_000) return String.format("%.1fK", count / 1_000.0);
+        return String.valueOf(count);
     }
 }

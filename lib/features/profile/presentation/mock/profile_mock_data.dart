@@ -124,7 +124,7 @@ class ProfileMockData {
   static const List<ProfileStat> stats = [
     ProfileStat(label: 'Following', value: 2),
     ProfileStat(label: 'Followers', value: 4),
-    ProfileStat(label: 'Likes', value: 154000),
+    ProfileStat(label: 'Likes', value: 0),
   ];
 
   // --- Tab content -----------------------------------------------------

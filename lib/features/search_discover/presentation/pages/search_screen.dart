@@ -11,7 +11,9 @@ import '../../data/datasources/static_search_data.dart';
 import '../../domain/entities/search_results.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+  final String? initialQuery;
+
+  const SearchScreen({super.key, this.initialQuery});
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -36,7 +38,15 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
+    final initialQuery = widget.initialQuery?.trim() ?? '';
+    if (initialQuery.isNotEmpty) {
+      _searchController.text = initialQuery;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _executeSearch(initialQuery);
+      });
+    } else {
+      _loadInitialData();
+    }
   }
 
   @override
@@ -55,7 +65,9 @@ class _SearchScreenState extends State<SearchScreen> {
       setState(() {
         _accounts = explore['accounts'] ?? StaticSearchData.accounts;
         _sounds = explore['sounds'] ?? StaticSearchData.sounds;
-        _trendingVideos = explore['trendingVideos'] ?? StaticSearchData.trendingVideos;
+        _trendingVideos = _sortVideosByViews(
+          explore['trendingVideos'] ?? StaticSearchData.trendingVideos,
+        );
         _hashtags = explore['hashtags'] ?? ['#viloapp', '#flutterdev', '#tokyocoding'];
         _recentSearches = history;
         _isLoading = false;
@@ -89,7 +101,7 @@ class _SearchScreenState extends State<SearchScreen> {
       setState(() {
         _accounts = result['accounts'] ?? [];
         _sounds = result['sounds'] ?? [];
-        _trendingVideos = result['trendingVideos'] ?? [];
+        _trendingVideos = _sortVideosByViews(result['trendingVideos'] ?? []);
         _hashtags = result['hashtags'] ?? [];
         final term = query.trim();
         _recentSearches.remove(term);
@@ -101,6 +113,12 @@ class _SearchScreenState extends State<SearchScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  List<TrendingVideo> _sortVideosByViews(Iterable<TrendingVideo> videos) {
+    final sorted = List<TrendingVideo>.from(videos);
+    sorted.sort((a, b) => b.viewCount.compareTo(a.viewCount));
+    return sorted;
   }
 
   void _toggleFollow(int index) {
@@ -403,6 +421,16 @@ class _SearchScreenState extends State<SearchScreen> {
                               _buildSectionHeader('Accounts'),
                               const SizedBox(height: 12),
                               ...List.generate(_accounts.length, (index) => _buildAccountItem(index)),
+                              if (_trendingVideos.isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                _buildSectionHeader(
+                                  _accounts.length == 1
+                                      ? 'Videos from ${_accounts.first.displayName.isNotEmpty ? _accounts.first.displayName : _accounts.first.username}'
+                                      : 'Videos from these accounts',
+                                ),
+                                const SizedBox(height: 12),
+                                _buildTrendingGrid(),
+                              ],
                             ] else
                               _buildEmptyState('No accounts found for "${_searchController.text.trim()}"'),
                           ] else if (_selectedCategory == 'Videos') ...[
@@ -516,14 +544,7 @@ class _SearchScreenState extends State<SearchScreen> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                Image.network(
-                  video.thumbnailUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: AppColors.surface,
-                    child: const Icon(Icons.movie_outlined, color: AppColors.outline),
-                  ),
-                ),
+                _buildVideoThumbnail(video.thumbnailUrl),
                 Positioned.fill(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
@@ -585,6 +606,27 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildVideoThumbnail(String url) {
+    final cleanUrl = url.trim();
+    final placeholder = Container(
+      color: AppColors.surface,
+      child: const Icon(Icons.movie_outlined, color: AppColors.outline),
+    );
+    if (cleanUrl.startsWith('assets/')) {
+      return Image.asset(
+        cleanUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => placeholder,
+      );
+    }
+    if (cleanUrl.isEmpty) return placeholder;
+    return Image.network(
+      cleanUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => placeholder,
     );
   }
 

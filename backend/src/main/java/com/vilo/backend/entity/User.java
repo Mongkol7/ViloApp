@@ -36,7 +36,7 @@ public class User implements UserDetails {
     @Column(columnDefinition = "TEXT")
     private String bio;
 
-    @Column(name = "avatar_url", length = 500)
+    @Column(name = "avatar_url", columnDefinition = "TEXT")
     private String avatarUrl;
 
     @Column(name = "is_verified", nullable = false)

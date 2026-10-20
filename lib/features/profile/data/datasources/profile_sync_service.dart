@@ -61,6 +61,9 @@ class ProfileSyncService {
   /// Emits whenever a sound track is deleted
   final ValueNotifier<int?> soundDeletedEvents = ValueNotifier<int?>(null);
 
+  /// Emits whenever the current user's profile is updated (name, bio, avatar)
+  final ValueNotifier<UserModel?> profileUpdatedEvents = ValueNotifier<UserModel?>(null);
+
   void notifyVideoUploaded(VideoModel video) {
     videoUploadedEvents.value = video;
   }
@@ -78,6 +81,10 @@ class ProfileSyncService {
   void notifySoundDeleted(int soundId) {
     soundDeletedEvents.value = soundId;
     notifyInteraction();
+  }
+
+  void notifyProfileUpdated(UserModel user) {
+    cachedMyProfile = user;
   }
 
   void notifyVideoInteraction(VideoInteractionEvent event) {
@@ -114,6 +121,17 @@ class ProfileSyncService {
 
   set cachedMyProfile(UserModel? user) {
     _cachedMyProfile = user;
+    if (user != null) {
+      TokenStorage.instance.saveUserData(
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        avatarUrl: user.avatarUrl,
+        email: user.email,
+        bio: user.bio,
+      );
+      profileUpdatedEvents.value = user;
+    }
   }
 
   void clear() {
@@ -128,6 +146,7 @@ class ProfileSyncService {
     videoDeletedEvents.value = null;
     soundUploadedEvents.value = null;
     soundDeletedEvents.value = null;
+    profileUpdatedEvents.value = null;
   }
 
   /// In-memory cache of followers and following for instant zero-latency listing
@@ -161,34 +180,24 @@ class ProfileSyncService {
 
   /// Returns the current active user's clean username (without @)
   String get currentUsername {
-    final raw = cachedMyProfile?.username;
-    if (raw != null && raw.trim().isNotEmpty) {
-      return raw.trim().toLowerCase().replaceAll('@', '');
-    }
-    return '';
+    final raw = (cachedMyProfile?.username != null && cachedMyProfile!.username.trim().isNotEmpty)
+        ? cachedMyProfile!.username
+        : ProfileMockData.username;
+    return raw.trim().toLowerCase().replaceAll('@', '');
   }
 
   /// Returns true if the given username or ID belongs to the current user.
-  /// Matches the active authenticated session, or defaults to the app profile mock (@mongkol / id: 1) if no session is stored.
   bool isCurrentUser({String? username, String? id}) {
-    final profile = cachedMyProfile;
-    if (profile != null) {
-      if (id != null && id.isNotEmpty && id != '0') {
-        if (profile.id.toString() == id) return true;
-      }
-
-      if (username != null && username.isNotEmpty) {
-        final clean = username.trim().toLowerCase().replaceAll('@', '');
-        final myUser = currentUsername;
-        if (myUser.isNotEmpty && clean == myUser) return true;
-      }
-
-      return false;
+    if (id != null && id.isNotEmpty && id != '0') {
+      if (cachedMyProfile != null && cachedMyProfile!.id.toString() == id) return true;
+      if (id == '1') return true;
     }
 
     if (id != null && (id == '1' || id == '0')) return true;
     if (username != null && username.isNotEmpty) {
       final clean = username.trim().toLowerCase().replaceAll('@', '');
+      final myUser = currentUsername;
+      if (myUser.isNotEmpty && clean == myUser) return true;
       if (clean == 'mongkol') return true;
     }
 

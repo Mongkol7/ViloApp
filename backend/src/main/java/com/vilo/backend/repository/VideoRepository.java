@@ -17,6 +17,8 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
 
     Page<Video> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
+    Page<Video> findAllByOrderByViewCountDesc(Pageable pageable);
+
     Page<Video> findByCreatorInOrderByCreatedAtDesc(Collection<User> creators, Pageable pageable);
 
     List<Video> findByCreatorOrderByCreatedAtDesc(User creator);
@@ -28,6 +30,8 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
     List<Video> findBySoundIdOrderByCreatedAtDesc(Long soundId);
 
     long countBySoundId(Long soundId);
+
+    List<Video> findByMusicTitleContainingIgnoreCaseOrderByCreatedAtDesc(String musicTitle);
 
     @Query("SELECT v FROM Video v WHERE v.creator.id IN :creatorIds ORDER BY v.createdAt DESC")
     Page<Video> findByCreatorIdIn(@Param("creatorIds") List<Long> creatorIds, Pageable pageable);
@@ -45,6 +49,9 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
     @org.springframework.transaction.annotation.Transactional
     @Query("UPDATE Video v SET v.soundId = null WHERE v.soundId = :soundId")
     void clearSoundId(@Param("soundId") Long soundId);
+
+    @Query("SELECT v FROM Video v WHERE v.creator.id IN :creatorIds")
+    List<Video> findAllByCreatorIdIn(@Param("creatorIds") List<Long> creatorIds);
 
     @Query("""
         SELECT DISTINCT v FROM Video v

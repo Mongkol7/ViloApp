@@ -306,7 +306,7 @@ class SearchRemoteDataSource {
           authorName: v['authorName']?.toString() ?? '',
           thumbnailUrl: resolvedThumb.isNotEmpty ? resolvedThumb : rawThumb,
           videoUrl: resolvedVideo.isNotEmpty ? resolvedVideo : rawVideo,
-          views: v['views']?.toString() ?? (v['viewCount'] != null ? '${v['viewCount']}' : '1.2M'),
+          views: v['views']?.toString() ?? (v['viewCount'] != null ? '${v['viewCount']}' : '0'),
           viewCount: (v['viewCount'] is num) ? (v['viewCount'] as num).toInt() : 0,
           likeCount: (v['likeCount'] is num) ? (v['likeCount'] as num).toInt() : ((v['likesCount'] is num) ? (v['likesCount'] as num).toInt() : 0),
           commentCount: (v['commentCount'] is num) ? (v['commentCount'] as num).toInt() : ((v['commentsCount'] is num) ? (v['commentsCount'] as num).toInt() : 0),
@@ -457,13 +457,14 @@ class SearchRemoteDataSource {
         .toSet();
 
     List<TrendingVideo> filteredVideos = [];
-    if (type == 'ALL' || type == 'VIDEOS') {
+    if (type == 'ALL' || type == 'VIDEOS' || type == 'USERS') {
       filteredVideos = allCandidates.values.where((v) {
         final vAuthor = v.authorUsername.toLowerCase().replaceAll('@', '');
         final vAuthorName = v.authorName.toLowerCase();
         final vTitle = v.title.toLowerCase();
         final vCaption = v.caption.toLowerCase();
 
+        if (type == 'USERS') return matchedUsernames.contains(vAuthor);
         if (matchedUsernames.contains(vAuthor)) return true;
         if (_matchesFuzzy(vTitle, cleanQ)) return true;
         if (_matchesFuzzy(vCaption, cleanQ)) return true;

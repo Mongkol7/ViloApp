@@ -36,7 +36,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   List<VideoFeedModel> _myVideos = [];
   List<VideoFeedModel> _savedVideos = [];
   List<VideoFeedModel> _likedVideos = [];
-bool _isLoadingTabs = false;
+  final Set<int> _loadingCategories = <int>{};
 
   @override
   bool get wantKeepAlive => true;
@@ -46,30 +46,35 @@ bool _isLoadingTabs = false;
     super.initState();
     _tabController = TabController(length: 5, vsync: this, initialIndex: 1);
     // Initialize with active profile from cache/token storage
-    _user = ProfileSyncService.instance.cachedMyProfile ??
+    _user =
+        ProfileSyncService.instance.cachedMyProfile ??
         UserModel(
           id: 0,
           username: '',
           email: '',
           displayName: 'User',
           bio: '',
-          avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+          avatarUrl:
+              'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
           isVerified: false,
           followersCount: 0,
           followingCount: 0,
         );
     ProfileSyncService.instance.followEvents.addListener(_onFollowEvent);
-ProfileSyncService.instance.videoUploadedEvents.addListener(_onVideoUploaded);
+    ProfileSyncService.instance.videoUploadedEvents.addListener(_onVideoUploaded);
     ProfileSyncService.instance.videoInteractionEvents.addListener(_onVideoInteractionEvent);
     ProfileSyncService.instance.videoDeletedEvents.addListener(_onVideoDeleted);
     ProfileSyncService.instance.soundUploadedEvents.addListener(_onSoundUploaded);
     ProfileSyncService.instance.soundDeletedEvents.addListener(_onSoundDeleted);
     ProfileSyncService.instance.interactionEvents.addListener(_onInteractionEvent);
+    ProfileSyncService.instance.profileUpdatedEvents.addListener(_onProfileUpdated);
 
     // Instant zero-latency seed from cache if available
     final cached = (_user != null && _user!.id > 0)
         ? (FeedRemoteDataSource.instance.getCachedUserVideos(_user!.id) ??
-            FeedRemoteDataSource.instance.getCachedUserVideos(_user!.username))
+              FeedRemoteDataSource.instance.getCachedUserVideos(
+                _user!.username,
+              ))
         : null;
     if (cached != null && cached.isNotEmpty) {
       _myVideos = List.from(cached);
@@ -77,24 +82,21 @@ ProfileSyncService.instance.videoUploadedEvents.addListener(_onVideoUploaded);
     _loadProfile();
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    ProfileSyncService.instance.followEvents.removeListener(_onFollowEvent);
-    ProfileSyncService.instance.videoUploadedEvents.removeListener(_onVideoUploaded);
-    ProfileSyncService.instance.videoInteractionEvents.removeListener(_onVideoInteractionEvent);
-    ProfileSyncService.instance.videoDeletedEvents.removeListener(_onVideoDeleted);
-    ProfileSyncService.instance.soundUploadedEvents.removeListener(_onSoundUploaded);
-    ProfileSyncService.instance.soundDeletedEvents.removeListener(_onSoundDeleted);
-    ProfileSyncService.instance.interactionEvents.removeListener(_onInteractionEvent);
-    super.dispose();
+  void _onProfileUpdated() {
+    final updated = ProfileSyncService.instance.profileUpdatedEvents.value;
+    if (updated != null && mounted) {
+      setState(() => _user = updated);
+    }
   }
 
   void _onFollowEvent() {
     final event = ProfileSyncService.instance.followEvents.value;
     if (event != null && mounted) {
       if (_user != null) {
-        final updatedFollowing = (_user!.followingCount + event.delta).clamp(0, 999999999);
+        final updatedFollowing = (_user!.followingCount + event.delta).clamp(
+          0,
+          999999999,
+        );
         setState(() {
           _user = _user!.copyWith(followingCount: updatedFollowing);
         });
@@ -164,7 +166,9 @@ void _onVideoUploaded() {
 
       if (event.isSaved != null) {
         if (event.isSaved == true) {
-          final existingIdx = _savedVideos.indexWhere((v) => v.id == event.videoId);
+          final existingIdx = _savedVideos.indexWhere(
+            (v) => v.id == event.videoId,
+          );
           if (existingIdx != -1) {
             _savedVideos[existingIdx] = _savedVideos[existingIdx].copyWith(
               isSaved: true,
@@ -174,16 +178,32 @@ void _onVideoUploaded() {
               commentCount: event.commentCount,
             );
           } else if (event.video != null) {
-            _savedVideos.insert(0, event.video!.copyWith(isSaved: true, saveCount: event.saveCount));
+            _savedVideos.insert(
+              0,
+              event.video!.copyWith(isSaved: true, saveCount: event.saveCount),
+            );
           }
         } else {
           _savedVideos.removeWhere((v) => v.id == event.videoId);
+        }
+      } else {
+        final existingIdx = _savedVideos.indexWhere(
+          (v) => v.id == event.videoId,
+        );
+        if (existingIdx != -1) {
+          _savedVideos[existingIdx] = _savedVideos[existingIdx].copyWith(
+            isLiked: event.isLiked,
+            likeCount: event.likeCount,
+            commentCount: event.commentCount,
+          );
         }
       }
 
       if (event.isLiked != null) {
         if (event.isLiked == true) {
-          final existingIdx = _likedVideos.indexWhere((v) => v.id == event.videoId);
+          final existingIdx = _likedVideos.indexWhere(
+            (v) => v.id == event.videoId,
+          );
           if (existingIdx != -1) {
             _likedVideos[existingIdx] = _likedVideos[existingIdx].copyWith(
               isLiked: true,
@@ -193,10 +213,24 @@ void _onVideoUploaded() {
               commentCount: event.commentCount,
             );
           } else if (event.video != null) {
-            _likedVideos.insert(0, event.video!.copyWith(isLiked: true, likeCount: event.likeCount));
+            _likedVideos.insert(
+              0,
+              event.video!.copyWith(isLiked: true, likeCount: event.likeCount),
+            );
           }
         } else {
           _likedVideos.removeWhere((v) => v.id == event.videoId);
+        }
+      } else {
+        final existingIdx = _likedVideos.indexWhere(
+          (v) => v.id == event.videoId,
+        );
+        if (existingIdx != -1) {
+          _likedVideos[existingIdx] = _likedVideos[existingIdx].copyWith(
+            isSaved: event.isSaved,
+            saveCount: event.saveCount,
+            commentCount: event.commentCount,
+          );
         }
       }
     });
@@ -209,7 +243,6 @@ void _onVideoUploaded() {
   }
 
   Future<void> _loadProfile({bool forceRefresh = false}) async {
-    setState(() => _isLoadingTabs = true);
     try {
       final user = await ProfileRemoteDataSource.instance.getMyProfile();
       if (mounted) {
@@ -220,84 +253,154 @@ void _onVideoUploaded() {
       debugPrint('[ProfileScreen] getMyProfile notice: $e');
     }
 
-// 1. Load user's uploaded sounds
-      try {
-        final sounds = await FeedRemoteDataSource.instance.getMySounds();
-        if (mounted) {
-          setState(() => _mySounds = sounds);
-        }
-      } catch (_) {
-        try {
-          if (_user != null && _user!.id > 0) {
-            final fallbackSounds = await FeedRemoteDataSource.instance.getUserSounds(_user!.id);
-            if (mounted) {
-              setState(() => _mySounds = fallbackSounds);
-            }
-          }
-        } catch (_) {}
+    // 1. Load user's uploaded sounds
+    try {
+      final sounds = await FeedRemoteDataSource.instance.getMySounds();
+      if (mounted) {
+        setState(() => _mySounds = sounds);
       }
+    } catch (_) {
+      try {
+        if (_user != null && _user!.id > 0) {
+          final fallbackSounds = await FeedRemoteDataSource.instance.getUserSounds(_user!.id);
+          if (mounted) {
+            setState(() => _mySounds = fallbackSounds);
+          }
+        }
+      } catch (_) {}
+    }
 
-      // 2. Load user's posted videos
+    // 2. Always fetch posted videos from backend for the user
+    try {
+      final identifier = (_user?.id != null && _user!.id > 0)
+          ? _user!.id
+          : (_user?.username.isNotEmpty == true ? _user!.username : 'me');
+      final videos = await FeedRemoteDataSource.instance.getUserVideos(
+        identifier,
+        forceRefresh: true,
+      );
+      if (mounted) {
+        setState(() => _myVideos = List.from(videos));
+      }
+    } catch (_) {
       try {
         final videos = await FeedRemoteDataSource.instance.getMyVideos();
         if (mounted) {
           setState(() => _myVideos = videos);
         }
-      } catch (_) {
-        try {
-          final identifier = (_user?.id != null && _user!.id > 0)
-              ? _user!.id
-              : (_user?.username.isNotEmpty == true ? _user!.username : 'me');
-          final videos = await FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: forceRefresh);
-          if (mounted) {
-            setState(() => _myVideos = List.from(videos));
-          }
-        } catch (e) {
-          debugPrint('[ProfileScreen] getUserVideos notice: $e');
-        }
-      }
-
-      // 3. Load user's saved/bookmarked videos
-      try {
-        final saved = await FeedRemoteDataSource.instance.getSavedVideos();
-        if (mounted) {
-          setState(() => _savedVideos = List.from(saved));
-        }
       } catch (e) {
-        debugPrint('[ProfileScreen] getSavedVideos notice: $e');
+        debugPrint('[ProfileScreen] getUserVideos notice: $e');
       }
-
-      // 4. Load user's liked videos
-      try {
-        final liked = await FeedRemoteDataSource.instance.getLikedVideos();
-        if (mounted) {
-          setState(() => _likedVideos = List.from(liked));
-        }
-      } catch (e) {
-        debugPrint('[ProfileScreen] getLikedVideos notice: $e');
-      }
-
-      // Pre-warm following & followers cache in background
-      final targetId = _user?.id ?? 1;
-      if (targetId > 0) {
-        ProfileRemoteDataSource.instance.getFollowing(targetId).then((fl) {
-          ProfileSyncService.instance.cachedFollowing = List.from(fl);
-        }).catchError((_) {});
-        ProfileRemoteDataSource.instance.getFollowers(targetId).then((f) {
-          ProfileSyncService.instance.cachedFollowers = List.from(f);
-        }).catchError((_) {});
-      }
-    if (mounted) {
-      setState(() => _isLoadingTabs = false);
     }
+
+    // 3. Load user's saved/bookmarked videos
+    try {
+      final saved = await FeedRemoteDataSource.instance.getSavedVideos();
+      if (mounted) {
+        setState(() => _savedVideos = List.from(saved));
+      }
+    } catch (e) {
+      debugPrint('[ProfileScreen] getSavedVideos notice: $e');
+    }
+
+    // 4. Load user's liked videos
+    try {
+      final liked = await FeedRemoteDataSource.instance.getLikedVideos();
+      if (mounted) {
+        setState(() => _likedVideos = List.from(liked));
+      }
+    } catch (e) {
+      debugPrint('[ProfileScreen] getLikedVideos notice: $e');
+    }
+
+    // Pre-warm following & followers cache in background for zero-latency instant listing
+    final targetId = _user?.id ?? 1;
+    if (targetId > 0) {
+      ProfileRemoteDataSource.instance.getFollowing(targetId).then((fl) {
+        ProfileSyncService.instance.cachedFollowing = List.from(fl);
+      }).catchError((_) {});
+      ProfileRemoteDataSource.instance.getFollowers(targetId).then((f) {
+        ProfileSyncService.instance.cachedFollowers = List.from(f);
+      }).catchError((_) {});
+    }
+  }
+
+  Future<void> _refreshCategory(int categoryIndex) async {
+    if (categoryIndex < 0 || categoryIndex > 4 ||
+        _loadingCategories.contains(categoryIndex)) {
+      return;
+    }
+
+    final minimumAnimation = Future<void>.delayed(const Duration(milliseconds: 450));
+    setState(() => _loadingCategories.add(categoryIndex));
+    try {
+      final identifier = (_user?.id != null && _user!.id > 0)
+          ? _user!.id
+          : (_user?.username.isNotEmpty == true ? _user!.username : 'me');
+
+      switch (categoryIndex) {
+        case 0:
+          try {
+            final sounds = await FeedRemoteDataSource.instance.getMySounds();
+            if (mounted) setState(() => _mySounds = sounds);
+          } catch (_) {
+            if (_user != null && _user!.id > 0) {
+              final fallback = await FeedRemoteDataSource.instance.getUserSounds(_user!.id);
+              if (mounted) setState(() => _mySounds = fallback);
+            }
+          }
+          break;
+        case 1:
+          final videos = await FeedRemoteDataSource.instance.getUserVideos(
+            identifier,
+            forceRefresh: true,
+          );
+          if (mounted) setState(() => _myVideos = List.from(videos));
+          break;
+        case 3:
+          final saved = await FeedRemoteDataSource.instance.getSavedVideos();
+          if (mounted) setState(() => _savedVideos = List.from(saved));
+          break;
+        case 4:
+          final liked = await FeedRemoteDataSource.instance.getLikedVideos();
+          if (mounted) setState(() => _likedVideos = List.from(liked));
+          break;
+      }
+    } finally {
+      await minimumAnimation;
+      if (mounted) setState(() => _loadingCategories.remove(categoryIndex));
+    }
+  }
+
+  bool _isCategoryLoading(int categoryIndex) =>
+      _loadingCategories.contains(categoryIndex);
+
+  Widget _buildCategoryPage(int categoryIndex, List<Widget> slivers) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: slivers,
+        ),
+        if (_loadingCategories.contains(categoryIndex))
+          const ColoredBox(
+            color: Color(0x66000000),
+            child: Center(
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2.2,
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   Future<void> _handleEditProfile() async {
     if (_user == null) return;
     final updated = await Navigator.of(context).push<UserModel>(
-      MaterialPageRoute(
-        builder: (_) => EditProfileScreen(user: _user!),
-      ),
+      MaterialPageRoute(builder: (_) => EditProfileScreen(user: _user!)),
     );
     if (updated != null && mounted) {
       setState(() => _user = updated);
@@ -307,7 +410,12 @@ void _onVideoUploaded() {
 
   void _handleShareProfile() {
     HapticFeedback.lightImpact();
-    Clipboard.setData(ClipboardData(text: 'https://vilo.app/@${_user?.username ?? ProfileMockData.username}'));
+    Clipboard.setData(
+      ClipboardData(
+        text:
+            'https://vilo.app/@${_user?.username ?? ProfileMockData.username}',
+      ),
+    );
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Profile link copied to clipboard!'),
@@ -351,7 +459,10 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E24),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete Video', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Delete Video',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         content: const Text(
           'Are you sure you want to delete this video? This action cannot be undone.',
           style: TextStyle(color: Colors.white70),
@@ -359,12 +470,17 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white54),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFFE2C55),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Delete', style: TextStyle(color: Colors.white)),
@@ -381,7 +497,10 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
               SizedBox(
                 width: 16,
                 height: 16,
-                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
               ),
               SizedBox(width: 12),
               Text('Deleting video...', style: TextStyle(color: Colors.white)),
@@ -405,7 +524,9 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Failed to delete video. Please check your connection.'),
+            content: Text(
+              'Failed to delete video. Please check your connection.',
+            ),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -413,7 +534,19 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
     }
   }
 
-
+  @override
+  void dispose() {
+    _tabController.dispose();
+    ProfileSyncService.instance.followEvents.removeListener(_onFollowEvent);
+    ProfileSyncService.instance.videoUploadedEvents.removeListener(_onVideoUploaded);
+    ProfileSyncService.instance.videoInteractionEvents.removeListener(_onVideoInteractionEvent);
+    ProfileSyncService.instance.videoDeletedEvents.removeListener(_onVideoDeleted);
+    ProfileSyncService.instance.soundUploadedEvents.removeListener(_onSoundUploaded);
+    ProfileSyncService.instance.soundDeletedEvents.removeListener(_onSoundDeleted);
+    ProfileSyncService.instance.interactionEvents.removeListener(_onInteractionEvent);
+    ProfileSyncService.instance.profileUpdatedEvents.removeListener(_onProfileUpdated);
+    super.dispose();
+  }
 
   Future<void> _handleCreateOrViewStory() async {
     final currentStory = ThoughtStoryManager.instance.currentStory;
@@ -431,9 +564,7 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
     } else {
       // If no story, open ShareThoughtScreen
       final result = await Navigator.of(context).push<SharedThoughtStory>(
-        MaterialPageRoute(
-          builder: (_) => const ShareThoughtScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const ShareThoughtScreen()),
       );
 
       if (result != null && mounted) {
@@ -445,10 +576,21 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final currentUsername = _user?.username.isNotEmpty == true ? _user!.username : ProfileMockData.username;
-    final currentDisplayName = _user?.displayName.isNotEmpty == true ? _user!.displayName : currentUsername;
-    final currentAvatarUrl = _user?.avatarUrl?.isNotEmpty == true ? _user!.avatarUrl! : ProfileMockData.avatarUrl;
-    final currentBio = _user?.bio?.isNotEmpty == true ? _user!.bio! : ProfileMockData.bio;
+    final currentUsername =
+        (_user?.username != null && _user!.username.trim().isNotEmpty)
+        ? _user!.username.trim()
+        : ProfileMockData.username;
+    final currentDisplayName =
+        (_user?.displayName != null && _user!.displayName.trim().isNotEmpty)
+        ? _user!.displayName.trim()
+        : currentUsername;
+    final currentAvatarUrl =
+        (_user?.avatarUrl != null && _user!.avatarUrl!.trim().isNotEmpty)
+        ? _user!.avatarUrl!.trim()
+        : ProfileMockData.avatarUrl;
+    final currentBio = _user?.bio != null
+        ? (_user!.bio!.trim().isNotEmpty ? _user!.bio!.trim() : 'No bio yet.')
+        : ProfileMockData.bio;
     final followersDisplay = _formatCount(_user?.followersCount ?? 0);
     final followingDisplay = _formatCount(_user?.followingCount ?? 0);
     final totalLikes = _myVideos.fold<int>(0, (sum, v) => sum + v.likeCount);
@@ -467,7 +609,11 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
             Text(currentDisplayName, style: PulseTypography.bodyLg),
             if (_user?.isVerified == true) ...[
               const SizedBox(width: 4),
-              const Icon(Icons.verified_rounded, color: Color(0xFF2F80ED), size: 16),
+              const Icon(
+                Icons.verified_rounded,
+                color: Color(0xFF2F80ED),
+                size: 16,
+              ),
             ],
           ],
         ),
@@ -494,314 +640,345 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
                     const SizedBox(height: 16),
                     // Avatar with Share Mind Thought Balloon & Story Ring
                     ValueListenableBuilder<SharedThoughtStory?>(
-                      valueListenable: ThoughtStoryManager.instance.storyNotifier,
+                      valueListenable:
+                          ThoughtStoryManager.instance.storyNotifier,
                       builder: (context, currentStory, _) {
                         final isStoryActive = currentStory != null;
-                        final messageText =
-                            isStoryActive ? currentStory.message : 'Share a thought...';
-                        final hasMusic = isStoryActive && currentStory.musicTrack != null;
+                        final messageText = isStoryActive
+                            ? currentStory.message
+                            : 'Share a thought...';
+                        final hasMusic =
+                            isStoryActive && currentStory.musicTrack != null;
 
                         return GestureDetector(
                           onTap: _handleCreateOrViewStory,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Floating Thought Message Balloon on top of Profile Avatar
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              constraints: const BoxConstraints(maxWidth: 160),
-                              decoration: BoxDecoration(
-                                color: isStoryActive
-                                    ? const Color(0xFF222228)
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                border: isStoryActive
-                                    ? Border.all(
-                                        color: const Color(0xFF383842),
-                                        width: 1.2,
-                                      )
-                                    : null,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.35),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      messageText,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontFamily: 'Inter',
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: isStoryActive
-                                            ? Colors.white
-                                            : const Color(0xFF141416),
-                                      ),
-                                    ),
-                                  ),
-                                  if (hasMusic) ...[
-                                    const SizedBox(width: 6),
-                                    const AnimatedMiniMusicWave(),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            // Speech balloon triangle pointer
-                            CustomPaint(
-                              size: const Size(10, 6),
-                              painter: _SpeechTrianglePainter(
-                                color: isStoryActive
-                                    ? const Color(0xFF222228)
-                                    : Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-
-                            // Profile Avatar with Instagram-style Story Gradient Ring (if active) or Plus Badge
-                            Container(
-                              width: 106,
-                              height: 106,
-                              padding: isStoryActive
-                                  ? const EdgeInsets.all(3.0)
-                                  : EdgeInsets.zero,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: isStoryActive
-                                    ? const LinearGradient(
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                        colors: [
-                                          Color(0xFFFE2C55),
-                                          Color(0xFFFF9F43),
-                                          Color(0xFF9B51E0),
-                                          Color(0xFF2F80ED),
-                                        ],
-                                      )
-                                    : null,
-                              ),
-                              child: Container(
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: PulseColors.background,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Floating Thought Message Balloon on top of Profile Avatar
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
                                 ),
-                                padding: isStoryActive
-                                    ? const EdgeInsets.all(2.5)
-                                    : EdgeInsets.zero,
-                                child: Stack(
-                                  clipBehavior: Clip.none,
+                                constraints: const BoxConstraints(
+                                  maxWidth: 160,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isStoryActive
+                                      ? const Color(0xFF222228)
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: isStoryActive
+                                      ? Border.all(
+                                          color: const Color(0xFF383842),
+                                          width: 1.2,
+                                        )
+                                      : null,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.35,
+                                      ),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    ClipOval(
-                                      child: SizedBox(
-                                        width: 96,
-                                        height: 96,
-                                        child: Image.network(
-                                          currentAvatarUrl,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (context, error, stackTrace) => Container(
-                                            color: PulseColors.surfaceContainer,
-                                            child: const Icon(
-                                              Icons.person_rounded,
-                                              color: Colors.white70,
-                                              size: 48,
-                                            ),
-                                          ),
+                                    Flexible(
+                                      child: Text(
+                                        messageText,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontFamily: 'Inter',
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: isStoryActive
+                                              ? Colors.white
+                                              : const Color(0xFF141416),
                                         ),
                                       ),
                                     ),
-                                    if (!isStoryActive)
-                                      Positioned(
-                                        bottom: 0,
-                                        right: 0,
-                                        child: Container(
-                                          width: 26,
-                                          height: 26,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: const Color(0xFF2F80ED),
-                                            border: Border.all(
-                                              color: PulseColors.background,
-                                              width: 2.5,
-                                            ),
-                                          ),
-                                          child: const Icon(
-                                            Icons.add,
-                                            color: Colors.white,
-                                            size: 16,
-                                          ),
-                                        ),
-                                      ),
+                                    if (hasMusic) ...[
+                                      const SizedBox(width: 6),
+                                      const AnimatedMiniMusicWave(),
+                                    ],
                                   ],
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  // Username
-                  Text('@$currentUsername', style: PulseTypography.headlineSm),
-                  const SizedBox(height: 20),
-                  // Stats Row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildStatItem('Following', followingDisplay, onTap: () => _openFollowersFollowing(1)),
-                      _buildDivider(),
-                      _buildStatItem('Followers', followersDisplay, onTap: () => _openFollowersFollowing(0)),
-                      _buildDivider(),
-                      _buildStatItem('Likes', likesDisplay),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  // Action Buttons
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildPillButton('Edit Profile', isPrimary: false, onTap: _handleEditProfile),
-                      const SizedBox(width: 8),
-                      _buildPillButton('Share Profile', isPrimary: false, onTap: _handleShareProfile),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  // Bio
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: Text(
-                      currentBio,
-                      textAlign: TextAlign.center,
-                      style: PulseTypography.bodyMd,
+                              // Speech balloon triangle pointer
+                              CustomPaint(
+                                size: const Size(10, 6),
+                                painter: _SpeechTrianglePainter(
+                                  color: isStoryActive
+                                      ? const Color(0xFF222228)
+                                      : Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+
+                              // Profile Avatar with Instagram-style Story Gradient Ring (if active) or Plus Badge
+                              Container(
+                                width: 106,
+                                height: 106,
+                                padding: isStoryActive
+                                    ? const EdgeInsets.all(3.0)
+                                    : EdgeInsets.zero,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: isStoryActive
+                                      ? const LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [
+                                            Color(0xFFFE2C55),
+                                            Color(0xFFFF9F43),
+                                            Color(0xFF9B51E0),
+                                            Color(0xFF2F80ED),
+                                          ],
+                                        )
+                                      : null,
+                                ),
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: PulseColors.background,
+                                  ),
+                                  padding: isStoryActive
+                                      ? const EdgeInsets.all(2.5)
+                                      : EdgeInsets.zero,
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      ClipOval(
+                                        child: SizedBox(
+                                          width: 96,
+                                          height: 96,
+                                          child: Image.network(
+                                            currentAvatarUrl,
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (context, error, stackTrace) =>
+                                                    Container(
+                                                      color: PulseColors
+                                                          .surfaceContainer,
+                                                      child: const Icon(
+                                                        Icons.person_rounded,
+                                                        color: Colors.white70,
+                                                        size: 48,
+                                                      ),
+                                                    ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (!isStoryActive)
+                                        Positioned(
+                                          bottom: 0,
+                                          right: 0,
+                                          child: Container(
+                                            width: 26,
+                                            height: 26,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: const Color(0xFF2F80ED),
+                                              border: Border.all(
+                                                color: PulseColors.background,
+                                                width: 2.5,
+                                              ),
+                                            ),
+                                            child: const Icon(
+                                              Icons.add,
+                                              color: Colors.white,
+                                              size: 16,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
-              ),
-            ),
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _SliverTabBarDelegate(
-                TabBar(
-                  controller: _tabController,
-                  indicatorColor: Colors.white,
-                  labelColor: Colors.white,
-                  unselectedLabelColor: Colors.grey,
-                  tabs: const [
-                    Tab(icon: Icon(Icons.music_note_rounded)), // Music (Left)
-                    Tab(icon: Icon(Icons.grid_view_rounded)),  // Grid / Posted Videos (Right)
-                    Tab(icon: Icon(Icons.shopping_bag_outlined)), // Shop
-                    Tab(icon: Icon(Icons.bookmark_border_rounded)), // Saved
-                    Tab(icon: Icon(Icons.favorite_border_rounded)), // Liked
+                    const SizedBox(height: 12),
+                    // Username
+                    Text(
+                      '@$currentUsername',
+                      style: PulseTypography.headlineSm,
+                    ),
+                    const SizedBox(height: 20),
+                    // Stats Row
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildStatItem(
+                          'Following',
+                          followingDisplay,
+                          onTap: () => _openFollowersFollowing(1),
+                        ),
+                        _buildDivider(),
+                        _buildStatItem(
+                          'Followers',
+                          followersDisplay,
+                          onTap: () => _openFollowersFollowing(0),
+                        ),
+                        _buildDivider(),
+                        _buildStatItem('Likes', likesDisplay),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    // Action Buttons
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildPillButton(
+                          'Edit Profile',
+                          isPrimary: false,
+                          onTap: _handleEditProfile,
+                        ),
+                        const SizedBox(width: 8),
+                        _buildPillButton(
+                          'Share Profile',
+                          isPrimary: false,
+                          onTap: _handleShareProfile,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    // Bio
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 40),
+                      child: Text(
+                        currentBio,
+                        textAlign: TextAlign.center,
+                        style: PulseTypography.bodyMd,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
-            ),
-          ];
-        },
-        body: ViloTabBarView(
-          controller: _tabController,
-          children: [
-CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _SliverTabBarDelegate(
+                  TabBar(
+                    controller: _tabController,
+                    onTap: _refreshCategory,
+                    indicatorColor: Colors.white,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.grey,
+                    tabs: const [
+                      Tab(icon: Icon(Icons.music_note_rounded)), // Music (Left)
+                      Tab(
+                        icon: Icon(Icons.grid_view_rounded),
+                      ), // Grid / Posted Videos (Right)
+                      Tab(icon: Icon(Icons.shopping_bag_outlined)), // Shop
+                      Tab(icon: Icon(Icons.bookmark_border_rounded)), // Saved
+                      Tab(icon: Icon(Icons.favorite_border_rounded)), // Liked
+                    ],
+                  ),
+                ),
+              ),
+            ];
+          },
+          body: ViloTabBarView(
+            controller: _tabController,
+            children: [
+              _buildCategoryPage(
                 0,
-                userSounds: _mySounds,
-                isLoading: _isLoadingTabs,
-                onSoundUpdated: (updatedSound) {
-                  setState(() {
-                    final idx = _mySounds.indexWhere((s) => s.id == updatedSound.id);
-                    if (idx != -1) {
-                      _mySounds[idx] = updatedSound;
-                    }
-                  });
-                },
-                onSoundDeleted: (deletedSound) {
-                  setState(() {
-                    _mySounds.removeWhere((s) => s.id == deletedSound.id);
-                  });
-                },
-              ),
-            ), // Music (Index 0)
-            CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(
+                buildProfileTabSlivers(
+                  0,
+                  userSounds: _mySounds,
+                  isLoading: _isCategoryLoading(0),
+                  onSoundUpdated: (updatedSound) {
+                    setState(() {
+                      final idx = _mySounds.indexWhere((s) => s.id == updatedSound.id);
+                      if (idx != -1) {
+                        _mySounds[idx] = updatedSound;
+                      }
+                    });
+                  },
+                  onSoundDeleted: (deletedSound) {
+                    setState(() {
+                      _mySounds.removeWhere((s) => s.id == deletedSound.id);
+                    });
+                  },
+                ),
+              ), // Music (Index 0)
+              _buildCategoryPage(
                 1,
-                userVideos: _myVideos,
-                isLoading: _isLoadingTabs,
-                onVideoTap: (video, index) {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => VideoFeedPage(
-                        isActive: true,
-                        initialVideos: _myVideos,
-                        initialIndex: index,
-                        canDelete: true, // Only posted videos viewed from profile can be deleted
+                buildProfileTabSlivers(
+                  1,
+                  userVideos: _myVideos,
+                  isLoading: _isCategoryLoading(1),
+                  onVideoTap: (video, index) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => VideoFeedPage(
+                          isActive: true,
+                          initialVideos: _myVideos,
+                          initialIndex: index,
+                          canDelete:
+                              true, // Only posted videos viewed from profile can be deleted
+                        ),
                       ),
-                    ),
-                  );
-                },
-                onVideoLongPress: (video, index) => _confirmDeleteProfileVideo(video),
-              ),
-            ), // Grid / Posted Videos (Index 1)
-            CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(2),
-            ), // Shop
-            CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(
+                    );
+                  },
+                  onVideoLongPress: (video, index) =>
+                      _confirmDeleteProfileVideo(video),
+                ),
+              ), // Grid / Posted Videos (Index 1)
+              _buildCategoryPage(2, buildProfileTabSlivers(2)), // Shop
+              _buildCategoryPage(
                 3,
-                savedVideos: _savedVideos,
-                isLoading: _isLoadingTabs,
-                onSavedVideoTap: (video, index) {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => VideoFeedPage(
-                        isActive: true,
-                        initialVideos: _savedVideos,
-                        initialIndex: index,
-                        canDelete: false,
+                buildProfileTabSlivers(
+                  3,
+                  savedVideos: _savedVideos,
+                  isLoading: _isCategoryLoading(3),
+                  onSavedVideoTap: (video, index) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => VideoFeedPage(
+                          isActive: true,
+                          initialVideos: _savedVideos,
+                          initialIndex: index,
+                          canDelete: false,
+                        ),
                       ),
-                    ),
-                  );
-                },
-              ),
-            ), // Saved
-            CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(
+                    );
+                  },
+                ),
+              ), // Saved
+              _buildCategoryPage(
                 4,
-                likedVideos: _likedVideos,
-                isLoading: _isLoadingTabs,
-                onLikedVideoTap: (video, index) {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => VideoFeedPage(
-                        isActive: true,
-                        initialVideos: _likedVideos,
-                        initialIndex: index,
-                        canDelete: false,
+                buildProfileTabSlivers(
+                  4,
+                  likedVideos: _likedVideos,
+                  isLoading: _isCategoryLoading(4),
+                  onLikedVideoTap: (video, index) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => VideoFeedPage(
+                          isActive: true,
+                          initialVideos: _likedVideos,
+                          initialIndex: index,
+                          canDelete: false,
+                        ),
                       ),
-                    ),
-                  );
-                },
-              ),
-            ), // Liked
-          ],
+                    );
+                  },
+                ),
+              ), // Liked
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 
@@ -813,9 +990,19 @@ CustomScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 15),
         child: Column(
           children: [
-            Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
+            Text(
+              value,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: Colors.white,
+              ),
+            ),
             const SizedBox(height: 4),
-            Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.grey, fontSize: 13),
+            ),
           ],
         ),
       ),
@@ -823,10 +1010,18 @@ CustomScrollView(
   }
 
   Widget _buildDivider() {
-    return Container(height: 15, width: 1, color: Colors.grey.withValues(alpha: 0.3));
+    return Container(
+      height: 15,
+      width: 1,
+      color: Colors.grey.withValues(alpha: 0.3),
+    );
   }
 
-  Widget _buildPillButton(String label, {bool isPrimary = true, VoidCallback? onTap}) {
+  Widget _buildPillButton(
+    String label, {
+    bool isPrimary = true,
+    VoidCallback? onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -881,7 +1076,11 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
   double get maxExtent => _tabBar.preferredSize.height;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     return Container(color: PulseColors.background, child: _tabBar);
   }
 

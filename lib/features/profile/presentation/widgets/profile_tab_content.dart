@@ -118,8 +118,7 @@ List<Widget> buildProfileTabSlivers(
                   } else if (video.isImagePost && video.videoUrl.trim().isNotEmpty) {
                     thumb = video.videoUrl.trim();
                   } else {
-                    final mockThumbs = ProfileMockData.videoThumbnails;
-                    thumb = mockThumbs[video.id.abs() % mockThumbs.length];
+                    thumb = '';
                   }
 
                   return VideoGridItem(
@@ -230,7 +229,7 @@ List<Widget> buildProfileTabSlivers(
                   } else if (video.isImagePost && video.videoUrl.trim().isNotEmpty) {
                     thumb = video.videoUrl.trim();
                   } else {
-                    thumb = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500';
+                    thumb = '';
                   }
 
                   return VideoGridItem(
@@ -354,7 +353,7 @@ List<Widget> buildProfileTabSlivers(
                   } else if (video.isImagePost && video.videoUrl.trim().isNotEmpty) {
                     thumb = video.videoUrl.trim();
                   } else {
-                    thumb = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500';
+                    thumb = '';
                   }
 
                   return VideoGridItem(

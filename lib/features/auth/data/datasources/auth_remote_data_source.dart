@@ -40,6 +40,7 @@ class AuthRemoteDataSource {
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       email: user.email,
+      bio: user.bio,
     );
 
     // Sync globally so identity immediately reflects active user
@@ -80,6 +81,7 @@ class AuthRemoteDataSource {
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       email: user.email,
+      bio: user.bio,
     );
 
     // Sync globally so identity immediately reflects active user
@@ -94,6 +96,14 @@ class AuthRemoteDataSource {
     final user = UserModel.fromJson(response as Map<String, dynamic>);
     ProfileSyncService.instance.cachedMyProfile = user;
     ProfileRemoteDataSource.instance.cacheUser(user);
+    await _tokenStorage.saveUserData(
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+      email: user.email,
+      bio: user.bio,
+    );
     return user;
   }
 

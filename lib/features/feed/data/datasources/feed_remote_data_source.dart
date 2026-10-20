@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io' show File, Platform;
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
@@ -17,6 +18,7 @@ class FeedRemoteDataSource {
   final TokenStorage _tokenStorage;
 
   final Map<String, List<VideoModel>> _feedCache = {};
+  final Map<String, int> _feedCacheSeeds = {};
   final Map<String, List<VideoModel>> _userVideosCache = {};
 
   FeedRemoteDataSource({ApiClient? client, TokenStorage? tokenStorage})
@@ -80,6 +82,7 @@ class FeedRemoteDataSource {
 
   void clearCache() {
     _feedCache.clear();
+    _feedCacheSeeds.clear();
     _userVideosCache.clear();
   }
 
@@ -152,24 +155,38 @@ class FeedRemoteDataSource {
     }
   }
 
-  /// Unified getFeed supporting pagination, cache, and both feedType and type parameters
+  /// Unified getFeed supporting pagination, cache, seed, and creator interleaving
   Future<List<VideoModel>> getFeed({
     int page = 0,
     int size = 10,
     String? type,
     String? feedType,
+    int? seed,
     bool forceRefresh = false,
   }) async {
     final rawType = (type ?? feedType ?? 'foryou').trim();
-    final normalizedType = (rawType.toUpperCase() == 'FOLLOWING') ? 'following' : 'foryou';
-    final cacheKey = normalizedType.replaceAll('_', '');
+    final normalizedInput = rawType.toUpperCase();
+    final normalizedType = normalizedInput == 'FOLLOWING' ? 'following' : 'foryou';
+    // Community uses the same backend feed as For You, but must keep its own
+    // cache so refreshing one top category never invalidates the other.
+    final cacheKey = normalizedInput == 'COMMUNITY'
+        ? 'community'
+        : normalizedType.replaceAll('_', '');
+
+    if (forceRefresh) {
+      _feedCache.remove(cacheKey);
+      _feedCacheSeeds.remove(cacheKey);
+    }
 
     if (!forceRefresh && normalizedType != 'following' && page == 0 && _feedCache[cacheKey] != null && _feedCache[cacheKey]!.isNotEmpty) {
-      return _feedCache[cacheKey]!;
+      if (seed == null || _feedCacheSeeds[cacheKey] == seed) {
+        return _feedCache[cacheKey]!;
+      }
     }
 
     try {
-      final endpoint = '/videos/feed?page=$page&size=$size&type=$normalizedType';
+      final seedParam = (seed != null) ? '&seed=$seed' : '';
+      final endpoint = '/videos/feed?page=$page&size=$size&type=$normalizedType$seedParam';
       final response = await _client.get(endpoint, requireAuth: false);
 
       List<dynamic>? list;
@@ -184,13 +201,21 @@ class FeedRemoteDataSource {
       }
 
       if (list != null) {
-        final videos = list
+        final rawVideos = list
             .whereType<Map<String, dynamic>>()
             .map((item) => VideoModel.fromJson(item))
             .toList();
 
+        // Ensure creator interleaving is respected across creators
+        final videos = (page == 0)
+            ? interleaveAndRandomizeVideos(rawVideos, seed: seed)
+            : rawVideos;
+
         if (page == 0) {
           _feedCache[cacheKey] = videos;
+          if (seed != null) {
+            _feedCacheSeeds[cacheKey] = seed;
+          }
         }
 
         // Pre-cache user videos into _userVideosCache so opening their profiles is instantaneous
@@ -220,8 +245,11 @@ class FeedRemoteDataSource {
     }
 
     if (page == 0) {
-      final fallback = _getFallbackFeed(normalizedType);
+      final fallback = _getFallbackFeed(normalizedType, seed: seed);
       _feedCache[cacheKey] = fallback;
+      if (seed != null) {
+        _feedCacheSeeds[cacheKey] = seed;
+      }
       for (final v in fallback) {
         final uName = v.username.replaceAll('@', '').trim().toLowerCase();
         _userVideosCache.putIfAbsent(uName, () => []);
@@ -1141,125 +1169,279 @@ final newVideo = VideoModel.fromJson(data as Map<String, dynamic>);
     }
   }
 
-  List<VideoModel> _getFallbackFeed(String feedType) {
+  /// Shuffles and round-robin interleaves videos across distinct creators.
+  /// Ensures consecutive videos are not by the same user, and feed order is randomized.
+  List<VideoModel> interleaveAndRandomizeVideos(List<VideoModel> videos, {int? seed}) {
+    if (videos.isEmpty) return videos;
+
+    final random = (seed != null) ? math.Random(seed) : math.Random();
+
+    // 1. Group videos by creator identifier (creatorId or username)
+    final byCreator = <String, List<VideoModel>>{};
+    for (final v in videos) {
+      final key = v.creatorId > 0
+          ? v.creatorId.toString()
+          : (v.username.isNotEmpty ? v.username.toLowerCase() : v.id.toString());
+      byCreator.putIfAbsent(key, () => []).add(v);
+    }
+
+    // 2. Shuffle videos within each creator's list
+    for (final list in byCreator.values) {
+      list.shuffle(random);
+    }
+
+    // 3. Shuffle creator order
+    final queues = byCreator.values.toList()..shuffle(random);
+
+    // 4. Interleave round-robin across creators
+    final result = <VideoModel>[];
+    bool hasMore = true;
+    while (hasMore) {
+      hasMore = false;
+      for (final queue in queues) {
+        if (queue.isNotEmpty) {
+          result.add(queue.removeAt(0));
+          if (queue.isNotEmpty) {
+            hasMore = true;
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  List<VideoModel> _getFallbackFeed(String feedType, {int? seed}) {
     final allVideos = [
       const VideoModel(
         id: 1,
+        creatorId: 1,
+        username: '@mongkol',
+        displayName: 'Thoeung Sereymongkol',
+        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid1.mp4',
+        caption: 'Building responsive Flutter UI with Spring Boot 🚀 #coding #flutterdev #vilo',
+        musicTitle: 'Original Sound - Thoeung Sereymongkol',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
+        isMe: true,
+      ),
+      const VideoModel(
+        id: 2,
         creatorId: 2,
         username: '@bunheng',
         displayName: 'Lim Bunheng',
         avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500',
         isVerified: true,
-        videoUrl: 'assets/videos/vid2.mp4',
-        caption: 'Night walk through the neon streets #citylife #neon #cyberpunk',
-        musicTitle: 'Cyberpunk Beats - Synthwave',
-        likeCount: 890000,
-        commentCount: 12100,
-        saveCount: 85000,
-        isFollowing: true,
-        isMe: false,
-      ),
-      const VideoModel(
-        id: 2,
-        creatorId: 7,
-        username: '@sophia_art',
-        displayName: 'Sophia Vance',
-        avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500',
-        isVerified: true,
-        videoUrl: 'assets/videos/vid1.mp4',
-        caption: 'The view from the top is breathtaking ⛰️ #mountains #visuals',
-        musicTitle: 'Epic Mountain Theme - Hans Zimmer',
-        likeCount: 2100000,
-        commentCount: 110000,
-        saveCount: 400000,
+        videoUrl: 'assets/videos/vid9.mp4',
+        caption: '60fps video engine rendering benchmarks 🚀 #tech #videoengine #performance',
+        musicTitle: 'High FPS Pulse - Seven7',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
         isFollowing: true,
         isMe: false,
       ),
       const VideoModel(
         id: 3,
-        creatorId: 10,
-        username: '@davi_beats',
-        displayName: 'David Miller',
-        avatarUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500',
+        creatorId: 8,
+        username: '@rithysak',
+        displayName: 'Sok Rithysak',
+        avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500',
         isVerified: true,
         videoUrl: 'assets/videos/vid3.mp4',
-        caption: 'Found this hidden waterfall today! 🌿💧 #hiking #nature',
-        musicTitle: 'Nature Sounds - Waterfall',
-        likeCount: 340000,
-        commentCount: 3200,
-        saveCount: 20000,
+        caption: 'Designing smooth micro-animations in Flutter 🎨 #ui #flutter #animation',
+        musicTitle: 'Smooth Motion Beats - Seven7',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
         isFollowing: true,
         isMe: false,
       ),
       const VideoModel(
         id: 4,
-        creatorId: 11,
-        username: '@sarah_fit',
-        displayName: 'Sarah Connor',
-        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500',
-        isVerified: false,
-        videoUrl: 'assets/videos/vid4.mp4',
-        caption: 'Morning workout done! 💪 HIIT session #fitness #gym',
-        musicTitle: 'Workout Mix 2026 - DJ Flex',
-        likeCount: 550000,
-        commentCount: 8400,
-        saveCount: 15000,
-        isFollowing: false,
+        creatorId: 9,
+        username: '@setkimliza',
+        displayName: 'Set Kimliza',
+        avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid5.mp4',
+        caption: 'Coffee shop morning aesthetics & Lo-Fi ☕ #coffee #vibes #morning',
+        musicTitle: 'Rainy Day Acoustic - LoFi',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
         isMe: false,
       ),
       const VideoModel(
         id: 5,
-        creatorId: 9,
-        username: '@linda_travel',
-        displayName: 'Linda Chen',
-        avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500',
+        creatorId: 10,
+        username: '@trenmono',
+        displayName: 'Tren Mono',
+        avatarUrl: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500',
         isVerified: true,
-        videoUrl: 'assets/videos/vid2.mp4',
-        caption: 'Peaceful morning on the lake 🛶 #lake #peace',
-        musicTitle: 'Morning Coffee Acoustic - Indie Band',
-        likeCount: 420000,
-        commentCount: 5100,
-        saveCount: 18000,
-        isFollowing: false,
+        videoUrl: 'assets/videos/vid7.mp4',
+        caption: 'Analog modular synth jam session in the lab 🎛️ #synth #modular #beats',
+        musicTitle: 'Analog Pulse - Tren Mono',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
         isMe: false,
       ),
       const VideoModel(
         id: 6,
-        creatorId: 16,
-        username: '@kevin_tech',
-        displayName: 'Kevin Zhang',
-        avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=500',
+        creatorId: 25,
+        username: '@tryphien',
+        displayName: 'Try Phien',
+        avatarUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500',
         isVerified: true,
-        videoUrl: 'assets/videos/vid3.mp4',
-        caption: 'Next-gen desk setup tour 🖥️ Minimal aesthetic #tech',
-        musicTitle: 'Midnight City Pulse - Neon Dreams',
-        likeCount: 310000,
-        commentCount: 4200,
-        saveCount: 31000,
-        isFollowing: false,
+        videoUrl: 'assets/videos/vid11.mp4',
+        caption: 'Next-gen creative setup tour 🖥️ Minimal aesthetic #creativesetup #tech',
+        musicTitle: 'Creative Waves - LoFi',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
         isMe: false,
       ),
       const VideoModel(
         id: 7,
-        creatorId: 99,
-        username: '@demo_vilo',
-        displayName: 'Demo Creator',
+        creatorId: 26,
+        username: '@nenseanghai',
+        displayName: 'Nen Seanghai',
+        avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid13.mp4',
+        caption: 'Designing clean responsive layouts & mobile interactions 📱 #flutterdev #uiux',
+        musicTitle: 'Motion Design Beats',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
+        isMe: false,
+      ),
+      const VideoModel(
+        id: 8,
+        creatorId: 1,
+        username: '@mongkol',
+        displayName: 'Thoeung Sereymongkol',
         avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500',
         isVerified: true,
-        videoUrl: 'assets/videos/vid1.mp4',
-        caption: 'Building modern reactive Flutter UI with Spring Boot #coding',
-        musicTitle: 'Seven7 Team Anthem - Seven7 Beats',
-        likeCount: 1200000,
-        commentCount: 45200,
-        saveCount: 120000,
-        isFollowing: false,
+        videoUrl: 'assets/videos/vid2.mp4',
+        caption: 'Late night coding session & neon vibes 🌃 #developer #tech #viloapp',
+        musicTitle: 'Midnight City Pulse - Neon Dreams',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
+        isMe: true,
+      ),
+      const VideoModel(
+        id: 9,
+        creatorId: 8,
+        username: '@rithysak',
+        displayName: 'Sok Rithysak',
+        avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid4.mp4',
+        caption: 'Weekend mountain trail ride 🚴 #nature #adventure #outdoor',
+        musicTitle: 'Open Road Acoustic',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
+        isMe: false,
+      ),
+      const VideoModel(
+        id: 10,
+        creatorId: 9,
+        username: '@setkimliza',
+        displayName: 'Set Kimliza',
+        avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid6.mp4',
+        caption: 'Golden hour city stroll after rain 🌧️✨ #aesthetic #mood #vilo',
+        musicTitle: 'After The Rain - Chillhop',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
+        isMe: false,
+      ),
+      const VideoModel(
+        id: 11,
+        creatorId: 10,
+        username: '@trenmono',
+        displayName: 'Tren Mono',
+        avatarUrl: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid8.mp4',
+        caption: 'Minimalist architecture walk in the city 🏢 #architecture #design #minimalism',
+        musicTitle: 'Mono Wave Vol 1',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
+        isMe: false,
+      ),
+      const VideoModel(
+        id: 12,
+        creatorId: 2,
+        username: '@bunheng',
+        displayName: 'Lim Bunheng',
+        avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid10.mp4',
+        caption: 'Cyberpunk neon street walk at night #citylife #neon #cyberpunk',
+        musicTitle: 'Cyberpunk Beats - Synthwave',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
+        isMe: false,
+      ),
+      const VideoModel(
+        id: 13,
+        creatorId: 25,
+        username: '@tryphien',
+        displayName: 'Try Phien',
+        avatarUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid12.mp4',
+        caption: 'Exploring neon night streets & cinematic moments 🌆 #cinematic #night #vilo',
+        musicTitle: 'Night Drive - Ambient',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
+        isMe: false,
+      ),
+      const VideoModel(
+        id: 14,
+        creatorId: 26,
+        username: '@nenseanghai',
+        displayName: 'Nen Seanghai',
+        avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid14.mp4',
+        caption: 'Sunset vibes by the river with acoustic melodies 🌅🎸 #sunset #acoustic #chill',
+        musicTitle: 'Sunset Glow - Acoustic',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
         isMe: false,
       ),
     ];
 
-    if (feedType.toLowerCase() == 'following') {
-      return allVideos.where((v) => v.isFollowing).toList();
-    }
-    return allVideos;
+    final filtered = (feedType.toLowerCase() == 'following')
+        ? allVideos.where((v) => v.isFollowing && !v.isMe).toList()
+        : allVideos;
+
+    return interleaveAndRandomizeVideos(filtered, seed: seed);
   }
 }

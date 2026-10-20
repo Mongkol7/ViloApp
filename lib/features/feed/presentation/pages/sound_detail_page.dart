@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../../profile/presentation/mock/profile_mock_data.dart';
 import '../../data/datasources/feed_remote_data_source.dart';
@@ -19,6 +20,7 @@ class SoundDetailPage extends StatefulWidget {
   final int? durationSeconds;
   final int? creatorId;
   final String? creatorUsername;
+  final VideoModel? sourceVideo;
 
   const SoundDetailPage({
     super.key,
@@ -31,6 +33,7 @@ class SoundDetailPage extends StatefulWidget {
     this.durationSeconds,
     this.creatorId,
     this.creatorUsername,
+    this.sourceVideo,
   });
 
   @override
@@ -298,10 +301,10 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
   }
 
   Future<void> _loadVideos() async {
-    // 1. If soundId is provided, query sound details from backend
-    if (widget.soundId != null && widget.soundId!.isNotEmpty && widget.soundId != '0') {
+    final id = await _resolveSoundId();
+    if (id != null && id.isNotEmpty && id != '0') {
       try {
-        final details = await FeedRemoteDataSource.instance.getSoundDetails(widget.soundId!);
+        final details = await FeedRemoteDataSource.instance.getSoundDetails(id);
         final sound = details['sound'] as SoundTrack?;
         final videosList = details['videos'] as List<VideoModel>?;
 
@@ -326,13 +329,21 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
             }
             if (videosList != null) {
               _rawVideos = List.from(videosList);
-              _videos = videosList.map((v) => {
+              if (widget.sourceVideo != null && !_rawVideos.any((v) => v.id == widget.sourceVideo!.id)) {
+                _rawVideos.insert(0, widget.sourceVideo!);
+              }
+              _videos = _rawVideos.map((v) => {
                 'id': v.id.toString(),
                 'thumbnailUrl': (v.thumbnailUrl != null && v.thumbnailUrl!.isNotEmpty)
                     ? v.thumbnailUrl!
                     : 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500',
-                'views': v.likes,
+                'views': v.views,
+                'viewCount': v.viewCount,
+                'video': v,
               }).toList();
+            } else if (widget.sourceVideo != null) {
+              _rawVideos = [widget.sourceVideo!];
+              _videos = [_sourceVideoMap()];
             }
             _isLoadingVideos = false;
           });
@@ -351,14 +362,19 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
         if (mounted && soundVideos.isNotEmpty) {
           setState(() {
             _rawVideos = List.from(soundVideos);
-            _videos = soundVideos.map((v) => {
+            if (widget.sourceVideo != null && !_rawVideos.any((v) => v.id == widget.sourceVideo!.id)) {
+              _rawVideos.insert(0, widget.sourceVideo!);
+            }
+            _videos = _rawVideos.map((v) => {
               'id': v.id.toString(),
               'thumbnailUrl': (v.thumbnailUrl != null && v.thumbnailUrl!.isNotEmpty)
                   ? v.thumbnailUrl!
                   : 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500',
-              'views': v.likes,
+              'views': v.views,
+              'viewCount': v.viewCount,
+              'video': v,
             }).toList();
-            _videosCount = '${soundVideos.length} videos';
+            _videosCount = '${_rawVideos.length} videos';
             _isLoadingVideos = false;
           });
           return;
@@ -368,16 +384,72 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
 
     if (mounted) {
       setState(() {
+        if (widget.sourceVideo != null) {
+          _rawVideos = [widget.sourceVideo!];
+          _videos = [_sourceVideoMap()];
+        } else {
+          _videos = [];
+        }
         _isLoadingVideos = false;
       });
     }
+  }
+
+  Map<String, dynamic> _sourceVideoMap() {
+    final source = widget.sourceVideo!;
+    return {
+      'id': source.id,
+      'thumbnailUrl': source.thumbnailUrl,
+      'views': source.formattedViews,
+      'viewCount': source.viewCount,
+      'videoUrl': source.videoUrl,
+      'soundTitle': source.musicTitle,
+    };
+  }
+
+
+  Future<String?> _resolveSoundId() async {
+    final providedId = widget.soundId?.trim();
+    if (providedId != null && providedId.isNotEmpty) return providedId;
+
+    final title = widget.title?.trim() ?? '';
+    if (title.isEmpty) return null;
+
+    try {
+      final response = await ApiClient.instance.get(
+        '/search?q=${Uri.encodeComponent(title)}&type=SOUNDS',
+        requireAuth: false,
+      );
+      final data = response is Map && response['data'] is Map
+          ? response['data'] as Map
+          : response is Map
+              ? response
+              : null;
+      final sounds = data?['sounds'];
+      if (sounds is List && sounds.isNotEmpty) {
+        final normalizedTitle = title.toLowerCase();
+        for (final sound in sounds) {
+          if (sound is Map) {
+            final soundTitle = sound['title']?.toString().toLowerCase() ?? '';
+            if (soundTitle == normalizedTitle ||
+                soundTitle.contains(normalizedTitle) ||
+                normalizedTitle.contains(soundTitle)) {
+              final id = sound['id']?.toString();
+              if (id != null && id.isNotEmpty) return id;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
     final title = _title ?? widget.title ?? 'Original Sound';
     final artist = _artist ?? widget.artist ?? 'Creator';
-    final count = _videosCount ?? widget.videosCount ?? '0 videos';
+    final count = _videosCount ?? widget.videosCount ?? '${_videos.length} videos';
     final duration = '${widget.durationSeconds ?? 45}s';
     final albumArt = (_albumArtUrl != null && _albumArtUrl!.isNotEmpty)
         ? _albumArtUrl!
@@ -471,14 +543,19 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
                                       ],
                                     ),
                                     child: ClipOval(
-                                      child: Image.network(
-                                        albumArt,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) => Container(
-                                          color: AppColors.surface,
-                                          child: const Icon(Icons.music_note_rounded, color: Colors.white),
-                                        ),
-                                      ),
+                                      child: albumArt.isEmpty
+                                          ? Container(
+                                              color: AppColors.surface,
+                                              child: const Icon(Icons.music_note_rounded, color: Colors.white),
+                                            )
+                                          : Image.network(
+                                              albumArt,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (context, error, stackTrace) => Container(
+                                                color: AppColors.surface,
+                                                child: const Icon(Icons.music_note_rounded, color: Colors.white),
+                                              ),
+                                            ),
                                     ),
                                   ),
                                 ),
@@ -808,14 +885,7 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              Image.network(
-                                video['thumbnailUrl'] ?? '',
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => Container(
-                                  color: AppColors.surface,
-                                  child: const Icon(Icons.movie_outlined, color: AppColors.outline),
-                                ),
-                              ),
+                              _buildVideoThumbnail(video['thumbnailUrl']?.toString() ?? ''),
                               Positioned.fill(
                                 child: DecoratedBox(
                                   decoration: BoxDecoration(
@@ -909,6 +979,27 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildVideoThumbnail(String url) {
+    final cleanUrl = url.trim();
+    final placeholder = Container(
+      color: AppColors.surface,
+      child: const Icon(Icons.movie_outlined, color: AppColors.outline),
+    );
+    if (cleanUrl.startsWith('assets/')) {
+      return Image.asset(
+        cleanUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => placeholder,
+      );
+    }
+    if (cleanUrl.isEmpty) return placeholder;
+    return Image.network(
+      cleanUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => placeholder,
     );
   }
 }

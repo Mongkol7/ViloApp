@@ -45,7 +45,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .requestMatchers("/uploads/**", "/api/v1/sounds/**").permitAll()
+                        .requestMatchers("/uploads/**", "/assets/**", "/api/v1/sounds/**").permitAll()
                         .requestMatchers("/api/v1/search/history", "/api/v1/search/history/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/search").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/explore/**").permitAll()

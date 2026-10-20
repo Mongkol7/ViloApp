@@ -25,5 +25,18 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addResourceLocations(uploadUri, "file:./uploads/", "file:backend/uploads/")
                 .resourceChain(true)
                 .addResolver(new org.springframework.web.servlet.resource.PathResourceResolver());
+
+        Path assetsPath = Paths.get("../assets").toAbsolutePath().normalize();
+        if (!java.nio.file.Files.exists(assetsPath)) {
+            assetsPath = Paths.get("assets").toAbsolutePath().normalize();
+        }
+        String assetsUri = assetsPath.toUri().toString();
+        if (!assetsUri.endsWith("/")) {
+            assetsUri += "/";
+        }
+        registry.addResourceHandler("/assets/**")
+                .addResourceLocations(assetsUri, "file:../assets/", "file:assets/", "file:./assets/")
+                .resourceChain(true)
+                .addResolver(new org.springframework.web.servlet.resource.PathResourceResolver());
     }
 }
