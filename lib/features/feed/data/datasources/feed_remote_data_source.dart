@@ -164,8 +164,13 @@ class FeedRemoteDataSource {
     bool forceRefresh = false,
   }) async {
     final rawType = (type ?? feedType ?? 'foryou').trim();
-    final normalizedType = (rawType.toUpperCase() == 'FOLLOWING') ? 'following' : 'foryou';
-    final cacheKey = normalizedType.replaceAll('_', '');
+    final normalizedInput = rawType.toUpperCase();
+    final normalizedType = normalizedInput == 'FOLLOWING' ? 'following' : 'foryou';
+    // Community uses the same backend feed as For You, but must keep its own
+    // cache so refreshing one top category never invalidates the other.
+    final cacheKey = normalizedInput == 'COMMUNITY'
+        ? 'community'
+        : normalizedType.replaceAll('_', '');
 
     if (forceRefresh) {
       _feedCache.remove(cacheKey);

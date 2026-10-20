@@ -129,12 +129,12 @@ class _CommunityFeedPageState extends State<CommunityFeedPage>
   }
 
   Future<void> _loadCommunityPosts({bool forceRefresh = false}) async {
-    if (forceRefresh && mounted) {
+    if (forceRefresh && mounted && _posts.isEmpty) {
       setState(() => _isLoading = true);
     }
     try {
       final videos = await _dataSource.getFeed(
-        feedType: 'FOR_YOU',
+        feedType: 'COMMUNITY',
         forceRefresh: forceRefresh,
       );
       if (!mounted) return;
