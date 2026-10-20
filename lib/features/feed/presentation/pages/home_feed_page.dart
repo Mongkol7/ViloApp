@@ -17,6 +17,10 @@ class HomeFeedPage extends StatefulWidget {
 class _HomeFeedPageState extends State<HomeFeedPage>
   with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   late TabController _tabController;
+  final Map<int, int> _tabRefreshTokens = <int, int>{};
+  int? _refreshingTab;
+  int _refreshRequest = 0;
+  int _settledTabIndex = 2;
 
   @override
   bool get wantKeepAlive => true;
@@ -33,6 +37,30 @@ class _HomeFeedPageState extends State<HomeFeedPage>
     if (mounted) {
       setState(() {});
     }
+    if (!_tabController.indexIsChanging) {
+      _settledTabIndex = _tabController.index;
+    }
+  }
+
+  void _handleTabTap(int index) {
+    // Switching tabs preserves each category's existing state. Tapping the
+    // currently selected category is the explicit refresh action.
+    if (index != _settledTabIndex || index == 3) return;
+
+    final request = ++_refreshRequest;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || request != _refreshRequest || index != _settledTabIndex) return;
+
+      setState(() {
+        _refreshingTab = index;
+        _tabRefreshTokens[index] = (_tabRefreshTokens[index] ?? 0) + 1;
+      });
+
+      Future<void>.delayed(const Duration(milliseconds: 450), () {
+        if (!mounted || request != _refreshRequest) return;
+        setState(() => _refreshingTab = null);
+      });
+    });
   }
 
   @override
@@ -55,15 +83,18 @@ class _HomeFeedPageState extends State<HomeFeedPage>
             children: [
               CommunityFeedPage(
                 key: const PageStorageKey('tab_community'),
+                refreshToken: _tabRefreshTokens[0] ?? 0,
               ),
               VideoFeedPage(
                 key: const PageStorageKey('tab_following'),
                 feedType: 'FOLLOWING',
+                refreshToken: _tabRefreshTokens[1] ?? 0,
                 isActive: widget.isActive && _tabController.index == 1,
               ),
               VideoFeedPage(
                 key: const PageStorageKey('tab_for_you'),
                 feedType: 'FOR_YOU',
+                refreshToken: _tabRefreshTokens[2] ?? 0,
                 isActive: widget.isActive && _tabController.index == 2,
               ),
               const ShopPage(key: PageStorageKey('tab_shop')),
@@ -108,6 +139,7 @@ class _HomeFeedPageState extends State<HomeFeedPage>
                         ),
                         child: TabBar(
                           controller: _tabController,
+                          onTap: _handleTabTap,
                           isScrollable: true,
                           tabAlignment: TabAlignment.center,
                           physics: const BouncingScrollPhysics(),
@@ -154,6 +186,18 @@ class _HomeFeedPageState extends State<HomeFeedPage>
               ],
             ),
           ),
+          if (_refreshingTab != null)
+            const Positioned.fill(
+              child: ColoredBox(
+                color: Color(0x66000000),
+                child: Center(
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2.2,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
