@@ -3,29 +3,22 @@ package com.vilo.backend.service;
 import com.vilo.backend.dto.SoundResponse;
 import com.vilo.backend.dto.VideoResponse;
 import com.vilo.backend.entity.Sound;
-<<<<<<< HEAD
 import com.vilo.backend.entity.User;
 import com.vilo.backend.entity.Video;
 import com.vilo.backend.exception.ForbiddenException;
-=======
-import com.vilo.backend.entity.Video;
->>>>>>> develop
 import com.vilo.backend.exception.ResourceNotFoundException;
 import com.vilo.backend.repository.SoundRepository;
 import com.vilo.backend.repository.VideoRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-<<<<<<< HEAD
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.*;
-=======
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
->>>>>>> develop
 import java.util.stream.Collectors;
 
 @Service
@@ -33,7 +26,6 @@ public class SoundService {
 
     private final SoundRepository soundRepository;
     private final VideoRepository videoRepository;
-<<<<<<< HEAD
     private final FileStorageService fileStorageService;
 
     public SoundService(SoundRepository soundRepository, VideoRepository videoRepository, FileStorageService fileStorageService) {
@@ -52,12 +44,6 @@ public class SoundService {
             }
             return SoundResponse.fromEntity(s);
         }).collect(Collectors.toList());
-=======
-
-    public SoundService(SoundRepository soundRepository, VideoRepository videoRepository) {
-        this.soundRepository = soundRepository;
-        this.videoRepository = videoRepository;
->>>>>>> develop
     }
 
     @Transactional(readOnly = true)
