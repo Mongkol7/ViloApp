@@ -872,6 +872,7 @@ class _SearchScreenState extends State<SearchScreen> {
               audioUrl: sound.audioUrl,
               albumArtUrl: sound.albumArtUrl,
               videosCount: sound.videosCount,
+              creatorUsername: sound.artist.replaceAll('@', '').trim(),
             ),
           ),
         );

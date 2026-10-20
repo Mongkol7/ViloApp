@@ -8,12 +8,16 @@ import '../../data/models/comment_model.dart';
 
 class CommentBottomSheet extends StatefulWidget {
   final int? videoId;
+  final int? videoCreatorId;
+  final String? videoCreatorUsername;
   final int initialCommentCount;
   final ValueChanged<int>? onCommentCountChanged;
 
   const CommentBottomSheet({
     super.key,
     this.videoId,
+    this.videoCreatorId,
+    this.videoCreatorUsername,
     this.initialCommentCount = 0,
     this.onCommentCountChanged,
   });
@@ -61,6 +65,24 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
     super.dispose();
   }
 
+  bool _canDeleteComment(CommentModel comment) {
+    // 1. Author of the comment
+    final isAuthor = ProfileSyncService.instance.isCurrentUser(
+      username: comment.username,
+      id: comment.userId.toString(),
+    );
+    if (isAuthor) return true;
+
+    // 2. Creator of the post / video
+    final isPostOwner = ProfileSyncService.instance.isCurrentUser(
+      username: widget.videoCreatorUsername,
+      id: widget.videoCreatorId?.toString(),
+    );
+    if (isPostOwner) return true;
+
+    return false;
+  }
+
   Future<void> _loadComments() async {
     if (widget.videoId == null) {
       if (mounted) {
@@ -92,62 +114,27 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
     }
   }
 
-Future<void> _deleteComment(CommentModel comment) async {
+  Future<void> _deleteComment(CommentModel comment) async {
     if (widget.videoId == null) return;
     try {
       final success = await _dataSource.deleteComment(widget.videoId!, comment.id);
       if (success && mounted) {
+        final newCount = (_commentCount - 1).clamp(0, 999999);
         setState(() {
           _comments.removeWhere((c) => c.id == comment.id);
-          _commentCount = (_commentCount - 1).clamp(0, 999999);
+          _commentCount = newCount;
         });
-        widget.onCommentCountChanged?.call(_commentCount);
+        widget.onCommentCountChanged?.call(newCount);
+        ProfileSyncService.instance.notifyVideoInteraction(
+          VideoInteractionEvent(
+            videoId: widget.videoId!,
+            commentCount: newCount,
+          ),
+        );
       }
     } catch (e) {
       debugPrint('[CommentBottomSheet] Delete comment error: $e');
     }
-  }
-
-  void _loadFallbackMock() {
-    if (!mounted) return;
-    setState(() {
-      _comments = [
-        CommentModel(
-          id: 1,
-          videoId: widget.videoId ?? 1,
-          userId: 101,
-          username: 'Ractz',
-          displayName: 'Ractz',
-          avatarUrl: 'https://i.pravatar.cc/150?img=14',
-          content: 'លេងអន់ចឹងលុប game ចោលទៅ ah bot',
-          createdAt: DateTime.now().subtract(const Duration(minutes: 9)),
-        ),
-        CommentModel(
-          id: 2,
-          videoId: widget.videoId ?? 1,
-          userId: 102,
-          username: 'Hengg',
-          displayName: 'Hengg',
-          avatarUrl: 'https://i.pravatar.cc/150?img=11',
-          content: 'Your Product so good😘',
-          createdAt: DateTime.now().subtract(const Duration(minutes: 32)),
-        ),
-        CommentModel(
-          id: 3,
-          videoId: widget.videoId ?? 1,
-          userId: 103,
-          username: 'សំពៀន',
-          displayName: 'សំពៀន',
-          avatarUrl: 'https://i.pravatar.cc/150?img=15',
-          content: 'មុខភ័យសង្ឃឹមជួយ',
-          createdAt: DateTime.now().subtract(const Duration(minutes: 45)),
-        ),
-      ];
-      if (_commentCount == 0) {
-        _commentCount = _comments.length;
-      }
-      _isLoading = false;
-    });
   }
 
   Future<void> _submitComment() async {
@@ -323,10 +310,12 @@ Future<void> _deleteComment(CommentModel comment) async {
                         itemCount: _comments.length,
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         itemBuilder: (context, index) {
+                          final comment = _comments[index];
+                          final canDelete = _canDeleteComment(comment);
                           return _CommentCard(
-                            comment: _comments[index],
-                            onReply: () => _onReplyTap(_comments[index]),
-onDelete: () => _deleteComment(_comments[index]),
+                            comment: comment,
+                            onReply: () => _onReplyTap(comment),
+                            onDelete: canDelete ? () => _deleteComment(comment) : null,
                           );
                         },
                       ),

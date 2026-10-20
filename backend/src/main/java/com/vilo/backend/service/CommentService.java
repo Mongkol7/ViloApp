@@ -7,6 +7,7 @@ import com.vilo.backend.repository.CommentRepository;
 import com.vilo.backend.repository.VideoRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,7 +61,7 @@ public class CommentService {
         boolean isVideoOwner = video.getCreatorId() != null && video.getCreatorId().equals(userId);
 
         if (!isAuthor && !isVideoOwner) {
-            throw new SecurityException("Unauthorized: You can only delete your own comments or comments on your video.");
+            throw new AccessDeniedException("Unauthorized: You can only delete your own comments or comments on your video.");
         }
 
         commentRepository.delete(comment);

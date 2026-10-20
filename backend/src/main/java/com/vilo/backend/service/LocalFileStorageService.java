@@ -14,6 +14,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -33,13 +35,39 @@ public class LocalFileStorageService implements FileStorageService {
             Files.createDirectories(this.rootStoragePath);
             Files.createDirectories(this.rootStoragePath.resolve("videos"));
             Files.createDirectories(this.rootStoragePath.resolve("photos"));
+            Files.createDirectories(this.rootStoragePath.resolve("music"));
             String thumbDir = getThumbnailDirectoryName();
             Files.createDirectories(this.rootStoragePath.resolve(thumbDir));
+
+            for (Path alt : getAlternateStorageRoots()) {
+                Files.createDirectories(alt);
+                Files.createDirectories(alt.resolve("videos"));
+                Files.createDirectories(alt.resolve("photos"));
+                Files.createDirectories(alt.resolve("music"));
+                Files.createDirectories(alt.resolve(thumbDir));
+            }
+
             log.info("Local storage directories initialized at: {} with thumbnail subfolder: {}", this.rootStoragePath, thumbDir);
         } catch (IOException e) {
             log.error("Failed to initialize upload directory: {}", e.getMessage(), e);
             throw new RuntimeException("Could not initialize local storage folder", e);
         }
+    }
+
+    private List<Path> getAlternateStorageRoots() {
+        List<Path> alternates = new ArrayList<>();
+        try {
+            Path p1 = Paths.get("uploads").toAbsolutePath().normalize();
+            Path p2 = Paths.get("backend", "uploads").toAbsolutePath().normalize();
+            if (this.rootStoragePath != null) {
+                if (!p1.equals(this.rootStoragePath)) alternates.add(p1);
+                if (!p2.equals(this.rootStoragePath)) alternates.add(p2);
+            } else {
+                alternates.add(p1);
+                alternates.add(p2);
+            }
+        } catch (Exception ignored) {}
+        return alternates;
     }
 
     @Override
@@ -100,6 +128,18 @@ public class LocalFileStorageService implements FileStorageService {
 
             Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
             log.debug("Stored file {} to {}", uniqueFilename, targetPath);
+
+            // Mirror file across alternate storage folders so it's always accessible
+            for (Path altRoot : getAlternateStorageRoots()) {
+                try {
+                    Path altDir = altRoot.resolve(resolvedSubDir).normalize();
+                    Files.createDirectories(altDir);
+                    Path altTarget = altDir.resolve(uniqueFilename).normalize();
+                    Files.copy(targetPath, altTarget, StandardCopyOption.REPLACE_EXISTING);
+                } catch (Exception mirrorEx) {
+                    log.debug("Mirror storage notice for {}: {}", uniqueFilename, mirrorEx.getMessage());
+                }
+            }
 
             return "/uploads/" + resolvedSubDir + "/" + uniqueFilename;
         } catch (IOException e) {

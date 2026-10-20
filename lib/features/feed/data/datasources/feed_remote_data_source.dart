@@ -149,7 +149,7 @@ class FeedRemoteDataSource {
     final normalizedType = (rawType.toUpperCase() == 'FOLLOWING') ? 'following' : 'foryou';
     final cacheKey = normalizedType.replaceAll('_', '');
 
-    if (!forceRefresh && page == 0 && _feedCache[cacheKey] != null && _feedCache[cacheKey]!.isNotEmpty) {
+    if (!forceRefresh && normalizedType != 'following' && page == 0 && _feedCache[cacheKey] != null && _feedCache[cacheKey]!.isNotEmpty) {
       return _feedCache[cacheKey]!;
     }
 
@@ -168,7 +168,7 @@ class FeedRemoteDataSource {
         list = response;
       }
 
-      if (list != null && list.isNotEmpty) {
+      if (list != null) {
         final videos = list
             .whereType<Map<String, dynamic>>()
             .map((item) => VideoModel.fromJson(item))
@@ -198,6 +198,10 @@ class FeedRemoteDataSource {
       }
     } catch (e) {
       debugPrint('[FeedRemoteDataSource] Remote feed error: $e');
+    }
+
+    if (normalizedType == 'following') {
+      return [];
     }
 
     if (page == 0) {
@@ -681,6 +685,154 @@ class FeedRemoteDataSource {
       debugPrint('[FeedRemoteDataSource] Get videos by sound error: $e');
     }
     return [];
+  }
+
+  /// Delete sound permanently from backend (owner only)
+  Future<bool> deleteSound(String soundId) async {
+    try {
+      await _client.delete(
+        '/sounds/$soundId',
+        requireAuth: true,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Delete sound error: $e');
+      return false;
+    }
+  }
+
+  /// Multipart sound/audio upload
+  Future<SoundTrack> uploadSound({
+    String? audioPath,
+    List<int>? audioBytes,
+    String audioFilename = 'sound.mp3',
+    String? title,
+    String? artist,
+    String? coverPath,
+    List<int>? coverBytes,
+    String coverFilename = 'cover.jpg',
+    String? coverUrl,
+  }) async {
+    final uri = Uri.parse('${ApiClient.baseUrl}/sounds/upload');
+    final request = http.MultipartRequest('POST', uri);
+
+    final token = await _tokenStorage.getAccessToken();
+    if (token != null && token.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    if (title != null && title.trim().isNotEmpty) {
+      request.fields['title'] = title.trim();
+    }
+    if (artist != null && artist.trim().isNotEmpty) {
+      request.fields['artist'] = artist.trim();
+    }
+    if (coverUrl != null && coverUrl.trim().isNotEmpty) {
+      request.fields['coverUrl'] = coverUrl.trim();
+    }
+
+    if (audioPath != null && audioPath.trim().isNotEmpty) {
+      final fileOnDisk = File(audioPath.trim());
+      if (fileOnDisk.existsSync()) {
+        request.files.add(
+          await http.MultipartFile.fromPath('audioFile', fileOnDisk.path, filename: audioFilename),
+        );
+      } else if (audioBytes != null && audioBytes.isNotEmpty) {
+        request.files.add(
+          http.MultipartFile.fromBytes('audioFile', audioBytes, filename: audioFilename),
+        );
+      }
+    } else if (audioBytes != null && audioBytes.isNotEmpty) {
+      request.files.add(
+        http.MultipartFile.fromBytes('audioFile', audioBytes, filename: audioFilename),
+      );
+    }
+
+    if (coverPath != null && coverPath.trim().isNotEmpty) {
+      final fileOnDisk = File(coverPath.trim());
+      if (fileOnDisk.existsSync()) {
+        request.files.add(
+          await http.MultipartFile.fromPath('coverFile', fileOnDisk.path, filename: coverFilename),
+        );
+      } else if (coverBytes != null && coverBytes.isNotEmpty) {
+        request.files.add(
+          http.MultipartFile.fromBytes('coverFile', coverBytes, filename: coverFilename),
+        );
+      }
+    } else if (coverBytes != null && coverBytes.isNotEmpty) {
+      request.files.add(
+        http.MultipartFile.fromBytes('coverFile', coverBytes, filename: coverFilename),
+      );
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final json = jsonDecode(response.body);
+      final data = json['data'] ?? json;
+      return SoundTrack.fromJson(data as Map<String, dynamic>);
+    }
+    throw ApiResponseException('Sound upload failed: ${response.statusCode}', response.statusCode);
+  }
+
+  /// Update sound metadata and/or cover art via PATCH /sounds/{id}
+  Future<SoundTrack?> updateSoundCover({
+    required int soundId,
+    String? title,
+    String? coverPath,
+    List<int>? coverBytes,
+    String coverFilename = 'cover.jpg',
+    String? coverUrl,
+  }) async {
+    try {
+      final uri = Uri.parse('${ApiClient.baseUrl}/sounds/$soundId');
+      final request = http.MultipartRequest('PATCH', uri);
+
+      final token = await _tokenStorage.getAccessToken();
+      if (token != null && token.isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+
+      if (title != null && title.trim().isNotEmpty) {
+        request.fields['title'] = title.trim();
+      }
+      if (coverUrl != null && coverUrl.trim().isNotEmpty) {
+        request.fields['coverUrl'] = coverUrl.trim();
+      }
+
+      if (coverPath != null && coverPath.trim().isNotEmpty) {
+        final fileOnDisk = File(coverPath.trim());
+        if (fileOnDisk.existsSync()) {
+          request.files.add(
+            await http.MultipartFile.fromPath('coverFile', fileOnDisk.path, filename: coverFilename),
+          );
+        } else if (coverBytes != null && coverBytes.isNotEmpty) {
+          request.files.add(
+            http.MultipartFile.fromBytes('coverFile', coverBytes, filename: coverFilename),
+          );
+        }
+      } else if (coverBytes != null && coverBytes.isNotEmpty) {
+        request.files.add(
+          http.MultipartFile.fromBytes('coverFile', coverBytes, filename: coverFilename),
+        );
+      }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final decoded = jsonDecode(response.body);
+        final data = decoded is Map && decoded.containsKey('data') ? decoded['data'] : decoded;
+        if (data is Map<String, dynamic>) {
+          return SoundTrack.fromJson(data);
+        }
+      } else {
+        debugPrint('[FeedRemoteDataSource] Update sound cover error: ${response.statusCode} ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Update sound cover exception: $e');
+    }
+    return null;
   }
 
   /// Multipart video upload

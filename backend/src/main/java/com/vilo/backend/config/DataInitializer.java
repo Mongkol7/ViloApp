@@ -10,6 +10,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.file.*;
 import java.util.List;
 import java.util.Set;
 
@@ -143,6 +144,8 @@ public class DataInitializer implements CommandLineRunner {
         mongkol.getFollowing().add(rithysak);
 
         userRepository.saveAll(List.of(mongkol, bunheng, rithysak, kimliza, mono));
+
+        ensureSeededMusicFiles();
 
         log.info("==================================================================");
         log.info("STEP 3: SEEDING USER-OWNED MUSIC TRACKS");
@@ -363,5 +366,40 @@ public class DataInitializer implements CommandLineRunner {
         video.setSaveCount(saveCount);
         video.setSavesCount(saveCount);
         videoRepository.save(video);
+    }
+
+    private void ensureSeededMusicFiles() {
+        String[] musicFiles = {"phnom_penh_sunset.mp3", "seven7_anthem.mp3", "obsidian_pulse.mp3"};
+        Path[] roots = {
+                Paths.get("uploads").toAbsolutePath().normalize(),
+                Paths.get("backend", "uploads").toAbsolutePath().normalize()
+        };
+
+        Path sourceFile = null;
+        for (Path root : roots) {
+            Path candidate = root.resolve("videos").resolve("video1.mp4");
+            if (Files.exists(candidate)) {
+                sourceFile = candidate;
+                break;
+            }
+        }
+
+        if (sourceFile != null) {
+            for (Path root : roots) {
+                Path musicDir = root.resolve("music");
+                try {
+                    Files.createDirectories(musicDir);
+                    for (String mf : musicFiles) {
+                        Path target = musicDir.resolve(mf);
+                        if (!Files.exists(target) || Files.size(target) == 0) {
+                            Files.copy(sourceFile, target, StandardCopyOption.REPLACE_EXISTING);
+                            log.info("Ensured playable seeded audio file at: {}", target);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Notice ensuring seeded music file in {}: {}", musicDir, e.getMessage());
+                }
+            }
+        }
     }
 }

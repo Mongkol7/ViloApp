@@ -55,6 +55,12 @@ class ProfileSyncService {
   /// Emits whenever a video is deleted
   final ValueNotifier<int?> videoDeletedEvents = ValueNotifier<int?>(null);
 
+  /// Emits whenever a sound track is uploaded
+  final ValueNotifier<SoundTrack?> soundUploadedEvents = ValueNotifier<SoundTrack?>(null);
+
+  /// Emits whenever a sound track is deleted
+  final ValueNotifier<int?> soundDeletedEvents = ValueNotifier<int?>(null);
+
   void notifyVideoUploaded(VideoModel video) {
     videoUploadedEvents.value = video;
   }
@@ -62,6 +68,16 @@ class ProfileSyncService {
   void notifyVideoDeleted(int videoId) {
     FeedRemoteDataSource.instance.removeCachedVideo(videoId);
     videoDeletedEvents.value = videoId;
+  }
+
+  void notifySoundUploaded(SoundTrack sound) {
+    soundUploadedEvents.value = sound;
+    notifyInteraction();
+  }
+
+  void notifySoundDeleted(int soundId) {
+    soundDeletedEvents.value = soundId;
+    notifyInteraction();
   }
 
   void notifyVideoInteraction(VideoInteractionEvent event) {
@@ -110,6 +126,8 @@ class ProfileSyncService {
     videoUploadedEvents.value = null;
     videoInteractionEvents.value = null;
     videoDeletedEvents.value = null;
+    soundUploadedEvents.value = null;
+    soundDeletedEvents.value = null;
   }
 
   /// In-memory cache of followers and following for instant zero-latency listing

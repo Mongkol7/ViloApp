@@ -7,7 +7,6 @@ import com.vilo.backend.entity.VideoTag;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -24,7 +23,8 @@ public class VideoResponse {
     private String caption;
     private String videoUrl;
     private String thumbnailUrl;
-private List<String> mediaUrls = new ArrayList<>();
+    private List<String> mediaUrls = new ArrayList<>();
+    private List<String> imageUrls = new ArrayList<>();
     private Long soundId;
     private String musicTitle;
     private String musicArtist;
@@ -109,21 +109,27 @@ private List<String> mediaUrls = new ArrayList<>();
         resp.setCaption(video.getCaption());
         resp.setVideoUrl(video.getVideoUrl());
         resp.setThumbnailUrl(video.getThumbnailUrl());
-resp.setSoundId(video.getSoundId());
-        if (video.getVideoUrl() != null && !video.getVideoUrl().isBlank()) {
-            if (video.getVideoUrl().contains(",")) {
+        resp.setSoundId(video.getSoundId());
+        List<String> images = new ArrayList<>();
+        if (video.getImageUrls() != null && !video.getImageUrls().isBlank()) {
+            String[] parts = video.getImageUrls().split(",");
+            for (String p : parts) {
+                if (p != null && !p.trim().isEmpty() && isImageFile(p.trim())) {
+                    images.add(p.trim());
+                }
+            }
+        } else if (video.getVideoUrl() != null && !video.getVideoUrl().isBlank()) {
+            if (isImageFile(video.getVideoUrl())) {
                 String[] parts = video.getVideoUrl().split(",");
-                List<String> list = new ArrayList<>();
                 for (String p : parts) {
-                    if (p != null && !p.trim().isEmpty()) {
-                        list.add(p.trim());
+                    if (p != null && !p.trim().isEmpty() && isImageFile(p.trim())) {
+                        images.add(p.trim());
                     }
                 }
-                resp.setMediaUrls(list);
-            } else {
-                resp.setMediaUrls(new ArrayList<>(Collections.singletonList(video.getVideoUrl().trim())));
             }
         }
+        resp.setImageUrls(images);
+        resp.setMediaUrls(images);
         resp.setMusicTitle(video.getMusicTitle() != null ? video.getMusicTitle() : "Original Sound - " + resp.getDisplayName());
         resp.setMusicArtist(video.getMusicArtist() != null ? video.getMusicArtist() : resp.getDisplayName());
         resp.setAudioUrl(video.getAudioUrl());
@@ -165,6 +171,14 @@ resp.setSoundId(video.getSoundId());
         return String.valueOf(count);
     }
 
+    public static boolean isImageFile(String path) {
+        if (path == null) return false;
+        String lower = path.toLowerCase().trim();
+        return lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")
+                || lower.endsWith(".webp") || lower.endsWith(".gif") || lower.endsWith(".bmp")
+                || lower.contains("/uploads/photos/");
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -204,8 +218,11 @@ resp.setSoundId(video.getSoundId());
     public String getThumbnailUrl() { return thumbnailUrl; }
     public void setThumbnailUrl(String thumbnailUrl) { this.thumbnailUrl = thumbnailUrl; }
 
-public List<String> getMediaUrls() { return mediaUrls; }
+    public List<String> getMediaUrls() { return mediaUrls; }
     public void setMediaUrls(List<String> mediaUrls) { this.mediaUrls = mediaUrls != null ? mediaUrls : new ArrayList<>(); }
+
+    public List<String> getImageUrls() { return imageUrls; }
+    public void setImageUrls(List<String> imageUrls) { this.imageUrls = imageUrls != null ? imageUrls : new ArrayList<>(); }
 
     public Long getSoundId() { return soundId; }
     public void setSoundId(Long soundId) { this.soundId = soundId; }
@@ -311,6 +328,8 @@ public List<String> getMediaUrls() { return mediaUrls; }
         private Boolean isFollowing = false;
         private Boolean isMe = false;
         private List<String> tags = new ArrayList<>();
+        private List<String> imageUrls = new ArrayList<>();
+        private Long soundId;
         private LocalDateTime createdAt;
 
         public Builder id(Long id) { this.id = id; return this; }
@@ -324,6 +343,8 @@ public List<String> getMediaUrls() { return mediaUrls; }
         public Builder caption(String caption) { this.caption = caption; return this; }
         public Builder videoUrl(String videoUrl) { this.videoUrl = videoUrl; return this; }
         public Builder thumbnailUrl(String thumbnailUrl) { this.thumbnailUrl = thumbnailUrl; return this; }
+        public Builder imageUrls(List<String> imageUrls) { this.imageUrls = imageUrls != null ? imageUrls : new ArrayList<>(); return this; }
+        public Builder soundId(Long soundId) { this.soundId = soundId; return this; }
         public Builder musicTitle(String musicTitle) { this.musicTitle = musicTitle; return this; }
         public Builder musicName(String musicName) { this.musicTitle = musicName; return this; }
         public Builder musicArtist(String musicArtist) { this.musicArtist = musicArtist; return this; }
@@ -348,6 +369,9 @@ public List<String> getMediaUrls() { return mediaUrls; }
             resp.setIsVerified(isVerified);
             resp.setIsFollowing(isFollowing);
             resp.setIsMe(isMe);
+            resp.setImageUrls(imageUrls);
+            resp.setMediaUrls(imageUrls);
+            resp.setSoundId(soundId);
             resp.setMusicTitle(musicTitle != null ? musicTitle : "Original Sound - " + (displayName != null ? displayName : username));
             resp.setMusicArtist(musicArtist != null ? musicArtist : (displayName != null ? displayName : username));
             resp.setAudioUrl(audioUrl);

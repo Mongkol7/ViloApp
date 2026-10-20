@@ -63,10 +63,19 @@ public class VideoController {
         List<Long> followingIds = null;
         Long currentUserId = currentUser != null ? currentUser.getId() : null;
 
-        if ("following".equalsIgnoreCase(type) && currentUser != null && currentUser.getFollowing() != null) {
-            followingIds = currentUser.getFollowing().stream()
-                    .map(User::getId)
-                    .toList();
+        if ("following".equalsIgnoreCase(type)) {
+            if (currentUser != null && currentUser.getId() != null) {
+                User reloaded = userRepository.findById(currentUser.getId()).orElse(currentUser);
+                if (reloaded.getFollowing() != null && !reloaded.getFollowing().isEmpty()) {
+                    followingIds = reloaded.getFollowing().stream()
+                            .map(User::getId)
+                            .toList();
+                } else {
+                    followingIds = Collections.emptyList();
+                }
+            } else {
+                followingIds = Collections.emptyList();
+            }
         }
 
         Pageable pageable = PageRequest.of(page, size);
@@ -218,6 +227,7 @@ public class VideoController {
             @RequestParam(value = "video", required = false) MultipartFile video,
             @RequestParam(value = "videoFile", required = false) MultipartFile videoFile,
             @RequestParam(value = "photos", required = false) List<MultipartFile> photos,
+            @RequestParam(value = "photoFiles", required = false) List<MultipartFile> photoFiles,
             @RequestParam(value = "videoFiles", required = false) List<MultipartFile> videoFiles,
             @RequestParam(value = "files", required = false) List<MultipartFile> files,
             @RequestParam(value = "videoPath", required = false) String videoPath,
@@ -230,6 +240,7 @@ public class VideoController {
             @RequestParam(value = "caption", required = false) String caption,
             @RequestParam(value = "soundId", required = false) Long soundId,
             @RequestParam(value = "audioFile", required = false) MultipartFile audioFile,
+            @RequestParam(value = "musicFile", required = false) MultipartFile musicFile,
             @RequestParam(value = "audio", required = false) MultipartFile audio,
             @RequestParam(value = "musicTitle", required = false) String musicTitle,
             @RequestParam(value = "musicName", required = false) String musicName,
@@ -244,10 +255,12 @@ public class VideoController {
 
         MultipartFile effectiveVideoFile = (video != null && !video.isEmpty()) ? video : videoFile;
         MultipartFile effectiveThumbnailFile = (thumbnail != null && !thumbnail.isEmpty()) ? thumbnail : thumbnailFile;
-        MultipartFile effectiveAudioFile = (audioFile != null && !audioFile.isEmpty()) ? audioFile : audio;
+        MultipartFile effectiveAudioFile = (audioFile != null && !audioFile.isEmpty()) ? audioFile
+                : ((musicFile != null && !musicFile.isEmpty()) ? musicFile : audio);
 
         List<MultipartFile> effectiveMediaFiles = (photos != null && !photos.isEmpty()) ? photos
-                : ((videoFiles != null && !videoFiles.isEmpty()) ? videoFiles : files);
+                : ((photoFiles != null && !photoFiles.isEmpty()) ? photoFiles
+                : ((videoFiles != null && !videoFiles.isEmpty()) ? videoFiles : files));
 
         String directPath = videoPath != null && !videoPath.isBlank() 
                 ? videoPath.trim() 
@@ -550,6 +563,25 @@ public class VideoController {
             }
         }
 
+        List<String> images = new ArrayList<>();
+        if (video.getImageUrls() != null && !video.getImageUrls().isBlank()) {
+            String[] parts = video.getImageUrls().split(",");
+            for (String p : parts) {
+                if (p != null && !p.trim().isEmpty() && VideoResponse.isImageFile(p.trim())) {
+                    images.add(p.trim());
+                }
+            }
+        } else if (video.getVideoUrl() != null && !video.getVideoUrl().isBlank()) {
+            if (VideoResponse.isImageFile(video.getVideoUrl())) {
+                String[] parts = video.getVideoUrl().split(",");
+                for (String p : parts) {
+                    if (p != null && !p.trim().isEmpty() && VideoResponse.isImageFile(p.trim())) {
+                        images.add(p.trim());
+                    }
+                }
+            }
+        }
+
         return VideoResponse.builder()
                 .id(video.getId())
                 .creatorId(video.getCreatorId())
@@ -562,7 +594,11 @@ public class VideoController {
                 .caption(video.getCaption())
                 .videoUrl(video.getVideoUrl())
                 .thumbnailUrl(video.getThumbnailUrl())
+                .imageUrls(images)
+                .soundId(video.getSoundId())
                 .musicTitle(video.getMusicTitle() != null ? video.getMusicTitle() : "Original Sound - " + displayName)
+                .musicArtist(video.getMusicArtist() != null ? video.getMusicArtist() : displayName)
+                .audioUrl(video.getAudioUrl())
                 .viewCount(video.getViewCount())
                 .likeCount(video.getLikeCount())
                 .commentCount(video.getCommentCount())

@@ -65,7 +65,7 @@ public class VideoService {
                         PageRequest.of(page, size)
                 );
             } else {
-                videoPage = videoRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(page, size));
+                videoPage = Page.empty(PageRequest.of(page, size));
             }
         } else {
             videoPage = videoRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(page, size));
@@ -87,7 +87,10 @@ public class VideoService {
 
     @Transactional(readOnly = true)
     public Page<Video> getFeed(String type, List<Long> followingIds, Pageable pageable) {
-        if ("following".equalsIgnoreCase(type) && followingIds != null && !followingIds.isEmpty()) {
+        if ("following".equalsIgnoreCase(type)) {
+            if (followingIds == null || followingIds.isEmpty()) {
+                return Page.empty(pageable);
+            }
             return videoRepository.findByCreatorIdIn(followingIds, pageable);
         }
         return videoRepository.findAllByOrderByCreatedAtDesc(pageable);
@@ -301,6 +304,7 @@ public class VideoService {
             }
         }
 
+        String imageUrls = null;
         if (nonNullMediaFiles.size() > 1) {
             List<String> storedUrls = new ArrayList<>();
             for (MultipartFile f : nonNullMediaFiles) {
@@ -308,20 +312,30 @@ public class VideoService {
                 String subDir = isImg ? "photos" : "videos";
                 storedUrls.add(fileStorageService.storeFile(f, subDir));
             }
-            videoUrl = String.join(",", storedUrls);
+            videoUrl = storedUrls.get(0);
+            imageUrls = String.join(",", storedUrls);
             isImage = true;
         } else if (nonNullMediaFiles.size() == 1) {
             MultipartFile file = nonNullMediaFiles.get(0);
             isImage = isImageFile(file.getOriginalFilename(), file.getContentType());
             String subDir = isImage ? "photos" : "videos";
             videoUrl = fileStorageService.storeFile(file, subDir);
+            if (isImage) {
+                imageUrls = videoUrl;
+            }
         } else if (videoFile != null && !videoFile.isEmpty()) {
             isImage = isImageFile(videoFile.getOriginalFilename(), videoFile.getContentType());
             String subDir = isImage ? "photos" : "videos";
             videoUrl = fileStorageService.storeFile(videoFile, subDir);
+            if (isImage) {
+                imageUrls = videoUrl;
+            }
         } else if (directPath != null && !directPath.isBlank()) {
             isImage = isImageFile(directPath, null);
             videoUrl = normalizeVideoPath(directPath);
+            if (isImage) {
+                imageUrls = videoUrl;
+            }
         } else {
             throw new IllegalArgumentException("Either video/photo file(s) or video/photo path must be provided");
         }
@@ -333,7 +347,7 @@ public class VideoService {
         } else if (thumbnailPath != null && !thumbnailPath.isBlank()) {
             thumbnailUrl = normalizeThumbnailPath(thumbnailPath);
         } else if (isImage) {
-            thumbnailUrl = videoUrl.contains(",") ? videoUrl.split(",")[0].trim() : videoUrl;
+            thumbnailUrl = (imageUrls != null && imageUrls.contains(",")) ? imageUrls.split(",")[0].trim() : videoUrl;
         }
 
         String effectiveCaption = caption;
@@ -342,6 +356,9 @@ public class VideoService {
         }
 
         Video video = new Video(creator, title, description, effectiveCaption, videoUrl, thumbnailUrl);
+        if (imageUrls != null) {
+            video.setImageUrls(imageUrls);
+        }
 
         // Handle Optional Music / Sound
         if (audioFile != null && !audioFile.isEmpty()) {
@@ -380,11 +397,27 @@ public class VideoService {
             if (audioUrl != null && !audioUrl.isBlank()) {
                 video.setAudioUrl(audioUrl.trim());
             }
-            soundRepository.findByTitleIgnoreCase(trimmedTitle).ifPresent(s -> {
+            Optional<com.vilo.backend.entity.Sound> existingSound = soundRepository.findByTitleIgnoreCase(trimmedTitle);
+            if (existingSound.isPresent()) {
+                com.vilo.backend.entity.Sound s = existingSound.get();
                 video.setSoundId(s.getId());
+                if (video.getAudioUrl() == null || video.getAudioUrl().isBlank()) {
+                    video.setAudioUrl(s.getAudioUrl());
+                }
                 s.setUsageCount(s.getUsageCount() != null ? s.getUsageCount() + 1 : 1L);
                 soundRepository.save(s);
-            });
+            } else if (audioUrl != null && !audioUrl.isBlank()) {
+                com.vilo.backend.entity.Sound newSound = new com.vilo.backend.entity.Sound(
+                        trimmedTitle,
+                        creator.getId(),
+                        creator.getUsername(),
+                        audioUrl.trim(),
+                        thumbnailUrl != null ? thumbnailUrl : videoUrl,
+                        1L
+                );
+                newSound = soundRepository.save(newSound);
+                video.setSoundId(newSound.getId());
+            }
         } else {
             // Optional: User explicitly posted without music or selected None
             video.setSoundId(null);

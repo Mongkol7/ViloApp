@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../../auth/data/datasources/auth_remote_data_source.dart';
 import '../../../auth/data/datasources/token_storage.dart';
 import '../../../profile/presentation/mock/profile_mock_data.dart';
@@ -15,12 +14,18 @@ class UploadVideoSheet extends StatefulWidget {
   final PlatformFile? initialFile;
   final List<PlatformFile>? initialFiles;
   final PlatformFile? initialThumbnail;
+  final int? initialSoundId;
+  final String? initialSoundTitle;
+  final String? initialAudioUrl;
 
   const UploadVideoSheet({
     super.key,
     this.initialFile,
     this.initialFiles,
     this.initialThumbnail,
+    this.initialSoundId,
+    this.initialSoundTitle,
+    this.initialAudioUrl,
   });
 
   static Future<VideoModel?> show(
@@ -28,6 +33,9 @@ class UploadVideoSheet extends StatefulWidget {
     PlatformFile? initialFile,
     List<PlatformFile>? initialFiles,
     PlatformFile? initialThumbnail,
+    int? initialSoundId,
+    String? initialSoundTitle,
+    String? initialAudioUrl,
   }) {
     return showModalBottomSheet<VideoModel>(
       context: context,
@@ -39,6 +47,9 @@ class UploadVideoSheet extends StatefulWidget {
         initialFile: initialFile,
         initialFiles: initialFiles,
         initialThumbnail: initialThumbnail,
+        initialSoundId: initialSoundId,
+        initialSoundTitle: initialSoundTitle,
+        initialAudioUrl: initialAudioUrl,
       ),
     );
   }
@@ -85,6 +96,13 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
     if (widget.initialThumbnail != null) {
       _selectedThumbnail = widget.initialThumbnail;
     }
+    if (widget.initialSoundTitle != null && widget.initialSoundTitle!.isNotEmpty) {
+      _selectedSound = widget.initialSoundTitle!;
+      _selectedSoundId = widget.initialSoundId;
+      _customSoundController.text = widget.initialSoundTitle!;
+    } else if (widget.initialSoundId != null) {
+      _selectedSoundId = widget.initialSoundId;
+    }
     _checkAuthStatus();
     _loadAvailableSounds();
   }
@@ -95,6 +113,18 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
       if (mounted && sounds.isNotEmpty) {
         setState(() {
           _availableSounds = sounds;
+          if (_selectedSoundId != null) {
+            final match = sounds.where((s) => s.id == _selectedSoundId).firstOrNull;
+            if (match != null) {
+              _selectedSound = match.title;
+            }
+          } else if (_selectedSound != 'None' && _selectedSound.isNotEmpty) {
+            final match = sounds.where((s) => s.title.toLowerCase() == _selectedSound.toLowerCase()).firstOrNull;
+            if (match != null) {
+              _selectedSoundId = match.id;
+              _selectedSound = match.title;
+            }
+          }
         });
       }
     } catch (e) {
@@ -121,6 +151,13 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
         _selectedThumbnail = widget.initialThumbnail;
       });
     }
+    if (widget.initialSoundTitle != null && widget.initialSoundTitle != oldWidget.initialSoundTitle) {
+      setState(() {
+        _selectedSound = widget.initialSoundTitle!;
+        _selectedSoundId = widget.initialSoundId;
+        _customSoundController.text = widget.initialSoundTitle!;
+      });
+    }
   }
 
   @override
@@ -137,6 +174,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
         type: FileType.custom,
         allowedExtensions: ['mp3', 'wav', 'aac', 'm4a', 'ogg'],
         allowMultiple: false,
+        withData: true,
       );
       if (result != null && result.files.isNotEmpty) {
         final picked = result.files.first;
@@ -209,90 +247,18 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
   Future<void> _pickVideo() async {
     try {
-      // 1. Try ImagePicker first (native Gallery / Media Library on mobile & web)
-      try {
-        final picker = ImagePicker();
-        List<XFile> pickedList = [];
-
-        try {
-          pickedList = await picker.pickMultipleMedia();
-        } catch (_) {
-          // Fallback to pickMedia if pickMultipleMedia is unsupported
-          final singleMedia = await picker.pickMedia();
-          if (singleMedia != null) {
-            pickedList = [singleMedia];
-          }
-        }
-
-        if (pickedList.isNotEmpty) {
-          final List<PlatformFile> parsed = [];
-          for (final xFile in pickedList) {
-            int size = 0;
-            Uint8List? bytes;
-            if (xFile.path.isNotEmpty) {
-              final file = File(xFile.path);
-              if (file.existsSync()) {
-                size = file.lengthSync();
-                if (size <= 25 * 1024 * 1024) {
-                  bytes = await file.readAsBytes();
-                }
-              }
-            }
-            if (bytes == null && size == 0) {
-              bytes = await xFile.readAsBytes();
-              size = bytes.length;
-            }
-
-            parsed.add(PlatformFile(
-              name: xFile.name.isNotEmpty ? xFile.name : 'media_upload.mp4',
-              size: size,
-              bytes: bytes,
-              path: xFile.path.isNotEmpty ? xFile.path : null,
-            ));
-          }
-
-          // Invariant: Video uploads are strictly single file at a time!
-          final hasVideo = parsed.any((f) => !_isImageFile(f));
-          if (hasVideo) {
-            final firstVideo = parsed.firstWhere(
-              (f) => !_isImageFile(f),
-              orElse: () => parsed.first,
-            );
-            setState(() {
-              _selectedFiles = [firstVideo];
-              _selectedFile = firstVideo;
-              _errorMessage = parsed.length > 1 ? 'Videos can only be posted one at a time. The first video was selected.' : null;
-            });
-          } else {
-            // All images: take up to 10 photos
-            final limited = parsed.take(10).toList();
-            setState(() {
-              _selectedFiles = limited;
-              _selectedFile = limited.first;
-              _errorMessage = null;
-            });
-          }
-          return;
-        } else {
-          return;
-        }
-      } catch (pickerErr) {
-        debugPrint('[UploadVideoSheet] ImagePicker fell back or unavailable: $pickerErr');
-      }
-
-      // 2. Fallback to FilePicker (desktop or alternate picker)
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['mp4', 'mov', 'mkv', 'webm', 'jpg', 'jpeg', 'png', 'webp', 'gif'],
         allowMultiple: true,
-        withData: false,
+        withData: true,
       );
 
       if (result != null && result.files.isNotEmpty) {
         final List<PlatformFile> parsed = [];
         for (final picked in result.files) {
           Uint8List? bytes = picked.bytes;
-          if (bytes == null && picked.path != null) {
+          if ((bytes == null || bytes.isEmpty) && picked.path != null) {
             final file = File(picked.path!);
             if (file.existsSync() && file.lengthSync() <= 25 * 1024 * 1024) {
               bytes = await file.readAsBytes();
@@ -328,12 +294,8 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
       }
     } catch (e) {
       if (mounted) {
-        String msg = 'Could not select file: $e';
-        if (e.toString().contains('MissingPluginException')) {
-          msg = 'File picker plugin requires an app restart. Please rebuild/restart the app or pick from Gallery.';
-        }
         setState(() {
-          _errorMessage = msg;
+          _errorMessage = 'Could not select file: $e';
         });
       }
     }
@@ -341,55 +303,41 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
   Future<void> _pickMorePhotos() async {
     try {
-      final picker = ImagePicker();
-      final xFiles = await picker.pickMultiImage();
-      if (xFiles.isNotEmpty) {
-        for (final xFile in xFiles) {
-          if (_selectedFiles.length >= 10) break;
-          int size = 0;
-          Uint8List? bytes;
-          if (xFile.path.isNotEmpty) {
-            final file = File(xFile.path);
-            if (file.existsSync()) {
-              size = file.lengthSync();
-              if (size <= 25 * 1024 * 1024) {
-                bytes = await file.readAsBytes();
-              }
-            }
-          }
-          if (bytes == null && size == 0) {
-            bytes = await xFile.readAsBytes();
-            size = bytes.length;
-          }
-          _selectedFiles.add(PlatformFile(
-            name: xFile.name.isNotEmpty ? xFile.name : 'photo_${_selectedFiles.length + 1}.jpg',
-            size: size,
-            bytes: bytes,
-            path: xFile.path.isNotEmpty ? xFile.path : null,
-          ));
-        }
-        setState(() {
-          _selectedFile = _selectedFiles.first;
-          _errorMessage = null;
-        });
-        return;
-      }
-    } catch (e) {
-      // Fallback to FilePicker
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
         allowMultiple: true,
-        withData: false,
+        withData: true,
       );
+
       if (result != null && result.files.isNotEmpty) {
         setState(() {
           for (final picked in result.files) {
             if (_selectedFiles.length >= 10) break;
-            _selectedFiles.add(picked);
+            Uint8List? bytes = picked.bytes;
+            if ((bytes == null || bytes.isEmpty) && picked.path != null) {
+              final file = File(picked.path!);
+              if (file.existsSync() && file.lengthSync() <= 25 * 1024 * 1024) {
+                bytes = file.readAsBytesSync();
+              }
+            }
+            _selectedFiles.add(PlatformFile(
+              name: picked.name,
+              size: picked.size,
+              bytes: bytes,
+              path: picked.path,
+            ));
           }
-          _selectedFile = _selectedFiles.first;
+          if (_selectedFiles.isNotEmpty) {
+            _selectedFile = _selectedFiles.first;
+          }
           _errorMessage = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Could not select more photos: $e';
         });
       }
     }
@@ -397,41 +345,17 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
   Future<void> _pickThumbnail() async {
     try {
-      // 1. Try ImagePicker first
-      try {
-        final picker = ImagePicker();
-        final xFile = await picker.pickImage(source: ImageSource.gallery);
-        if (xFile != null) {
-          final bytes = await xFile.readAsBytes();
-          setState(() {
-            _selectedThumbnail = PlatformFile(
-              name: xFile.name.isNotEmpty ? xFile.name : 'thumbnail.jpg',
-              size: bytes.length,
-              bytes: bytes,
-              path: xFile.path.isNotEmpty ? xFile.path : null,
-            );
-            _errorMessage = null;
-          });
-          return;
-        } else {
-          return;
-        }
-      } catch (pickerErr) {
-        debugPrint('[UploadVideoSheet] ImagePicker pickThumbnail fell back: $pickerErr');
-      }
-
-      // 2. Fallback to FilePicker
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
         allowMultiple: false,
-        withData: false,
+        withData: true,
       );
 
       if (result != null && result.files.isNotEmpty) {
         final picked = result.files.first;
         Uint8List? bytes = picked.bytes;
-        if (bytes == null && picked.path != null) {
+        if ((bytes == null || bytes.isEmpty) && picked.path != null) {
           final file = File(picked.path!);
           if (file.existsSync() && file.lengthSync() <= 10 * 1024 * 1024) {
             bytes = await file.readAsBytes();
@@ -444,6 +368,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
             bytes: bytes,
             path: picked.path,
           );
+          _errorMessage = null;
         });
       }
     } catch (e) {
@@ -520,6 +445,22 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
         return;
       }
 
+      int? soundIdToSend = _selectedSoundId;
+      String? musicTitleToSend;
+      if (_selectedSound != 'None' && _selectedSound.trim().isNotEmpty) {
+        musicTitleToSend = _selectedSound.trim();
+      }
+
+      List<int>? audioBytes = _selectedAudioFile?.bytes;
+      if ((audioBytes == null || audioBytes.isEmpty) && _selectedAudioFile?.path != null) {
+        final localAudio = File(_selectedAudioFile!.path!);
+        if (localAudio.existsSync()) {
+          try {
+            audioBytes = await localAudio.readAsBytes();
+          } catch (_) {}
+        }
+      }
+
       if (_isMultiImage) {
         // Multi-image carousel upload
         final List<String> paths = [];
@@ -537,6 +478,12 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
         final newVideo = await _feedDataSource.uploadVideo(
           caption: finalCaption,
+          soundId: soundIdToSend,
+          musicTitle: musicTitleToSend,
+          audioUrl: widget.initialAudioUrl,
+          audioPath: _selectedAudioFile?.path,
+          audioBytes: audioBytes,
+          audioFilename: _selectedAudioFile?.name ?? 'music.mp3',
           imagePaths: paths.isNotEmpty ? paths : null,
           imageBytesList: bytesList.isNotEmpty ? bytesList : null,
           imageFilenames: filenames,
@@ -589,18 +536,13 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
         }
       }
 
-      int? soundIdToSend = _selectedSoundId;
-      String? musicTitleToSend;
-      if (_selectedSound != 'None' && _selectedSound.trim().isNotEmpty) {
-        musicTitleToSend = _selectedSound.trim();
-      }
-
       final newVideo = await _feedDataSource.uploadVideo(
-caption: finalCaption,
+        caption: finalCaption,
         soundId: soundIdToSend,
         musicTitle: musicTitleToSend,
+        audioUrl: widget.initialAudioUrl,
         audioPath: _selectedAudioFile?.path,
-        audioBytes: _selectedAudioFile?.bytes,
+        audioBytes: audioBytes,
         audioFilename: _selectedAudioFile?.name ?? 'music.mp3',
         videoPath: currentFile.path,
         videoBytes: videoBytes,
@@ -940,7 +882,7 @@ caption: finalCaption,
                           child: ListView.separated(
                             scrollDirection: Axis.horizontal,
                             itemCount: _selectedFiles.length + (_selectedFiles.length < 10 ? 1 : 0),
-                            separatorBuilder: (_, __) => const SizedBox(width: 8),
+                            separatorBuilder: (context, index) => const SizedBox(width: 8),
                             itemBuilder: (context, index) {
                               if (index == _selectedFiles.length) {
                                 return InkWell(
@@ -1072,7 +1014,7 @@ caption: finalCaption,
                                       ? Image.memory(
                                           currentDisplayFile.bytes!,
                                           fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) => const Icon(
+                                          errorBuilder: (context, error, stackTrace) => const Icon(
                                             Icons.image_outlined,
                                             color: Colors.white70,
                                             size: 24,
@@ -1083,7 +1025,7 @@ caption: finalCaption,
                                           ? Image.file(
                                               File(currentDisplayFile.path!),
                                               fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) => const Icon(
+                                              errorBuilder: (context, error, stackTrace) => const Icon(
                                                 Icons.image_outlined,
                                                 color: Colors.white70,
                                                 size: 24,
@@ -1273,7 +1215,7 @@ caption: finalCaption,
                                   ? Image.memory(
                                       _selectedThumbnail!.bytes!,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => const Icon(
+                                      errorBuilder: (context, error, stackTrace) => const Icon(
                                         Icons.image_outlined,
                                         color: Colors.white70,
                                         size: 22,
@@ -1284,7 +1226,7 @@ caption: finalCaption,
                                       ? Image.file(
                                           File(_selectedThumbnail!.path!),
                                           fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) => const Icon(
+                                          errorBuilder: (context, error, stackTrace) => const Icon(
                                             Icons.image_outlined,
                                             color: Colors.white70,
                                             size: 22,

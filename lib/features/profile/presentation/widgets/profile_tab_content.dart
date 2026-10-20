@@ -26,6 +26,8 @@ List<Widget> buildProfileTabSlivers(
   void Function(VideoFeedModel video, int index)? onVideoLongPress,
   void Function(VideoFeedModel video, int index)? onSavedVideoTap,
   void Function(VideoFeedModel video, int index)? onLikedVideoTap,
+  void Function(SoundTrack updatedSound)? onSoundUpdated,
+  void Function(SoundTrack deletedSound)? onSoundDeleted,
 }) {
   switch (selectedIndex) {
     case 0: // Sounds
@@ -41,7 +43,12 @@ List<Widget> buildProfileTabSlivers(
             sliver: SliverList.builder(
               itemCount: userSounds.length,
               itemBuilder: (context, i) =>
-                  SoundListItem(sound: userSounds[i]),
+                  SoundListItem(
+                    sound: userSounds[i],
+                    isCreator: isCurrentUser,
+                    onSoundUpdated: onSoundUpdated,
+                    onSoundDeleted: onSoundDeleted,
+                  ),
             ),
           ),
         ];
@@ -117,7 +124,7 @@ List<Widget> buildProfileTabSlivers(
 
                   return VideoGridItem(
                     thumbnailUrl: thumb,
-                    viewsLabel: video.likes,
+                    viewsLabel: video.views,
                     onTap: onVideoTap != null ? () => onVideoTap(video, i) : null,
                     onLongPress: onVideoLongPress != null ? () => onVideoLongPress(video, i) : null,
                   );
@@ -228,7 +235,7 @@ List<Widget> buildProfileTabSlivers(
 
                   return VideoGridItem(
                     thumbnailUrl: thumb,
-                    viewsLabel: video.likes,
+                    viewsLabel: video.views,
                     onTap: onSavedVideoTap != null
                         ? () => onSavedVideoTap(video, i)
                         : (onVideoTap != null ? () => onVideoTap(video, i) : null),
@@ -352,7 +359,7 @@ List<Widget> buildProfileTabSlivers(
 
                   return VideoGridItem(
                     thumbnailUrl: thumb,
-                    viewsLabel: video.likes,
+                    viewsLabel: video.views,
                     onTap: onLikedVideoTap != null
                         ? () => onLikedVideoTap(video, i)
                         : (onVideoTap != null ? () => onVideoTap(video, i) : null),

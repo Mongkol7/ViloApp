@@ -40,4 +40,9 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
 
     @Query("SELECT v FROM Video v WHERE LOWER(v.musicTitle) LIKE LOWER(CONCAT('%', :musicTitle, '%')) ORDER BY v.createdAt DESC")
     List<Video> findByMusicTitleContainingIgnoreCase(@Param("musicTitle") String musicTitle);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @Query("UPDATE Video v SET v.soundId = null WHERE v.soundId = :soundId")
+    void clearSoundId(@Param("soundId") Long soundId);
 }

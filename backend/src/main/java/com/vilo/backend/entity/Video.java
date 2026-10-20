@@ -34,6 +34,9 @@ public class Video {
     @Column(name = "thumbnail_url", length = 1000)
     private String thumbnailUrl;
 
+    @Column(name = "image_urls", columnDefinition = "TEXT")
+    private String imageUrls;
+
     @Column(name = "sound_id")
     private Long soundId;
 
@@ -212,4 +215,7 @@ public class Video {
 
     public List<VideoTag> getTags() { return tags; }
     public void setTags(List<VideoTag> tags) { this.tags = tags; }
+
+    public String getImageUrls() { return imageUrls; }
+    public void setImageUrls(String imageUrls) { this.imageUrls = imageUrls; }
 }

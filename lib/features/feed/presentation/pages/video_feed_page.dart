@@ -144,6 +144,10 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
     if (!mounted) return;
     final event = ProfileSyncService.instance.followEvents.value;
     if (event != null) {
+      if (widget.feedType.toUpperCase() == 'FOLLOWING') {
+        _fetchFeed(refresh: true);
+        return;
+      }
       setState(() {
         _videos = _videos.map((v) {
           if (v.creatorId == event.targetUserId) {
@@ -412,19 +416,45 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
     }
 
     if (_videos.isEmpty) {
+      final isFollowingTab = widget.feedType.toUpperCase() == 'FOLLOWING';
       return Scaffold(
         backgroundColor: Colors.black,
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.videocam_outlined, color: Colors.white38, size: 56),
-              const SizedBox(height: 12),
-              Text(
-                widget.feedType.toUpperCase() == 'FOLLOWING'
-                    ? 'Follow creators to see their videos here!'
-                    : 'No videos available yet.',
-                style: const TextStyle(color: Colors.white70, fontSize: 15),
+        body: RefreshIndicator(
+          color: Colors.white,
+          backgroundColor: const Color(0xFF202024),
+          onRefresh: () => _fetchFeed(refresh: true),
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            slivers: [
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isFollowingTab ? Icons.person_add_alt_1_outlined : Icons.videocam_outlined,
+                          color: Colors.white38,
+                          size: 58,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          isFollowingTab
+                              ? 'No posts from people you follow yet. Follow creators to see their latest videos and photos here!'
+                              : 'No videos available yet.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 15,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -436,7 +466,11 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          ScrollConfiguration(
+          RefreshIndicator(
+            color: Colors.white,
+            backgroundColor: const Color(0xFF202024),
+            onRefresh: () => _fetchFeed(refresh: true),
+            child: ScrollConfiguration(
             behavior: ScrollConfiguration.of(context).copyWith(
               dragDevices: {
                 PointerDeviceKind.touch,
@@ -491,6 +525,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
               },
             ),
           ),
+          ),
           if (Navigator.of(context).canPop())
             Positioned(
               top: MediaQuery.of(context).padding.top + 8,
@@ -544,6 +579,7 @@ class _VideoPostWidget extends StatefulWidget {
 class _VideoPostWidgetState extends State<_VideoPostWidget>
     with RouteAware, WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
   VideoPlayerController? _controller;
+  VideoPlayerController? _audioController;
   PageController? _imageCarouselController;
   int _currentImageIndex = 0;
   bool _manuallyPaused = false;
@@ -555,6 +591,13 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   @override
   bool get wantKeepAlive => true;
 
+  bool get _hasCustomAudio {
+    final audio = widget.video.resolvedAudioUrl;
+    if (audio == null || audio.trim().isEmpty) return false;
+    if (widget.video.isImagePost) return true;
+    return audio != widget.video.resolvedVideoUrl;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -565,30 +608,94 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
     if (!widget.video.isImagePost) {
       _initController();
     }
+    if (_hasCustomAudio) {
+      if (widget.video.isImagePost) {
+        _initAudioController();
+      } else {
+        // Stagger audio controller initialization on Android to prevent dual hardware decoder collisions
+        Future.delayed(const Duration(milliseconds: 150), () {
+          if (mounted && _hasCustomAudio) {
+            _initAudioController();
+          }
+        });
+      }
+    }
   }
 
   void _initController() {
-    final url = widget.video.videoUrl;
+    final url = widget.video.resolvedVideoUrl;
+    if (url.isEmpty) {
+      setState(() => _hasControllerError = true);
+      return;
+    }
+
     if (url.startsWith('assets/')) {
-      _controller = VideoPlayerController.asset(url);
+      _controller = VideoPlayerController.asset(
+        url,
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      );
     } else {
-      _controller = VideoPlayerController.networkUrl(Uri.parse(url));
+      _controller = VideoPlayerController.networkUrl(
+        Uri.parse(url),
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      );
     }
 
     _controller!.addListener(_videoListener);
-    _controller!.initialize().then((_) {
+    _controller!.initialize().then((_) async {
       if (!mounted) return;
-      _controller!.setLooping(true);
-      _controller!.setVolume(_isMuted ? 0.0 : 1.0);
+      await _controller!.setLooping(true);
+      final vidVolume = _hasCustomAudio ? 0.0 : (_isMuted ? 0.0 : 1.0);
+      await _controller!.setVolume(vidVolume);
       setState(() {});
       if (widget.isActive && widget.isCurrentPage && !_manuallyPaused) {
-        _controller!.play();
+        await _controller!.play();
       }
     }).catchError((error) {
       if (mounted) {
         setState(() {
           _hasControllerError = true;
         });
+      }
+    });
+  }
+
+  void _initAudioController() {
+    final audio = widget.video.resolvedAudioUrl;
+    if (audio == null || audio.trim().isEmpty) return;
+
+    if (_audioController != null) {
+      _audioController!.removeListener(_audioListener);
+      _audioController!.dispose();
+      _audioController = null;
+    }
+
+    if (audio.startsWith('assets/')) {
+      _audioController = VideoPlayerController.asset(
+        audio,
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      );
+    } else {
+      _audioController = VideoPlayerController.networkUrl(
+        Uri.parse(audio),
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      );
+    }
+
+    _audioController!.addListener(_audioListener);
+    _audioController!.initialize().then((_) async {
+      if (!mounted) return;
+      await _audioController!.setLooping(true);
+      await _audioController!.setVolume(_isMuted ? 0.0 : 1.0);
+      setState(() {});
+      if (widget.isActive && widget.isCurrentPage && !_manuallyPaused) {
+        await _audioController!.play();
+      }
+    }).catchError((error) {
+      debugPrint('[VideoFeed] Audio controller init error: $error');
+      // If custom audio fails on a video post, restore the main video audio so user still gets sound
+      if (mounted && !widget.video.isImagePost && _controller != null && _controller!.value.isInitialized) {
+        _controller!.setVolume(_isMuted ? 0.0 : 1.0);
       }
     });
   }
@@ -600,6 +707,17 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
       _controller!.seekTo(Duration.zero);
       if (widget.isActive && widget.isCurrentPage && !_manuallyPaused) {
         _controller!.play();
+      }
+    }
+  }
+
+  void _audioListener() {
+    if (!mounted || _audioController == null || !_audioController!.value.isInitialized) return;
+    final value = _audioController!.value;
+    if (value.duration > Duration.zero && value.position >= value.duration) {
+      _audioController!.seekTo(Duration.zero);
+      if (widget.isActive && widget.isCurrentPage && !_manuallyPaused) {
+        _audioController!.play();
       }
     }
   }
@@ -690,24 +808,41 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
           _imageCarouselController!.jumpToPage(0);
         }
       }
-      return;
+    } else {
+      if (_controller == null || oldWidget.video.resolvedVideoUrl != widget.video.resolvedVideoUrl) {
+        if (_controller != null) {
+          _controller!.removeListener(_videoListener);
+          _controller!.dispose();
+          _controller = null;
+        }
+        _initController();
+      }
     }
 
-    if (_controller == null || oldWidget.video.videoUrl != widget.video.videoUrl) {
-      if (_controller != null) {
-        _controller!.removeListener(_videoListener);
-        _controller!.dispose();
+    if (oldWidget.video.resolvedAudioUrl != widget.video.resolvedAudioUrl) {
+      if (_audioController != null) {
+        _audioController!.removeListener(_audioListener);
+        _audioController!.dispose();
+        _audioController = null;
       }
-      _initController();
-      return;
+      if (_hasCustomAudio) {
+        _initAudioController();
+      }
     }
 
     final shouldPlay = widget.isActive && widget.isCurrentPage && !_manuallyPaused;
-    if (_controller!.value.isInitialized) {
+    if (_controller != null && _controller!.value.isInitialized) {
       if (shouldPlay && !_controller!.value.isPlaying) {
         _controller!.play();
       } else if (!shouldPlay && _controller!.value.isPlaying) {
         _controller!.pause();
+      }
+    }
+    if (_audioController != null && _audioController!.value.isInitialized) {
+      if (shouldPlay && !_audioController!.value.isPlaying) {
+        _audioController!.play();
+      } else if (!shouldPlay && _audioController!.value.isPlaying) {
+        _audioController!.pause();
       }
     }
   }
@@ -716,29 +851,46 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   void didPushNext() {
     if (_controller != null && _controller!.value.isInitialized && _controller!.value.isPlaying) {
       _controller!.pause();
-      if (mounted) setState(() {});
     }
+    if (_audioController != null && _audioController!.value.isInitialized && _audioController!.value.isPlaying) {
+      _audioController!.pause();
+    }
+    if (mounted) setState(() {});
   }
 
   @override
   void didPopNext() {
-    if (widget.isActive && widget.isCurrentPage && !_manuallyPaused && _controller != null && _controller!.value.isInitialized) {
-      _controller!.play();
+    final shouldPlay = widget.isActive && widget.isCurrentPage && !_manuallyPaused;
+    if (shouldPlay) {
+      if (_controller != null && _controller!.value.isInitialized) {
+        _controller!.play();
+      }
+      if (_audioController != null && _audioController!.value.isInitialized) {
+        _audioController!.play();
+      }
       if (mounted) setState(() {});
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (_controller == null) return;
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      if (_controller!.value.isInitialized && _controller!.value.isPlaying) {
+      if (_controller != null && _controller!.value.isInitialized && _controller!.value.isPlaying) {
         _controller!.pause();
-        if (mounted) setState(() {});
       }
+      if (_audioController != null && _audioController!.value.isInitialized && _audioController!.value.isPlaying) {
+        _audioController!.pause();
+      }
+      if (mounted) setState(() {});
     } else if (state == AppLifecycleState.resumed) {
-      if (widget.isActive && widget.isCurrentPage && !_manuallyPaused && _controller!.value.isInitialized) {
-        _controller!.play();
+      final shouldPlay = widget.isActive && widget.isCurrentPage && !_manuallyPaused;
+      if (shouldPlay) {
+        if (_controller != null && _controller!.value.isInitialized) {
+          _controller!.play();
+        }
+        if (_audioController != null && _audioController!.value.isInitialized) {
+          _audioController!.play();
+        }
         if (mounted) setState(() {});
       }
     }
@@ -752,20 +904,32 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
     if (_controller != null) {
       _controller!.removeListener(_videoListener);
       _controller!.dispose();
+      _controller = null;
+    }
+    if (_audioController != null) {
+      _audioController!.removeListener(_audioListener);
+      _audioController!.dispose();
+      _audioController = null;
     }
     super.dispose();
   }
 
   void _togglePlayPause() {
-    if (_controller == null) return;
     setState(() {
-      if (_controller!.value.isPlaying) {
+      final isCurrentlyPlaying = (_controller != null && _controller!.value.isPlaying) ||
+          (_audioController != null && _audioController!.value.isPlaying);
+
+      if (isCurrentlyPlaying) {
         _manuallyPaused = true;
-        _controller!.pause();
+        _controller?.pause();
+        _audioController?.pause();
       } else {
         _manuallyPaused = false;
-        _controller!.setVolume(_isMuted ? 0.0 : 1.0);
-        _controller!.play();
+        final vidVolume = _hasCustomAudio ? 0.0 : (_isMuted ? 0.0 : 1.0);
+        _controller?.setVolume(vidVolume);
+        _controller?.play();
+        _audioController?.setVolume(_isMuted ? 0.0 : 1.0);
+        _audioController?.play();
       }
     });
   }
@@ -773,7 +937,9 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
   void _toggleMute() {
     setState(() {
       _isMuted = !_isMuted;
-      _controller?.setVolume(_isMuted ? 0.0 : 1.0);
+      final vidVolume = _hasCustomAudio ? 0.0 : (_isMuted ? 0.0 : 1.0);
+      _controller?.setVolume(vidVolume);
+      _audioController?.setVolume(_isMuted ? 0.0 : 1.0);
     });
   }
 
@@ -947,12 +1113,25 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
 
     return Stack(
       children: [
+        // Hidden video player surface required by Android ExoPlayer to output audio
+        if (_audioController != null && _audioController!.value.isInitialized)
+          Positioned(
+            left: 0,
+            top: 0,
+            child: SizedBox(
+              width: 1,
+              height: 1,
+              child: VideoPlayer(_audioController!),
+            ),
+          ),
+
         // Background Video or Photo
         Positioned.fill(
           child: Container(
             color: const Color(0xFF121216),
             child: widget.video.isImagePost
                 ? GestureDetector(
+                    onTap: _hasCustomAudio ? _togglePlayPause : null,
                     onDoubleTap: _handleDoubleTap,
                     behavior: HitTestBehavior.opaque,
                     child: widget.video.isMultiImagePost
@@ -996,16 +1175,28 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                                         widget.video.resolvedMediaUrls.length,
                                         (index) {
                                           final isSelected = index == _currentImageIndex;
-                                          return AnimatedContainer(
-                                            duration: const Duration(milliseconds: 200),
-                                            margin: const EdgeInsets.symmetric(horizontal: 3.5),
-                                            width: isSelected ? 8 : 6,
-                                            height: isSelected ? 8 : 6,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: isSelected
-                                                  ? Colors.white
-                                                  : Colors.white.withValues(alpha: 0.35),
+                                          return GestureDetector(
+                                            behavior: HitTestBehavior.opaque,
+                                            onTap: () {
+                                              _imageCarouselController?.animateToPage(
+                                                index,
+                                                duration: const Duration(milliseconds: 250),
+                                                curve: Curves.easeInOut,
+                                              );
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                              child: AnimatedContainer(
+                                                duration: const Duration(milliseconds: 200),
+                                                width: isSelected ? 8 : 6,
+                                                height: isSelected ? 8 : 6,
+                                                decoration: BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  color: isSelected
+                                                      ? Colors.white
+                                                      : Colors.white.withValues(alpha: 0.35),
+                                                ),
+                                              ),
                                             ),
                                           );
                                         },
@@ -1017,7 +1208,11 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                             ],
                           )
                         : Center(
-                            child: _buildImagePost(video.videoUrl),
+                            child: _buildImagePost(
+                              video.resolvedMediaUrls.isNotEmpty
+                                  ? video.resolvedMediaUrls.first
+                                  : VideoModel.resolveMediaUrl(video.videoUrl),
+                            ),
                           ),
                   )
                 : (_controller != null &&
@@ -1104,6 +1299,34 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                       ),
                     );
                   },
+                ),
+              ),
+            ),
+          ),
+
+        // Carousel page indicator badge (Top Right)
+        if (widget.video.isMultiImagePost)
+          Positioned(
+            top: widget.isStandalone
+                ? (MediaQuery.of(context).padding.top + 16)
+                : (MediaQuery.of(context).padding.top + 64),
+            right: 12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                '${_currentImageIndex + 1}/${widget.video.resolvedMediaUrls.length}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -1220,6 +1443,8 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                     backgroundColor: Colors.transparent,
                     builder: (context) => CommentBottomSheet(
                       videoId: video.id,
+                      videoCreatorId: video.creatorId,
+                      videoCreatorUsername: video.username,
                       initialCommentCount: video.commentCount,
                       onCommentCountChanged: widget.onCommentCountChanged,
                     ),
@@ -1266,6 +1491,10 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                             : (video.displayName.isNotEmpty ? video.displayName : video.username),
                         albumArtUrl: video.thumbnailUrl,
                         audioUrl: video.audioUrl,
+                        creatorId: video.creatorId,
+                        creatorUsername: (video.musicArtist != null && video.musicArtist!.isNotEmpty)
+                            ? video.musicArtist!.replaceAll('@', '').trim()
+                            : video.username.replaceAll('@', '').trim(),
                       ),
                     ),
                   );
@@ -1286,7 +1515,7 @@ child: Container(
                           ? video.thumbnailUrl!
                           : 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100',
                     ),
-                    onBackgroundImageError: (_, __) {},
+                    onBackgroundImageError: (exception, stackTrace) {},
                   ),
                 ),
               ),
@@ -1349,6 +1578,10 @@ child: Container(
                             : (video.displayName.isNotEmpty ? video.displayName : video.username),
                         albumArtUrl: video.thumbnailUrl,
                         audioUrl: video.audioUrl,
+                        creatorId: video.creatorId,
+                        creatorUsername: (video.musicArtist != null && video.musicArtist!.isNotEmpty)
+                            ? video.musicArtist!.replaceAll('@', '').trim()
+                            : video.username.replaceAll('@', '').trim(),
                       ),
                     ),
                   );

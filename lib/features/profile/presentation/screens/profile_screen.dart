@@ -62,6 +62,8 @@ bool _isLoadingTabs = false;
 ProfileSyncService.instance.videoUploadedEvents.addListener(_onVideoUploaded);
     ProfileSyncService.instance.videoInteractionEvents.addListener(_onVideoInteractionEvent);
     ProfileSyncService.instance.videoDeletedEvents.addListener(_onVideoDeleted);
+    ProfileSyncService.instance.soundUploadedEvents.addListener(_onSoundUploaded);
+    ProfileSyncService.instance.soundDeletedEvents.addListener(_onSoundDeleted);
     ProfileSyncService.instance.interactionEvents.addListener(_onInteractionEvent);
 
     // Instant zero-latency seed from cache if available
@@ -82,6 +84,8 @@ ProfileSyncService.instance.videoUploadedEvents.addListener(_onVideoUploaded);
     ProfileSyncService.instance.videoUploadedEvents.removeListener(_onVideoUploaded);
     ProfileSyncService.instance.videoInteractionEvents.removeListener(_onVideoInteractionEvent);
     ProfileSyncService.instance.videoDeletedEvents.removeListener(_onVideoDeleted);
+    ProfileSyncService.instance.soundUploadedEvents.removeListener(_onSoundUploaded);
+    ProfileSyncService.instance.soundDeletedEvents.removeListener(_onSoundDeleted);
     ProfileSyncService.instance.interactionEvents.removeListener(_onInteractionEvent);
     super.dispose();
   }
@@ -119,6 +123,25 @@ void _onVideoUploaded() {
         _myVideos.removeWhere((v) => v.id == deletedId);
         _likedVideos.removeWhere((v) => v.id == deletedId);
         _savedVideos.removeWhere((v) => v.id == deletedId);
+      });
+    }
+  }
+
+  void _onSoundUploaded() {
+    final sound = ProfileSyncService.instance.soundUploadedEvents.value;
+    if (sound != null && mounted) {
+      setState(() {
+        _mySounds.removeWhere((s) => s.id == sound.id);
+        _mySounds = [sound, ..._mySounds];
+      });
+    }
+  }
+
+  void _onSoundDeleted() {
+    final deletedId = ProfileSyncService.instance.soundDeletedEvents.value;
+    if (deletedId != null && mounted) {
+      setState(() {
+        _mySounds.removeWhere((s) => s.id == deletedId);
       });
     }
   }
@@ -691,7 +714,24 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
           children: [
 CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(0, userSounds: _mySounds, isLoading: _isLoadingTabs),
+              slivers: buildProfileTabSlivers(
+                0,
+                userSounds: _mySounds,
+                isLoading: _isLoadingTabs,
+                onSoundUpdated: (updatedSound) {
+                  setState(() {
+                    final idx = _mySounds.indexWhere((s) => s.id == updatedSound.id);
+                    if (idx != -1) {
+                      _mySounds[idx] = updatedSound;
+                    }
+                  });
+                },
+                onSoundDeleted: (deletedSound) {
+                  setState(() {
+                    _mySounds.removeWhere((s) => s.id == deletedSound.id);
+                  });
+                },
+              ),
             ), // Music (Index 0)
             CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),

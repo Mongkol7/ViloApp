@@ -1,3 +1,5 @@
+import '../../../../core/network/api_client.dart';
+
 /// A single stat displayed in the profile header (e.g. Followers: 12800).
 class ProfileStat {
   final String label;
@@ -30,6 +32,43 @@ class SoundTrack {
     this.similarCount = 0,
   });
 
+  static String resolveUrl(String? url) {
+    if (url == null || url.trim().isEmpty) return '';
+    final clean = url.trim();
+    if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('assets/')) {
+      return clean;
+    }
+    final host = ApiClient.baseUrl.replaceAll('/api/v1', '');
+    if (clean.startsWith('/')) {
+      return '$host$clean';
+    }
+    return '$host/$clean';
+  }
+
+  SoundTrack copyWith({
+    int? id,
+    String? coverUrl,
+    String? title,
+    String? usedByLabel,
+    String? artist,
+    String? audioUrl,
+    int? creatorId,
+    String? creatorUsername,
+    int? similarCount,
+  }) {
+    return SoundTrack(
+      id: id ?? this.id,
+      coverUrl: coverUrl ?? this.coverUrl,
+      title: title ?? this.title,
+      usedByLabel: usedByLabel ?? this.usedByLabel,
+      artist: artist ?? this.artist,
+      audioUrl: audioUrl ?? this.audioUrl,
+      creatorId: creatorId ?? this.creatorId,
+      creatorUsername: creatorUsername ?? this.creatorUsername,
+      similarCount: similarCount ?? this.similarCount,
+    );
+  }
+
   factory SoundTrack.fromJson(Map<String, dynamic> json) {
     final rawUsage = json['usageCount'] ?? json['usage_count'];
     String formatted = json['usedByLabel'] ?? json['formattedUsageCount'] ?? '';
@@ -37,17 +76,20 @@ class SoundTrack {
       final count = rawUsage is int ? rawUsage : int.tryParse(rawUsage.toString()) ?? 0;
       formatted = count >= 1000 ? '${(count / 1000).toStringAsFixed(1)}K' : '$count videos';
     }
+    final rawCover = (json['coverUrl'] != null && json['coverUrl'].toString().isNotEmpty)
+        ? json['coverUrl'].toString()
+        : ((json['albumArtUrl'] != null && json['albumArtUrl'].toString().isNotEmpty)
+            ? json['albumArtUrl'].toString()
+            : 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200');
+    final rawAudio = json['audioUrl']?.toString();
+
     return SoundTrack(
       id: json['id'] is int ? json['id'] : int.tryParse(json['id']?.toString() ?? ''),
-      coverUrl: (json['coverUrl'] != null && json['coverUrl'].toString().isNotEmpty)
-          ? json['coverUrl'].toString()
-          : ((json['albumArtUrl'] != null && json['albumArtUrl'].toString().isNotEmpty)
-              ? json['albumArtUrl'].toString()
-              : 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200'),
+      coverUrl: resolveUrl(rawCover),
       title: json['title']?.toString() ?? 'Original Sound',
       usedByLabel: formatted.isNotEmpty ? formatted : '1 video',
       artist: json['artist']?.toString() ?? json['creatorUsername']?.toString(),
-      audioUrl: json['audioUrl']?.toString(),
+      audioUrl: rawAudio != null ? resolveUrl(rawAudio) : null,
       creatorId: json['creatorId'] is int ? json['creatorId'] : int.tryParse(json['creatorId']?.toString() ?? ''),
       creatorUsername: json['creatorUsername']?.toString() ?? json['artist']?.toString(),
       similarCount: 0,

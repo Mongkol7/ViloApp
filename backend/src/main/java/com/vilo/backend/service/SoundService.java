@@ -5,12 +5,15 @@ import com.vilo.backend.dto.VideoResponse;
 import com.vilo.backend.entity.Sound;
 import com.vilo.backend.entity.User;
 import com.vilo.backend.entity.Video;
+import com.vilo.backend.exception.ForbiddenException;
 import com.vilo.backend.exception.ResourceNotFoundException;
 import com.vilo.backend.repository.SoundRepository;
 import com.vilo.backend.repository.VideoRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -20,10 +23,12 @@ public class SoundService {
 
     private final SoundRepository soundRepository;
     private final VideoRepository videoRepository;
+    private final FileStorageService fileStorageService;
 
-    public SoundService(SoundRepository soundRepository, VideoRepository videoRepository) {
+    public SoundService(SoundRepository soundRepository, VideoRepository videoRepository, FileStorageService fileStorageService) {
         this.soundRepository = soundRepository;
         this.videoRepository = videoRepository;
+        this.fileStorageService = fileStorageService;
     }
 
     @Transactional(readOnly = true)
@@ -130,5 +135,102 @@ public class SoundService {
             }
             return SoundResponse.fromEntity(s);
         }).collect(Collectors.toList());
+    }
+
+
+    @Transactional
+    public SoundResponse uploadSound(MultipartFile audioFile, MultipartFile coverFile, String title, String artist, String coverUrl, User currentUser) {
+        String storedAudioUrl = fileStorageService.storeFile(audioFile, "music");
+        String soundTitle = (title != null && !title.isBlank()) ? title.trim()
+                : (audioFile.getOriginalFilename() != null ? audioFile.getOriginalFilename().replaceFirst("[.][^.]+$", "") : "Original Sound");
+        Long creatorId = currentUser != null ? currentUser.getId() : 1L;
+        String creatorUsername = currentUser != null ? currentUser.getUsername() : "anonymous";
+        String effectiveArtist = (artist != null && !artist.isBlank()) ? artist.trim() : "@" + creatorUsername;
+
+        String storedCoverUrl = null;
+        if (coverFile != null && !coverFile.isEmpty()) {
+            storedCoverUrl = fileStorageService.storeFile(coverFile, "thumbnails");
+        }
+
+        String effectiveCover = (storedCoverUrl != null && !storedCoverUrl.isBlank()) ? storedCoverUrl
+                : ((coverUrl != null && !coverUrl.isBlank()) ? coverUrl.trim() : "https://images.unsplash.com/photo-1518770660439-4636190af475?w=500");
+
+        Sound sound = new Sound(soundTitle, creatorId, creatorUsername, storedAudioUrl, effectiveCover, 0L);
+        sound.setArtist(effectiveArtist);
+        sound = soundRepository.save(sound);
+        return SoundResponse.fromEntity(sound);
+    }
+
+    @Transactional
+    public SoundResponse uploadSound(MultipartFile audioFile, String title, String artist, String coverUrl, User currentUser) {
+        return uploadSound(audioFile, null, title, artist, coverUrl, currentUser);
+    }
+
+    @Transactional
+    public void deleteSound(Long soundId, User currentUser) {
+        Sound sound = soundRepository.findById(soundId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sound not found with id: " + soundId));
+
+        if (currentUser == null) {
+            throw new ForbiddenException("Authentication required to delete sound");
+        }
+
+        boolean isOwner = false;
+        if (sound.getCreatorId() != null && currentUser.getId() != null) {
+            isOwner = sound.getCreatorId().equals(currentUser.getId());
+        }
+        if (!isOwner && currentUser.getUsername() != null && sound.getCreatorUsername() != null) {
+            String cleanCurrent = currentUser.getUsername().replaceFirst("^@", "").trim();
+            String cleanCreator = sound.getCreatorUsername().replaceFirst("^@", "").trim();
+            isOwner = cleanCurrent.equalsIgnoreCase(cleanCreator);
+        }
+
+        if (!isOwner) {
+            throw new ForbiddenException("Forbidden: Only the owner can delete this sound");
+        }
+
+        // Safely clear soundId on any videos referencing that sound
+        List<Video> videos = videoRepository.findBySoundIdOrderByCreatedAtDesc(soundId);
+        for (Video v : videos) {
+            v.setSoundId(null);
+        }
+        videoRepository.saveAll(videos);
+        videoRepository.clearSoundId(soundId);
+
+        soundRepository.delete(sound);
+    }
+
+    @Transactional
+    public SoundResponse updateSound(Long soundId, String title, MultipartFile coverFile, String coverUrl, User currentUser) {
+        Sound sound = soundRepository.findById(soundId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sound not found with id: " + soundId));
+
+        if (currentUser == null) {
+            throw new org.springframework.security.access.AccessDeniedException("Unauthorized: Authentication required to edit sound details.");
+        }
+
+        if (sound.getCreatorId() != null) {
+            boolean isCreator = sound.getCreatorId().equals(currentUser.getId()) ||
+                    (currentUser.getUsername() != null && currentUser.getUsername().equalsIgnoreCase(sound.getCreatorUsername()));
+            if (!isCreator) {
+                throw new org.springframework.security.access.AccessDeniedException("Unauthorized: Only the creator of this sound track can edit its cover or details.");
+            }
+        }
+
+        if (title != null && !title.isBlank()) {
+            sound.setTitle(title.trim());
+        }
+
+        if (coverFile != null && !coverFile.isEmpty()) {
+            String storedCoverUrl = fileStorageService.storeFile(coverFile, "thumbnails");
+            sound.setCoverUrl(storedCoverUrl);
+            sound.setAlbumArtUrl(storedCoverUrl);
+        } else if (coverUrl != null && !coverUrl.isBlank()) {
+            sound.setCoverUrl(coverUrl.trim());
+            sound.setAlbumArtUrl(coverUrl.trim());
+        }
+
+        sound = soundRepository.save(sound);
+        return SoundResponse.fromEntity(sound);
     }
 }
