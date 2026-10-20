@@ -7,6 +7,8 @@ import com.vilo.backend.entity.VideoLike;
 import com.vilo.backend.entity.VideoSave;
 import com.vilo.backend.entity.VideoTag;
 import com.vilo.backend.exception.ResourceNotFoundException;
+import com.vilo.backend.entity.Hashtag;
+import com.vilo.backend.repository.HashtagRepository;
 import com.vilo.backend.repository.CommentRepository;
 import com.vilo.backend.repository.UserRepository;
 import com.vilo.backend.repository.VideoLikeRepository;
@@ -32,6 +34,7 @@ public class VideoService {
     private final CommentRepository commentRepository;
     private final FileStorageService fileStorageService;
     private final com.vilo.backend.repository.SoundRepository soundRepository;
+    private final HashtagRepository hashtagRepository;
 
     public VideoService(VideoRepository videoRepository,
                         UserRepository userRepository,
@@ -39,7 +42,8 @@ public class VideoService {
                         VideoSaveRepository videoSaveRepository,
                         CommentRepository commentRepository,
                         FileStorageService fileStorageService,
-                        com.vilo.backend.repository.SoundRepository soundRepository) {
+                        com.vilo.backend.repository.SoundRepository soundRepository,
+                        HashtagRepository hashtagRepository) {
         this.videoRepository = videoRepository;
         this.userRepository = userRepository;
         this.videoLikeRepository = videoLikeRepository;
@@ -47,6 +51,7 @@ public class VideoService {
         this.commentRepository = commentRepository;
         this.fileStorageService = fileStorageService;
         this.soundRepository = soundRepository;
+        this.hashtagRepository = hashtagRepository;
     }
 
     @Transactional(readOnly = true)
@@ -355,7 +360,10 @@ public class VideoService {
             effectiveCaption = ((title != null ? title : "") + (description != null && !description.isBlank() ? " " + description : "")).trim();
         }
 
-        Video video = new Video(creator, title, description, effectiveCaption, videoUrl, thumbnailUrl);
+        String effectiveTitle = (title != null && !title.isBlank()) ? title.trim() : (effectiveCaption != null ? effectiveCaption : "");
+        String effectiveDescription = (description != null && !description.isBlank()) ? description.trim() : (effectiveCaption != null ? effectiveCaption : "");
+
+        Video video = new Video(creator, effectiveTitle, effectiveDescription, effectiveCaption, videoUrl, thumbnailUrl);
         if (imageUrls != null) {
             video.setImageUrls(imageUrls);
         }
@@ -426,11 +434,39 @@ public class VideoService {
             video.setAudioUrl(null);
         }
 
+        // Normalize tags & extract hashtags from caption
+        Set<String> cleanTagSet = new LinkedHashSet<>();
         if (tags != null) {
-            for (String tag : tags) {
-                if (tag != null && !tag.isBlank()) {
-                    video.getTags().add(new VideoTag(video, tag.trim().replaceAll("^#", "")));
+            for (String rawTag : tags) {
+                if (rawTag != null) {
+                    for (String part : rawTag.split("[,\\s]+")) {
+                        String clean = part.trim().replaceAll("^#+", "");
+                        if (!clean.isEmpty()) {
+                            cleanTagSet.add(clean.toLowerCase());
+                        }
+                    }
                 }
+            }
+        }
+        if (effectiveCaption != null && !effectiveCaption.isBlank()) {
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("#([a-zA-Z0-9_]+)").matcher(effectiveCaption);
+            while (matcher.find()) {
+                String tagFromCaption = matcher.group(1).trim().toLowerCase();
+                if (!tagFromCaption.isEmpty()) {
+                    cleanTagSet.add(tagFromCaption);
+                }
+            }
+        }
+
+        for (String cleanTag : cleanTagSet) {
+            video.getTags().add(new VideoTag(video, cleanTag));
+            if (hashtagRepository != null) {
+                try {
+                    Hashtag hashtag = hashtagRepository.findByTagIgnoreCase(cleanTag)
+                            .orElseGet(() -> new Hashtag(cleanTag, 0L, false));
+                    hashtag.setUsageCount((hashtag.getUsageCount() != null ? hashtag.getUsageCount() : 0L) + 1);
+                    hashtagRepository.save(hashtag);
+                } catch (Exception ignored) {}
             }
         }
 

@@ -57,6 +57,21 @@ class FeedRemoteDataSource {
     list.insert(0, video);
   }
 
+  List<VideoModel> getAllCachedVideos() {
+    final Map<int, VideoModel> map = {};
+    for (final list in _feedCache.values) {
+      for (final v in list) {
+        map[v.id] = v;
+      }
+    }
+    for (final list in _userVideosCache.values) {
+      for (final v in list) {
+        map[v.id] = v;
+      }
+    }
+    return map.values.toList();
+  }
+
   void invalidateUserVideos(dynamic identifier) {
     if (identifier == null) return;
     final clean = identifier.toString().replaceAll('@', '').trim().toLowerCase();

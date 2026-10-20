@@ -45,4 +45,27 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
     @org.springframework.transaction.annotation.Transactional
     @Query("UPDATE Video v SET v.soundId = null WHERE v.soundId = :soundId")
     void clearSoundId(@Param("soundId") Long soundId);
+
+    @Query("""
+        SELECT DISTINCT v FROM Video v
+        LEFT JOIN v.tags t
+        LEFT JOIN v.creator c
+        WHERE LOWER(COALESCE(v.title, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))
+           OR LOWER(COALESCE(v.caption, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))
+           OR LOWER(COALESCE(v.description, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))
+           OR LOWER(COALESCE(t.tagName, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))
+           OR LOWER(COALESCE(c.username, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))
+           OR LOWER(COALESCE(c.displayName, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))
+        ORDER BY v.createdAt DESC
+    """)
+    List<Video> searchVideos(@Param("keyword") String keyword, Pageable pageable);
+
+    @Query("""
+        SELECT DISTINCT v FROM Video v
+        JOIN v.tags t
+        WHERE LOWER(t.tagName) = LOWER(:tagName)
+           OR LOWER(v.caption) LIKE LOWER(CONCAT('%#', :tagName, '%'))
+        ORDER BY v.createdAt DESC
+    """)
+    List<Video> findByTagName(@Param("tagName") String tagName, Pageable pageable);
 }

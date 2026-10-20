@@ -9,4 +9,7 @@ import java.util.List;
 @Repository
 public interface VideoTagRepository extends JpaRepository<VideoTag, Long> {
     List<VideoTag> findByVideoId(Long videoId);
+    
+    @org.springframework.data.jpa.repository.Query("SELECT DISTINCT t.tagName FROM VideoTag t WHERE LOWER(t.tagName) LIKE LOWER(CONCAT('%', :query, '%'))")
+    List<String> searchTagNames(@org.springframework.data.repository.query.Param("query") String query, org.springframework.data.domain.Pageable pageable);
 }

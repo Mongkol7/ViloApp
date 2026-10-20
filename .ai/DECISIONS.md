@@ -41,3 +41,30 @@
 - **Status**: Accepted
 - **Context**: Tying profile metadata (`GET /users/me`) and video list (`GET /videos/user/{id}`) inside a single `try` block caused network errors in auth/profile to swallow and cancel user video fetching, leaving the profile grid blank or stuck on mock fallbacks.
 - **Decision**: Decouple `_loadProfile()` into distinct, independent execution blocks. User video posts are always loaded and cached regardless of token or `/users/me` status, backed by `RefreshIndicator` with `AlwaysScrollableScrollPhysics`.
+
+## ADR-008: `ViloTabBarView` for NestedScrollView Initial Index Synchronization
+
+- **Status**: Accepted
+- **Context**: Flutter's native `TabBarView` inside `NestedScrollView` clamps its internal `PagePosition` offset to 0.0 when initial layout constraints evaluate to zero width during route push transitions (`Navigator.push`). When opening profiles with `initialIndex: 1` (Posted Videos), the `TabBar` indicator highlights Tab 1, but the body gets stuck displaying Tab 0 (Music) until switching back and forth.
+- **Decision**: Built `ViloTabBarView` (`vilo_tab_bar_view.dart`) which directly wraps a controlled `PageView`, monitors `TabController`, and performs post-frame / scroll-end synchronization checks. If `pageController.page?.round() != controller.index`, it immediately jumps to the target page, guaranteeing 100% reliable tab initialization across all profile screens.
+
+## ADR-009: Responsive Video Feed Overlays & Edge-Faded Top Navigation Bar
+
+- **Status**: Accepted
+- **Context**: Video player captions and action controls collided with the floating bottom navigation bar on news feeds, or sat too high when viewed in standalone profile views without a navigation dock. The top category tabs and search icon also overlapped the floating sound toggle button.
+- **Decision**:
+  1. Dynamically compute responsive offsets: in news feed with bottom dock, captions sit at `padding.bottom + 80pt`; in standalone views, they move down to `padding.bottom + 20pt`.
+  2. Shift right-side action buttons (`Profile`, `Like`, `Comment`, `Save`, `Share`, `Music Disc`) and volume toggle to `right: 8` for an edge-aligned TikTok/Reels aesthetic.
+  3. Relocate sound toggle to `padding.top + 64pt` in main feed (8pt below the category bar) avoiding collision with search.
+  4. Top category navbar in `HomeFeedPage` wrapped with a horizontal `ShaderMask` linear alpha gradient (`[0.0, 0.08, 0.92, 1.0]`) and `BouncingScrollPhysics` for edge-fade and fluid horizontal dragging across all input devices.
+
+## ADR-010: Database Video Title & Hashtag Search Engine
+
+- **Status**: Accepted
+- **Context**: Video search previously queried a static list of 8 mock videos, making real uploaded/posted videos completely unsearchable. Hashtags on posted videos were not synchronized with `HashtagRepository`, and search results in Flutter displayed as static cards that only showed a snackbar instead of playing the video.
+- **Decision**:
+  1. Implemented full-text keyword search in `VideoRepository.searchVideos` matching `title`, `caption`, `description`, `VideoTag.tagName`, and creator username/displayName.
+  2. Implemented `searchTagNames` in `VideoTagRepository` and automatically registered newly uploaded tags/hashtags in `HashtagRepository` with incremented usage counts.
+  3. Integrated `VideoRepository` into `SearchService.search()` with tokenized multi-word query fallback and DTO conversion containing all playback parameters.
+  4. Extended Flutter `TrendingVideo` with `videoUrl`, `caption`, `toVideoModel()`, and wired search grid taps to open `VideoFeedPage` for immediate fullscreen playback.
+  5. Updated `_fallbackLocalSearch` to search `FeedRemoteDataSource.instance.getAllCachedVideos()` for offline and optimistic local responsiveness.

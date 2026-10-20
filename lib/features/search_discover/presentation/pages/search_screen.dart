@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../../feed/presentation/pages/sound_detail_page.dart';
+import '../../../feed/presentation/pages/video_feed_page.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../../profile/presentation/screens/public_profile_screen.dart';
 import '../../data/datasources/search_remote_data_source.dart';
@@ -498,15 +499,15 @@ class _SearchScreenState extends State<SearchScreen> {
         final video = _trendingVideos[index];
         return GestureDetector(
           onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  video.title.isNotEmpty
-                      ? '${video.title} (${video.authorUsername})'
-                      : 'Playing video by ${video.authorUsername}',
+            final videoList = _trendingVideos.map((tv) => tv.toVideoModel()).toList();
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => VideoFeedPage(
+                  initialVideos: videoList,
+                  initialIndex: index,
+                  hasBottomNav: false,
+                  canDelete: false,
                 ),
-                backgroundColor: const Color(0xFF202024),
-                duration: const Duration(seconds: 1),
               ),
             );
           },
