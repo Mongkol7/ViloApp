@@ -69,6 +69,14 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     }
   }
 
+  void _setScrollNavigationState(VoidCallback update) {
+    if (!mounted) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(update);
+    });
+  }
+
   bool _handleScrollNotification(ScrollNotification notification) {
     if (notification.metrics.axis != Axis.vertical) return false;
 
@@ -77,7 +85,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     // 1. Immediate return to expanded state if at top or overscrolled at top
     if (currentOffset <= 0) {
       if (_isCompact) {
-        setState(() {
+        _setScrollNavigationState(() {
           _isCompact = false;
           _accumulatedDelta = 0.0;
         });
@@ -96,7 +104,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
 
         // Threshold: Downward displacement > 20pt
         if (_accumulatedDelta > 20.0 && !_isCompact) {
-          setState(() {
+          _setScrollNavigationState(() {
             _isCompact = true;
           });
         }
@@ -107,7 +115,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
 
         // Immediate expansion: Upward delta < -6pt
         if (_accumulatedDelta < -6.0 && _isCompact) {
-          setState(() {
+          _setScrollNavigationState(() {
             _isCompact = false;
           });
         }
@@ -116,7 +124,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     } else if (notification is UserScrollNotification) {
       // Velocity / gesture end checks
       if (notification.direction == ScrollDirection.forward && _isCompact) {
-        setState(() {
+        _setScrollNavigationState(() {
           _isCompact = false;
           _accumulatedDelta = 0.0;
         });

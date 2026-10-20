@@ -63,14 +63,20 @@ class ProductDetailPage extends StatelessWidget {
                           ),
                           const Spacer(),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
-                              color: Colors.red.withOpacity(0.2),
+                              color: Colors.red.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: const Text(
                               '-58%',
-                              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ],
@@ -87,11 +93,18 @@ class ProductDetailPage extends StatelessWidget {
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          const Icon(Icons.star, color: Colors.orange, size: 18),
+                          const Icon(
+                            Icons.star,
+                            color: Colors.orange,
+                            size: 18,
+                          ),
                           const SizedBox(width: 4),
                           const Text(
                             '4.8',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const SizedBox(width: 8),
                           const Text(
@@ -101,7 +114,10 @@ class ProductDetailPage extends StatelessWidget {
                           const Spacer(),
                           const Text(
                             'Free Shipping',
-                            style: TextStyle(color: Colors.greenAccent, fontSize: 12),
+                            style: TextStyle(
+                              color: Colors.greenAccent,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -110,12 +126,20 @@ class ProductDetailPage extends StatelessWidget {
                       const SizedBox(height: 24),
                       const Text(
                         'Description',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       const Text(
                         'Experience high-quality audio and cutting-edge technology with this premium gadget. Designed for comfort and durability, it offers seamless connectivity and superior performance for all your needs.',
-                        style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                          height: 1.5,
+                        ),
                       ),
                     ],
                   ),
@@ -128,7 +152,11 @@ class ProductDetailPage extends StatelessWidget {
                   padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   child: Text(
                     'Comments (45)',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -154,10 +182,14 @@ class ProductDetailPage extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
+                  color: Colors.black.withValues(alpha: 0.5),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                child: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
               ),
             ),
           ),
@@ -171,7 +203,9 @@ class ProductDetailPage extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 15, 20, 30),
               decoration: BoxDecoration(
                 color: const Color(0xFF1C1C1E),
-                border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+                border: Border(
+                  top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+                ),
               ),
               child: Row(
                 children: [
@@ -181,7 +215,10 @@ class ProductDetailPage extends StatelessWidget {
                       color: Colors.white10,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.shopping_cart_outlined, color: Colors.white),
+                    child: const Icon(
+                      Icons.shopping_cart_outlined,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -194,7 +231,11 @@ class ProductDetailPage extends StatelessWidget {
                       ),
                       child: const Text(
                         'Buy Now',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
                       ),
                     ),
                   ),
@@ -216,7 +257,13 @@ class ProductDetailPage extends StatelessWidget {
       'https://i.pravatar.cc/150?img=5',
     ];
 
-    final List<String> names = ['Alex Johnson', 'Maria Garcia', 'James Wilson', 'Sarah Davis', 'Robert Smith'];
+    final List<String> names = [
+      'Alex Johnson',
+      'Maria Garcia',
+      'James Wilson',
+      'Sarah Davis',
+      'Robert Smith',
+    ];
     final List<String> comments = [
       'Absolutely amazing product! The quality surpassed my expectations.',
       'Fast shipping and great customer service. Highly recommend.',
@@ -239,7 +286,11 @@ class ProductDetailPage extends StatelessWidget {
               const SizedBox(width: 12),
               Text(
                 names[index % names.length],
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
               ),
               const Spacer(),
               Row(
@@ -257,7 +308,11 @@ class ProductDetailPage extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             comments[index % comments.length],
-            style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              height: 1.4,
+            ),
           ),
           const SizedBox(height: 8),
           const Text(

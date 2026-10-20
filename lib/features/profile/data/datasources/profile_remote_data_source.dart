@@ -76,7 +76,10 @@ class ProfileRemoteDataSource {
       body: body,
       requireAuth: true,
     );
-    return UserModel.fromJson(response as Map<String, dynamic>);
+    final user = UserModel.fromJson(response as Map<String, dynamic>);
+    cacheUser(user);
+    ProfileSyncService.instance.cachedMyProfile = user;
+    return user;
   }
 
   /// Toggle follow state on target user (POST /api/v1/users/{id}/follow)

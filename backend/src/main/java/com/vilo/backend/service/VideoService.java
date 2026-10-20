@@ -15,6 +15,7 @@ import com.vilo.backend.repository.VideoLikeRepository;
 import com.vilo.backend.repository.VideoRepository;
 import com.vilo.backend.repository.VideoSaveRepository;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -56,24 +57,9 @@ public class VideoService {
         final User reloadedUser = (currentUser != null && currentUser.getId() != null)
                 ? userRepository.findById(currentUser.getId()).orElse(currentUser)
                 : null;
-
-        String feedType = type != null ? type.toUpperCase() : "FOR_YOU";
-        Page<Video> videoPage;
-
-        if ("FOLLOWING".equals(feedType)) {
-            if (reloadedUser != null && reloadedUser.getFollowing() != null && !reloadedUser.getFollowing().isEmpty()) {
-                videoPage = videoRepository.findByCreatorInOrderByCreatedAtDesc(
-                        reloadedUser.getFollowing(),
-                        PageRequest.of(page, size)
-                );
-            } else {
-                videoPage = videoRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(page, size));
-            }
-        } else {
-            videoPage = videoRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(page, size));
-        }
-
         Long currentUserId = reloadedUser != null ? reloadedUser.getId() : null;
+
+        Page<Video> videoPage = getFeed(type, currentUserId, PageRequest.of(page, size), null);
 
         return videoPage.getContent().stream()
                 .map(v -> {
@@ -88,11 +74,110 @@ public class VideoService {
     }
 
     @Transactional(readOnly = true)
-    public Page<Video> getFeed(String type, List<Long> followingIds, Pageable pageable) {
-        if ("following".equalsIgnoreCase(type) && followingIds != null && !followingIds.isEmpty()) {
-            return videoRepository.findByCreatorIdIn(followingIds, pageable);
+    public Page<Video> getFeed(String type, Long currentUserId, Pageable pageable, Long seed) {
+        List<Video> candidateVideos;
+
+        if ("following".equalsIgnoreCase(type)) {
+            List<Long> followingIds = (currentUserId != null)
+                    ? userRepository.findFollowingIdsByUserId(currentUserId)
+                    : Collections.emptyList();
+
+            if (!followingIds.isEmpty()) {
+                candidateVideos = videoRepository.findAllByCreatorIdIn(followingIds);
+                if (candidateVideos.isEmpty()) {
+                    candidateVideos = videoRepository.findAll();
+                }
+            } else {
+                candidateVideos = videoRepository.findAll();
+            }
+        } else {
+            candidateVideos = videoRepository.findAll();
         }
-        return videoRepository.findAllByOrderByCreatedAtDesc(pageable);
+
+        List<Video> randomizedList = interleaveAndRandomizeVideos(candidateVideos, seed);
+
+        int start = (int) pageable.getOffset();
+        int end = Math.min(start + pageable.getPageSize(), randomizedList.size());
+        List<Video> paged = (start < randomizedList.size())
+                ? randomizedList.subList(start, end)
+                : Collections.emptyList();
+
+        return new PageImpl<>(paged, pageable, randomizedList.size());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Video> getFeed(String type, List<Long> followingIds, Pageable pageable) {
+        return getFeed(type, followingIds, pageable, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Video> getFeed(String type, List<Long> followingIds, Pageable pageable, Long seed) {
+        List<Video> candidateVideos;
+
+        if ("following".equalsIgnoreCase(type) && followingIds != null && !followingIds.isEmpty()) {
+            candidateVideos = videoRepository.findAllByCreatorIdIn(followingIds);
+            if (candidateVideos.isEmpty()) {
+                candidateVideos = videoRepository.findAll();
+            }
+        } else {
+            candidateVideos = videoRepository.findAll();
+        }
+
+        List<Video> randomizedList = interleaveAndRandomizeVideos(candidateVideos, seed);
+
+        int start = (int) pageable.getOffset();
+        int end = Math.min(start + pageable.getPageSize(), randomizedList.size());
+        List<Video> paged = (start < randomizedList.size())
+                ? randomizedList.subList(start, end)
+                : Collections.emptyList();
+
+        return new PageImpl<>(paged, pageable, randomizedList.size());
+    }
+
+    /**
+     * Shuffles and round-robin interleaves videos across distinct creators.
+     * Ensures consecutive videos are not by the same user, and distribution is randomized.
+     */
+    public List<Video> interleaveAndRandomizeVideos(List<Video> videos, Long seed) {
+        if (videos == null || videos.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Random rng = (seed != null) ? new Random(seed) : new Random();
+
+        // 1. Group candidate videos by creator ID
+        Map<Long, List<Video>> byCreator = new LinkedHashMap<>();
+        for (Video v : videos) {
+            Long creatorId = (v.getCreator() != null && v.getCreator().getId() != null)
+                    ? v.getCreator().getId()
+                    : (v.getCreatorId() != null ? v.getCreatorId() : 0L);
+            byCreator.computeIfAbsent(creatorId, k -> new ArrayList<>()).add(v);
+        }
+
+        // 2. Shuffle each creator's videos
+        for (List<Video> creatorVideos : byCreator.values()) {
+            Collections.shuffle(creatorVideos, rng);
+        }
+
+        // 3. Shuffle creators
+        List<List<Video>> queues = new ArrayList<>(byCreator.values());
+        Collections.shuffle(queues, rng);
+
+        // 4. Interleave round-robin across creators
+        List<Video> result = new ArrayList<>(videos.size());
+        boolean hasMore = true;
+        while (hasMore) {
+            hasMore = false;
+            for (List<Video> q : queues) {
+                if (!q.isEmpty()) {
+                    result.add(q.remove(0));
+                    if (!q.isEmpty()) {
+                        hasMore = true;
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     @Transactional(readOnly = true)

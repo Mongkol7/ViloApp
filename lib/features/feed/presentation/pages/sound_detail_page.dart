@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../core/widgets/video_thumbnail.dart';
+import '../../data/models/video_model.dart';
 
 class SoundDetailPage extends StatefulWidget {
   final String? soundId;
@@ -10,6 +12,7 @@ class SoundDetailPage extends StatefulWidget {
   final String? videosCount;
   final String? audioUrl;
   final int? durationSeconds;
+  final VideoModel? sourceVideo;
 
   const SoundDetailPage({
     super.key,
@@ -20,6 +23,7 @@ class SoundDetailPage extends StatefulWidget {
     this.videosCount,
     this.audioUrl,
     this.durationSeconds,
+    this.sourceVideo,
   });
 
   @override
@@ -75,12 +79,27 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
   }
 
   Future<void> _loadVideos() async {
-    final id = widget.soundId ?? '1';
+    final id = await _resolveSoundId();
+    if (id == null) {
+      if (mounted) {
+        setState(() {
+          _videos = widget.sourceVideo == null ? [] : [_sourceVideoMap()];
+          _isLoadingVideos = false;
+        });
+      }
+      return;
+    }
+
     try {
       final response = await ApiClient.instance.get('/sounds/$id/videos', requireAuth: false);
       if (mounted && response != null && response['success'] == true && response['data'] is List) {
+        final videos = (response['data'] as List)
+            .whereType<Map>()
+            .map((video) => Map<String, dynamic>.from(video))
+            .toList();
+        _includeSourceVideo(videos);
         setState(() {
-          _videos = List<Map<String, dynamic>>.from(response['data']);
+          _videos = videos;
           _isLoadingVideos = false;
         });
         return;
@@ -88,39 +107,77 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
     } catch (_) {}
 
     if (mounted) {
-      final fallbackThumbs = [
-        'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=500&auto=format&fit=crop&q=80',
-      ];
-      final fallbackViews = ['1.8M', '820K', '542K', '310K', '295K', '180K', '125K', '98K', '64K'];
-
       setState(() {
-        _videos = List.generate(fallbackThumbs.length, (i) => {
-          'id': 'v_$i',
-          'thumbnailUrl': fallbackThumbs[i],
-          'views': fallbackViews[i],
-        });
+        _videos = widget.sourceVideo == null ? [] : [_sourceVideoMap()];
         _isLoadingVideos = false;
       });
     }
+  }
+
+  Map<String, dynamic> _sourceVideoMap() {
+    final source = widget.sourceVideo!;
+    return {
+      'id': source.id,
+      'thumbnailUrl': source.thumbnailUrl,
+      'views': source.formattedViews,
+      'viewCount': source.viewCount,
+      'videoUrl': source.videoUrl,
+      'soundTitle': source.musicTitle,
+    };
+  }
+
+  void _includeSourceVideo(List<Map<String, dynamic>> videos) {
+    if (widget.sourceVideo == null) return;
+
+    final sourceId = widget.sourceVideo!.id.toString();
+    videos.removeWhere((video) => video['id']?.toString() == sourceId);
+    videos.insert(0, _sourceVideoMap());
+  }
+
+  Future<String?> _resolveSoundId() async {
+    final providedId = widget.soundId?.trim();
+    if (providedId != null && providedId.isNotEmpty) return providedId;
+
+    final title = widget.title?.trim() ?? '';
+    if (title.isEmpty) return null;
+
+    try {
+      final response = await ApiClient.instance.get(
+        '/search?q=${Uri.encodeComponent(title)}&type=SOUNDS',
+        requireAuth: false,
+      );
+      final data = response is Map && response['data'] is Map
+          ? response['data'] as Map
+          : response is Map
+              ? response
+              : null;
+      final sounds = data?['sounds'];
+      if (sounds is List && sounds.isNotEmpty) {
+        final normalizedTitle = title.toLowerCase();
+        for (final sound in sounds) {
+          if (sound is Map) {
+            final soundTitle = sound['title']?.toString().toLowerCase() ?? '';
+            if (soundTitle == normalizedTitle ||
+                soundTitle.contains(normalizedTitle) ||
+                normalizedTitle.contains(soundTitle)) {
+              final id = sound['id']?.toString();
+              if (id != null && id.isNotEmpty) return id;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
     final title = widget.title ?? 'Midnight City Pulse';
     final artist = widget.artist ?? 'Neon Dreams';
-    final count = widget.videosCount ?? '1.8M videos';
+    final count = widget.videosCount ?? '${_videos.length} videos';
     final duration = '${widget.durationSeconds ?? 45}s';
-    final albumArt = widget.albumArtUrl?.isNotEmpty == true
-        ? widget.albumArtUrl!
-        : 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=80';
+    final albumArt = widget.albumArtUrl?.trim() ?? '';
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -198,14 +255,19 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
                                       ],
                                     ),
                                     child: ClipOval(
-                                      child: Image.network(
-                                        albumArt,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) => Container(
-                                          color: AppColors.surface,
-                                          child: const Icon(Icons.music_note_rounded, color: Colors.white),
-                                        ),
-                                      ),
+                                      child: albumArt.isEmpty
+                                          ? Container(
+                                              color: AppColors.surface,
+                                              child: const Icon(Icons.music_note_rounded, color: Colors.white),
+                                            )
+                                          : Image.network(
+                                              albumArt,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (context, error, stackTrace) => Container(
+                                                color: AppColors.surface,
+                                                child: const Icon(Icons.music_note_rounded, color: Colors.white),
+                                              ),
+                                            ),
                                     ),
                                   ),
                                 ),
@@ -371,6 +433,19 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
                     ),
                   ),
                 )
+              else if (_videos.isEmpty)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(24, 32, 24, 40),
+                    child: Center(
+                      child: Text(
+                        'No videos using this sound yet.',
+                        style: TextStyle(color: Colors.white54, fontSize: 14),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                )
               else
                 SliverGrid(
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -387,10 +462,9 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            Image.network(
-                              video['thumbnailUrl'] ?? '',
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => Container(
+                            VideoThumbnail(
+                              videoUrl: video['videoUrl']?.toString() ?? '',
+                              placeholder: Container(
                                 color: AppColors.surface,
                                 child: const Icon(Icons.movie_outlined, color: AppColors.outline),
                               ),

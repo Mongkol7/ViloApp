@@ -29,7 +29,7 @@ class ShopProductCard extends StatelessWidget {
               width: 52,
               height: 52,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
+              errorBuilder: (_, _, _) => Container(
                 width: 52,
                 height: 52,
                 color: PulseColors.surfaceContainer,

@@ -49,25 +49,20 @@ public class VideoController {
      * Paginated video feeds (foryou / following).
      */
     @GetMapping("/feed")
-    @Operation(summary = "Get video feed", description = "Retrieves paginated video feed filtered by foryou / following")
+    @Operation(summary = "Get video feed", description = "Retrieves paginated video feed filtered by foryou / following with randomized creator interleaving")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getFeed(
             @Parameter(description = "Feed type: foryou or following")
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "foryou") String type,
+            @RequestParam(required = false) Long seed,
             @AuthenticationPrincipal User currentUser
     ) {
-        List<Long> followingIds = null;
         Long currentUserId = currentUser != null ? currentUser.getId() : null;
-
-        if ("following".equalsIgnoreCase(type) && currentUser != null && currentUser.getFollowing() != null) {
-            followingIds = currentUser.getFollowing().stream()
-                    .map(User::getId)
-                    .toList();
-        }
+        Long effectiveSeed = (seed != null) ? seed : (System.currentTimeMillis() / 60000L);
 
         Pageable pageable = PageRequest.of(page, size);
-        Page<Video> videoPage = videoService.getFeed(type, followingIds, pageable);
+        Page<Video> videoPage = videoService.getFeed(type, currentUserId, pageable, effectiveSeed);
 
         List<VideoResponse> responses = videoPage.getContent().stream()
                 .map(video -> mapToVideoResponse(video, currentUserId))
@@ -79,6 +74,7 @@ public class VideoController {
         data.put("totalItems", videoPage.getTotalElements());
         data.put("totalPages", videoPage.getTotalPages());
         data.put("hasNext", videoPage.hasNext());
+        data.put("seed", effectiveSeed);
 
         return ResponseEntity.ok(ApiResponse.ok("Feed retrieved successfully", data));
     }

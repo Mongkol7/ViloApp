@@ -55,6 +55,9 @@ class ProfileSyncService {
   /// Emits whenever a video is deleted
   final ValueNotifier<int?> videoDeletedEvents = ValueNotifier<int?>(null);
 
+  /// Emits whenever the current user's profile is updated (name, bio, avatar)
+  final ValueNotifier<UserModel?> profileUpdatedEvents = ValueNotifier<UserModel?>(null);
+
   void notifyVideoUploaded(VideoModel video) {
     videoUploadedEvents.value = video;
   }
@@ -62,6 +65,10 @@ class ProfileSyncService {
   void notifyVideoDeleted(int videoId) {
     FeedRemoteDataSource.instance.removeCachedVideo(videoId);
     videoDeletedEvents.value = videoId;
+  }
+
+  void notifyProfileUpdated(UserModel user) {
+    cachedMyProfile = user;
   }
 
   void notifyVideoInteraction(VideoInteractionEvent event) {
@@ -90,6 +97,17 @@ class ProfileSyncService {
 
   set cachedMyProfile(UserModel? user) {
     _cachedMyProfile = user;
+    if (user != null) {
+      TokenStorage.instance.saveUserData(
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        avatarUrl: user.avatarUrl,
+        email: user.email,
+        bio: user.bio,
+      );
+      profileUpdatedEvents.value = user;
+    }
   }
 
   void clear() {
@@ -102,6 +120,7 @@ class ProfileSyncService {
     videoUploadedEvents.value = null;
     videoInteractionEvents.value = null;
     videoDeletedEvents.value = null;
+    profileUpdatedEvents.value = null;
   }
 
   /// In-memory cache of followers and following for instant zero-latency listing

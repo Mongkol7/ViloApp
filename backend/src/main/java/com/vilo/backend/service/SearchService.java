@@ -77,6 +77,18 @@ public class SearchService {
                     .map(UserResponse::fromEntitySummary)
                     .collect(Collectors.toList());
             response.setUsers(userDtos);
+
+            // User search also returns the public videos posted by the
+            // matched accounts so the client can show them below the users.
+            if ("USERS".equals(normalizedType) && !users.isEmpty()) {
+                List<Map<String, Object>> userVideoDtos = videoRepository
+                        .findByCreatorInOrderByCreatedAtDesc(users, PageRequest.of(0, 30))
+                        .getContent()
+                        .stream()
+                        .map(this::convertVideoToMap)
+                        .collect(Collectors.toList());
+                response.setTrendingVideos(userVideoDtos);
+            }
         }
 
         // 2. Search Sounds
@@ -151,6 +163,10 @@ public class SearchService {
                 }
             }
 
+            videoDtos.sort((left, right) -> Long.compare(
+                    getViewCount(right),
+                    getViewCount(left)
+            ));
             response.setTrendingVideos(videoDtos);
         }
 
@@ -176,9 +192,9 @@ public class SearchService {
         summary.setSounds(trendingSounds.stream().map(SoundResponse::fromEntity).collect(Collectors.toList()));
 
         // Trending video grid (real database videos only)
-        List<Video> latestDbVideos = videoRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 20)).getContent();
-        if (!latestDbVideos.isEmpty()) {
-            List<Map<String, Object>> exploreVideos = latestDbVideos.stream()
+        List<Video> trendingDbVideos = videoRepository.findAllByOrderByViewCountDesc(PageRequest.of(0, 20)).getContent();
+        if (!trendingDbVideos.isEmpty()) {
+            List<Map<String, Object>> exploreVideos = trendingDbVideos.stream()
                     .map(this::convertVideoToMap)
                     .collect(Collectors.toList());
             summary.setTrendingVideos(exploreVideos);
@@ -244,6 +260,11 @@ public class SearchService {
         if (count >= 1_000_000) return String.format(Locale.US, "%.1fM", count / 1_000_000.0);
         if (count >= 1_000) return String.format(Locale.US, "%.1fK", count / 1_000.0);
         return String.valueOf(count);
+    }
+
+    private long getViewCount(Map<String, Object> video) {
+        Object value = video.get("viewCount");
+        return value instanceof Number ? ((Number) value).longValue() : 0L;
     }
 
     @Transactional

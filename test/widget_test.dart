@@ -427,15 +427,13 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    // Verify creator from DB is rendered (@bunheng)
-    expect(find.text('@bunheng'), findsOneWidget);
+    // Verify creator from DB is rendered and has followed status
+    final followedUsernames = ['@bunheng', '@rithysak', '@setkimliza', '@trenmono', '@tryphien', '@nenseanghai'];
     expect(
-      find.byWidgetPredicate(
-        (widget) => widget is RichText && widget.text.toPlainText().contains('60fps video engine'),
-      ),
+      find.byWidgetPredicate((widget) => widget is Text && followedUsernames.contains(widget.data)),
       findsOneWidget,
     );
-    // Because bunheng is already followed, + icon is NOT shown on avatar
+    // Because followed creators have isFollowing: true, + icon is NOT shown on avatar
     expect(find.byIcon(Icons.add), findsNothing);
   });
 

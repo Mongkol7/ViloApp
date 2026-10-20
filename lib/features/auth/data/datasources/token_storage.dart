@@ -17,6 +17,7 @@ class TokenStorage {
   String? _displayName;
   String? _avatarUrl;
   String? _email;
+  String? _bio;
   bool _initialized = false;
 
   File? _getFile() {
@@ -50,6 +51,7 @@ class TokenStorage {
         _displayName = map['displayName'] as String?;
         _avatarUrl = map['avatarUrl'] as String?;
         _email = map['email'] as String?;
+        _bio = map['bio'] as String?;
       }
     } catch (_) {}
   }
@@ -66,6 +68,7 @@ class TokenStorage {
           'displayName': _displayName,
           'avatarUrl': _avatarUrl,
           'email': _email,
+          'bio': _bio,
         };
         file.writeAsStringSync(jsonEncode(data));
       }
@@ -87,12 +90,26 @@ class TokenStorage {
     required String displayName,
     String? avatarUrl,
     String? email,
+    String? bio,
   }) async {
     _userId = id;
     _username = username;
     _displayName = displayName;
     if (avatarUrl != null) _avatarUrl = avatarUrl;
     if (email != null) _email = email;
+    if (bio != null) _bio = bio;
+    _persist();
+  }
+
+  Future<void> updateProfileData({
+    String? displayName,
+    String? avatarUrl,
+    String? bio,
+  }) async {
+    _load();
+    if (displayName != null) _displayName = displayName;
+    if (avatarUrl != null) _avatarUrl = avatarUrl;
+    if (bio != null) _bio = bio;
     _persist();
   }
 
@@ -121,6 +138,11 @@ class TokenStorage {
     return _avatarUrl;
   }
 
+  Future<String?> getBio() async {
+    _load();
+    return _bio;
+  }
+
   Future<int?> getUserId() async {
     _load();
     return _userId;
@@ -133,6 +155,7 @@ class TokenStorage {
       id: _userId ?? 0,
       username: _username ?? '',
       displayName: _displayName ?? (_username ?? ''),
+      bio: _bio ?? '',
       avatarUrl: _avatarUrl,
       email: _email ?? '',
       isVerified: false,
@@ -154,6 +177,7 @@ class TokenStorage {
     _displayName = null;
     _avatarUrl = null;
     _email = null;
+    _bio = null;
     try {
       final file = _getFile();
       if (file != null && file.existsSync()) {

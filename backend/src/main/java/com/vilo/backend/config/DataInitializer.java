@@ -110,12 +110,12 @@ public class DataInitializer implements CommandLineRunner {
                 "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80",
                 true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
 
-        getOrCreateUser("alex_dancer", "alex@vilo.app", "password123",
+        User alexDancer = getOrCreateUser("alex_dancer", "alex@vilo.app", "password123",
                 "Alex Rivers", "Choreographer & Movement Director",
                 "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=500&auto=format&fit=crop&q=80",
                 false, Set.of(Role.ROLE_USER));
 
-        getOrCreateUser("linda_travel", "linda@vilo.app", "password123",
+        User lindaTravel = getOrCreateUser("linda_travel", "linda@vilo.app", "password123",
                 "Linda Chen", "Wanderlust | Visiting 40+ countries",
                 "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500&auto=format&fit=crop&q=80",
                 true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
@@ -135,7 +135,7 @@ public class DataInitializer implements CommandLineRunner {
                 "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=500&auto=format&fit=crop&q=80",
                 false, Set.of(Role.ROLE_USER));
 
-        getOrCreateUser("emily_chef", "emily@vilo.app", "password123",
+        User emilyChef = getOrCreateUser("emily_chef", "emily@vilo.app", "password123",
                 "Emily Watson", "Pastry arts & sourdough adventures",
                 "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=500&auto=format&fit=crop&q=80",
                 true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
@@ -145,12 +145,12 @@ public class DataInitializer implements CommandLineRunner {
                 "https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?w=500&auto=format&fit=crop&q=80",
                 false, Set.of(Role.ROLE_USER));
 
-        getOrCreateUser("cloe_design", "cloe@vilo.app", "password123",
+        User cloeDesign = getOrCreateUser("cloe_design", "cloe@vilo.app", "password123",
                 "Chloe Martin", "Product Designer & 3D Blender enthusiast",
                 "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop&q=80",
                 true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
 
-        getOrCreateUser("kevin_tech", "kevin@vilo.app", "password123",
+        User kevinTech = getOrCreateUser("kevin_tech", "kevin@vilo.app", "password123",
                 "Kevin Zhang", "Next-gen tech breakdown & desk setups",
                 "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=500&auto=format&fit=crop&q=80",
                 true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
@@ -165,7 +165,7 @@ public class DataInitializer implements CommandLineRunner {
                 "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=500&auto=format&fit=crop&q=80",
                 false, Set.of(Role.ROLE_USER));
 
-        getOrCreateUser("maya_music", "maya@vilo.app", "password123",
+        User mayaMusic = getOrCreateUser("maya_music", "maya@vilo.app", "password123",
                 "Maya Lin", "Acoustic guitar & indie songwriting",
                 "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80",
                 true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
@@ -311,7 +311,21 @@ public class DataInitializer implements CommandLineRunner {
         seedFreshVideo(nenseanghai, "assets/videos/vid14.mp4", "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600",
                 "Sunset vibes by the river with acoustic melodies 🌅🎸 #sunset #acoustic #chill", "Sunset Glow - Acoustic");
 
-        log.info("Fresh creator videos verified and seeded for all 7 team creators!");
+        // Add the remaining local videos to accounts Mongkol does not follow.
+        seedFreshVideo(lindaTravel, "assets/videos/vid15.mp4", "https://images.unsplash.com/photo-1500534623283-312aade485b7?w=600",
+                "Finding quiet places off the beaten path #travel #wanderlust #vilo", "Open Road Acoustic");
+        seedFreshVideo(emilyChef, "assets/videos/vid16.mp4", "https://images.unsplash.com/photo-1556910103-1c02745aae4d?w=600",
+                "A warm pastry morning from kitchen to table #baking #foodie #morning", "Rainy Day Acoustic - LoFi");
+        seedFreshVideo(cloeDesign, "assets/videos/vid17.mp4", "https://images.unsplash.com/photo-1558655146-d09347e92766?w=600",
+                "Turning a rough idea into a polished 3D concept #design #blender #creative", "Liquid Glass Motion - Design Beats");
+        seedFreshVideo(kevinTech, "assets/videos/vid18.mp4", "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600",
+                "Desk setup details that make deep work feel better #tech #setup #productivity", "Deep Focus Coding - DevPulse");
+        seedFreshVideo(mayaMusic, "assets/videos/vid19.mp4", "https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=600",
+                "An acoustic loop for a slow afternoon #music #acoustic #songwriting", "Seven7 Team Anthem - Seven7 Beats");
+        seedFreshVideo(alexDancer, "assets/videos/vid20.mp4", "https://images.unsplash.com/photo-1535525153412-5a42439a210d?w=600",
+                "Movement practice under city lights #dance #movement #performance", "Retro 80s Synth Groove - Vaporwave Boy");
+
+        log.info("Fresh creator videos verified and seeded for all local video assets!");
     }
 
     private void seedFreshVideo(User creator, String videoUrl, String thumbnailUrl, String caption, String musicTitle) {
@@ -337,20 +351,25 @@ public class DataInitializer implements CommandLineRunner {
         return userRepository.findByUsername(username)
                 .map(existing -> {
                     boolean changed = false;
-                    if (displayName != null && !displayName.equals(existing.getDisplayName())) {
+                    // Only populate initial fields if currently empty. NEVER overwrite user edits!
+                    if ((existing.getDisplayName() == null || existing.getDisplayName().isBlank()) && displayName != null) {
                         existing.setDisplayName(displayName);
                         changed = true;
                     }
-                    if (bio != null && !bio.equals(existing.getBio())) {
+                    if ((existing.getBio() == null || existing.getBio().isBlank()) && bio != null) {
                         existing.setBio(bio);
                         changed = true;
                     }
-                    if (avatarUrl != null && !avatarUrl.equals(existing.getAvatarUrl())) {
+                    if ((existing.getAvatarUrl() == null || existing.getAvatarUrl().isBlank()) && avatarUrl != null) {
                         existing.setAvatarUrl(avatarUrl);
                         changed = true;
                     }
-                    if (email != null && !email.equals(existing.getEmail())) {
+                    if ((existing.getEmail() == null || existing.getEmail().isBlank()) && email != null) {
                         existing.setEmail(email);
+                        changed = true;
+                    }
+                    if (existing.getRoles() == null || existing.getRoles().isEmpty()) {
+                        existing.setRoles(roles);
                         changed = true;
                     }
                     return changed ? userRepository.save(existing) : existing;

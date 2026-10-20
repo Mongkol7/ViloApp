@@ -7,7 +7,9 @@ import '../controllers/video_feed_manager.dart';
 import 'video_feed_page.dart';
 
 class CommunityFeedPage extends StatefulWidget {
-  const CommunityFeedPage({super.key});
+  final int refreshToken;
+
+  const CommunityFeedPage({super.key, this.refreshToken = 0});
 
   @override
   State<CommunityFeedPage> createState() => _CommunityFeedPageState();
@@ -112,15 +114,29 @@ class _CommunityFeedPageState extends State<CommunityFeedPage>
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant CommunityFeedPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshToken != widget.refreshToken) {
+      _loadCommunityPosts(forceRefresh: true);
+    }
+  }
+
   void _onFeedRefresh() {
     if (mounted) {
       _loadCommunityPosts();
     }
   }
 
-  Future<void> _loadCommunityPosts() async {
+  Future<void> _loadCommunityPosts({bool forceRefresh = false}) async {
+    if (forceRefresh && mounted) {
+      setState(() => _isLoading = true);
+    }
     try {
-      final videos = await _dataSource.getFeed(feedType: 'FOR_YOU');
+      final videos = await _dataSource.getFeed(
+        feedType: 'FOR_YOU',
+        forceRefresh: forceRefresh,
+      );
       if (!mounted) return;
 
       if (videos.isNotEmpty) {

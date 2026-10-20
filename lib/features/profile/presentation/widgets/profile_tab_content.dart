@@ -87,13 +87,13 @@ List<Widget> buildProfileTabSlivers(
                   } else if (video.isImagePost && video.videoUrl.trim().isNotEmpty) {
                     thumb = video.videoUrl.trim();
                   } else {
-                    final mockThumbs = ProfileMockData.videoThumbnails;
-                    thumb = mockThumbs[video.id.abs() % mockThumbs.length];
+                    thumb = '';
                   }
 
                   return VideoGridItem(
                     thumbnailUrl: thumb,
-                    viewsLabel: video.likes,
+                    videoUrl: video.isImagePost ? null : video.videoUrl,
+                    viewsLabel: video.formattedViews,
                     onTap: onVideoTap != null ? () => onVideoTap(video, i) : null,
                     onLongPress: onVideoLongPress != null ? () => onVideoLongPress(video, i) : null,
                   );
@@ -182,12 +182,13 @@ List<Widget> buildProfileTabSlivers(
                   } else if (video.isImagePost && video.videoUrl.trim().isNotEmpty) {
                     thumb = video.videoUrl.trim();
                   } else {
-                    thumb = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500';
+                    thumb = '';
                   }
 
                   return VideoGridItem(
                     thumbnailUrl: thumb,
-                    viewsLabel: video.likes,
+                    videoUrl: video.isImagePost ? null : video.videoUrl,
+                    viewsLabel: video.formattedViews,
                     onTap: onSavedVideoTap != null
                         ? () => onSavedVideoTap(video, i)
                         : (onVideoTap != null ? () => onVideoTap(video, i) : null),
@@ -307,12 +308,13 @@ List<Widget> buildProfileTabSlivers(
                   } else if (video.isImagePost && video.videoUrl.trim().isNotEmpty) {
                     thumb = video.videoUrl.trim();
                   } else {
-                    thumb = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500';
+                    thumb = '';
                   }
 
                   return VideoGridItem(
                     thumbnailUrl: thumb,
-                    viewsLabel: video.likes,
+                    videoUrl: video.isImagePost ? null : video.videoUrl,
+                    viewsLabel: video.formattedViews,
                     onTap: onLikedVideoTap != null
                         ? () => onLikedVideoTap(video, i)
                         : (onVideoTap != null ? () => onVideoTap(video, i) : null),
