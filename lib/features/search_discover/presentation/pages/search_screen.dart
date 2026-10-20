@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/widgets/video_thumbnail.dart';
 import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../../feed/presentation/pages/sound_detail_page.dart';
 import '../../../feed/presentation/pages/video_feed_page.dart';
@@ -545,13 +544,7 @@ class _SearchScreenState extends State<SearchScreen> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                VideoThumbnail(
-                  videoUrl: video.videoUrl,
-                  placeholder: Container(
-                    color: AppColors.surface,
-                    child: const Icon(Icons.movie_outlined, color: AppColors.outline),
-                  ),
-                ),
+                _buildVideoThumbnail(video.thumbnailUrl),
                 Positioned.fill(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
@@ -613,6 +606,27 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildVideoThumbnail(String url) {
+    final cleanUrl = url.trim();
+    final placeholder = Container(
+      color: AppColors.surface,
+      child: const Icon(Icons.movie_outlined, color: AppColors.outline),
+    );
+    if (cleanUrl.startsWith('assets/')) {
+      return Image.asset(
+        cleanUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => placeholder,
+      );
+    }
+    if (cleanUrl.isEmpty) return placeholder;
+    return Image.network(
+      cleanUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => placeholder,
     );
   }
 

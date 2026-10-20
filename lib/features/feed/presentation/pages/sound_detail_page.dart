@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/network/api_client.dart';
-import '../../../../core/widgets/video_thumbnail.dart';
 import '../../data/models/video_model.dart';
 
 class SoundDetailPage extends StatefulWidget {
@@ -462,13 +461,7 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            VideoThumbnail(
-                              videoUrl: video['videoUrl']?.toString() ?? '',
-                              placeholder: Container(
-                                color: AppColors.surface,
-                                child: const Icon(Icons.movie_outlined, color: AppColors.outline),
-                              ),
-                            ),
+                            _buildVideoThumbnail(video['thumbnailUrl']?.toString() ?? ''),
                             Positioned.fill(
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
@@ -561,6 +554,27 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildVideoThumbnail(String url) {
+    final cleanUrl = url.trim();
+    final placeholder = Container(
+      color: AppColors.surface,
+      child: const Icon(Icons.movie_outlined, color: AppColors.outline),
+    );
+    if (cleanUrl.startsWith('assets/')) {
+      return Image.asset(
+        cleanUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => placeholder,
+      );
+    }
+    if (cleanUrl.isEmpty) return placeholder;
+    return Image.network(
+      cleanUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => placeholder,
     );
   }
 }

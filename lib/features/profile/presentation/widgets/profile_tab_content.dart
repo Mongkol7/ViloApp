@@ -92,7 +92,6 @@ List<Widget> buildProfileTabSlivers(
 
                   return VideoGridItem(
                     thumbnailUrl: thumb,
-                    videoUrl: video.isImagePost ? null : video.videoUrl,
                     viewsLabel: video.formattedViews,
                     onTap: onVideoTap != null ? () => onVideoTap(video, i) : null,
                     onLongPress: onVideoLongPress != null ? () => onVideoLongPress(video, i) : null,
@@ -187,7 +186,6 @@ List<Widget> buildProfileTabSlivers(
 
                   return VideoGridItem(
                     thumbnailUrl: thumb,
-                    videoUrl: video.isImagePost ? null : video.videoUrl,
                     viewsLabel: video.formattedViews,
                     onTap: onSavedVideoTap != null
                         ? () => onSavedVideoTap(video, i)
@@ -313,7 +311,6 @@ List<Widget> buildProfileTabSlivers(
 
                   return VideoGridItem(
                     thumbnailUrl: thumb,
-                    videoUrl: video.isImagePost ? null : video.videoUrl,
                     viewsLabel: video.formattedViews,
                     onTap: onLikedVideoTap != null
                         ? () => onLikedVideoTap(video, i)

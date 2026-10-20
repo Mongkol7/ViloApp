@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/video_thumbnail.dart';
 import '../../../feed/data/models/video_model.dart';
 import '../style/pulse_tokens.dart';
 
@@ -10,14 +9,12 @@ class VideoGridItem extends StatelessWidget {
   const VideoGridItem({
     super.key,
     required this.thumbnailUrl,
-    this.videoUrl,
     this.viewsLabel,
     this.onTap,
     this.onLongPress,
   });
 
   final String thumbnailUrl;
-  final String? videoUrl;
   final String? viewsLabel;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
@@ -27,13 +24,7 @@ class VideoGridItem extends StatelessWidget {
     Widget imageWidget;
     final cleanUrl = thumbnailUrl.trim();
 
-    if (videoUrl != null && videoUrl!.trim().isNotEmpty) {
-      imageWidget = VideoThumbnail(
-        videoUrl: videoUrl!,
-        fit: BoxFit.cover,
-        placeholder: Container(color: PulseColors.surfaceContainer),
-      );
-    } else if (cleanUrl.startsWith('assets/')) {
+    if (cleanUrl.startsWith('assets/')) {
       imageWidget = Image.asset(
         cleanUrl,
         fit: BoxFit.cover,

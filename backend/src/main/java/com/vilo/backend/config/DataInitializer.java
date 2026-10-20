@@ -276,53 +276,53 @@ public class DataInitializer implements CommandLineRunner {
         // Seed fresh distinct videos from assets/videos/ for each of the 7 creator accounts
         log.info("Checking and seeding fresh creator videos from assets/videos/...");
 
-        seedFreshVideo(mongkol, "assets/videos/vid1.mp4", "https://images.unsplash.com/photo-1518770660439-4636190af475?w=600",
+        seedFreshVideo(mongkol, "assets/videos/vid1.mp4", "assets/video_thumbnails/vid1.jpg",
                 "Building responsive Flutter UI with Spring Boot 🚀 #coding #flutterdev #vilo", "Original Sound - Thoeung Sereymongkol");
-        seedFreshVideo(mongkol, "assets/videos/vid2.mp4", "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600",
+        seedFreshVideo(mongkol, "assets/videos/vid2.mp4", "assets/video_thumbnails/vid2.jpg",
                 "Late night coding session & neon vibes 🌃 #developer #tech #viloapp", "Midnight City Pulse - Neon Dreams");
 
-        seedFreshVideo(rithysak, "assets/videos/vid3.mp4", "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=600",
+        seedFreshVideo(rithysak, "assets/videos/vid3.mp4", "assets/video_thumbnails/vid3.jpg",
                 "Designing smooth micro-animations in Flutter 🎨 #ui #flutter #animation", "Smooth Motion Beats - Seven7");
-        seedFreshVideo(rithysak, "assets/videos/vid4.mp4", "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=600",
+        seedFreshVideo(rithysak, "assets/videos/vid4.mp4", "assets/video_thumbnails/vid4.jpg",
                 "Weekend mountain trail ride 🚴 #nature #adventure #outdoor", "Open Road Acoustic");
 
-        seedFreshVideo(setkimliza, "assets/videos/vid5.mp4", "https://images.unsplash.com/photo-1514565131-fce0801e5785?w=600",
+        seedFreshVideo(setkimliza, "assets/videos/vid5.mp4", "assets/video_thumbnails/vid5.jpg",
                 "Coffee shop morning aesthetics & Lo-Fi ☕ #coffee #vibes #morning", "Rainy Day Acoustic - LoFi");
-        seedFreshVideo(setkimliza, "assets/videos/vid6.mp4", "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600",
+        seedFreshVideo(setkimliza, "assets/videos/vid6.mp4", "assets/video_thumbnails/vid6.jpg",
                 "Golden hour city stroll after rain 🌧️✨ #aesthetic #mood #vilo", "After The Rain - Chillhop");
 
-        seedFreshVideo(trenmono, "assets/videos/vid7.mp4", "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600",
+        seedFreshVideo(trenmono, "assets/videos/vid7.mp4", "assets/video_thumbnails/vid7.jpg",
                 "Analog modular synth jam session in the lab 🎛️ #synth #modular #beats", "Analog Pulse - Tren Mono");
-        seedFreshVideo(trenmono, "assets/videos/vid8.mp4", "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=600",
+        seedFreshVideo(trenmono, "assets/videos/vid8.mp4", "assets/video_thumbnails/vid8.jpg",
                 "Minimalist architecture walk in the city 🏢 #architecture #design #minimalism", "Mono Wave Vol 1");
 
-        seedFreshVideo(bunheng, "assets/videos/vid9.mp4", "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600",
+        seedFreshVideo(bunheng, "assets/videos/vid9.mp4", "assets/video_thumbnails/vid9.jpg",
                 "60fps video engine rendering benchmarks 🚀 #tech #videoengine #performance", "High FPS Pulse - Seven7");
-        seedFreshVideo(bunheng, "assets/videos/vid10.mp4", "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600",
+        seedFreshVideo(bunheng, "assets/videos/vid10.mp4", "assets/video_thumbnails/vid10.jpg",
                 "Cyberpunk neon street walk at night #citylife #neon #cyberpunk", "Cyberpunk Beats - Synthwave");
 
-        seedFreshVideo(tryphien, "assets/videos/vid11.mp4", "https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=600",
+        seedFreshVideo(tryphien, "assets/videos/vid11.mp4", "assets/video_thumbnails/vid11.jpg",
                 "Next-gen creative setup tour 🖥️ Minimal aesthetic #creativesetup #tech", "Creative Waves - LoFi");
-        seedFreshVideo(tryphien, "assets/videos/vid12.mp4", "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600",
+        seedFreshVideo(tryphien, "assets/videos/vid12.mp4", "assets/video_thumbnails/vid12.jpg",
                 "Exploring neon night streets & cinematic moments 🌆 #cinematic #night #vilo", "Night Drive - Ambient");
 
-        seedFreshVideo(nenseanghai, "assets/videos/vid13.mp4", "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600",
+        seedFreshVideo(nenseanghai, "assets/videos/vid13.mp4", "assets/video_thumbnails/vid13.jpg",
                 "Designing clean responsive layouts & mobile interactions 📱 #flutterdev #uiux", "Motion Design Beats");
-        seedFreshVideo(nenseanghai, "assets/videos/vid14.mp4", "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600",
+        seedFreshVideo(nenseanghai, "assets/videos/vid14.mp4", "assets/video_thumbnails/vid14.jpg",
                 "Sunset vibes by the river with acoustic melodies 🌅🎸 #sunset #acoustic #chill", "Sunset Glow - Acoustic");
 
         // Add the remaining local videos to accounts Mongkol does not follow.
-        seedFreshVideo(lindaTravel, "assets/videos/vid15.mp4", "https://images.unsplash.com/photo-1500534623283-312aade485b7?w=600",
+        seedFreshVideo(lindaTravel, "assets/videos/vid15.mp4", "assets/video_thumbnails/vid15.jpg",
                 "Finding quiet places off the beaten path #travel #wanderlust #vilo", "Open Road Acoustic");
-        seedFreshVideo(emilyChef, "assets/videos/vid16.mp4", "https://images.unsplash.com/photo-1556910103-1c02745aae4d?w=600",
+        seedFreshVideo(emilyChef, "assets/videos/vid16.mp4", "assets/video_thumbnails/vid16.jpg",
                 "A warm pastry morning from kitchen to table #baking #foodie #morning", "Rainy Day Acoustic - LoFi");
-        seedFreshVideo(cloeDesign, "assets/videos/vid17.mp4", "https://images.unsplash.com/photo-1558655146-d09347e92766?w=600",
+        seedFreshVideo(cloeDesign, "assets/videos/vid17.mp4", "assets/video_thumbnails/vid17.jpg",
                 "Turning a rough idea into a polished 3D concept #design #blender #creative", "Liquid Glass Motion - Design Beats");
-        seedFreshVideo(kevinTech, "assets/videos/vid18.mp4", "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600",
+        seedFreshVideo(kevinTech, "assets/videos/vid18.mp4", "assets/video_thumbnails/vid18.jpg",
                 "Desk setup details that make deep work feel better #tech #setup #productivity", "Deep Focus Coding - DevPulse");
-        seedFreshVideo(mayaMusic, "assets/videos/vid19.mp4", "https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=600",
+        seedFreshVideo(mayaMusic, "assets/videos/vid19.mp4", "assets/video_thumbnails/vid19.jpg",
                 "An acoustic loop for a slow afternoon #music #acoustic #songwriting", "Seven7 Team Anthem - Seven7 Beats");
-        seedFreshVideo(alexDancer, "assets/videos/vid20.mp4", "https://images.unsplash.com/photo-1535525153412-5a42439a210d?w=600",
+        seedFreshVideo(alexDancer, "assets/videos/vid20.mp4", "assets/video_thumbnails/vid20.jpg",
                 "Movement practice under city lights #dance #movement #performance", "Retro 80s Synth Groove - Vaporwave Boy");
 
         log.info("Fresh creator videos verified and seeded for all local video assets!");
@@ -331,18 +331,25 @@ public class DataInitializer implements CommandLineRunner {
     private void seedFreshVideo(User creator, String videoUrl, String thumbnailUrl, String caption, String musicTitle) {
         if (creator == null) return;
         List<Video> existing = videoRepository.findByCreatorOrderByCreatedAtDesc(creator);
-        boolean alreadyHas = existing.stream().anyMatch(v -> v.getVideoUrl().equals(videoUrl));
-        if (!alreadyHas) {
-            Video video = new Video(creator, videoUrl, thumbnailUrl, caption, musicTitle, 0L, 0L, 0L);
-            if (caption != null) {
-                java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("#([a-zA-Z0-9_]+)").matcher(caption);
-                while (matcher.find()) {
-                    String cleanTag = matcher.group(1).toLowerCase();
-                    video.getTags().add(new com.vilo.backend.entity.VideoTag(video, cleanTag));
+        for (Video existingVideo : existing) {
+            if (videoUrl.equals(existingVideo.getVideoUrl())) {
+                if (!thumbnailUrl.equals(existingVideo.getThumbnailUrl())) {
+                    existingVideo.setThumbnailUrl(thumbnailUrl);
+                    videoRepository.save(existingVideo);
                 }
+                return;
             }
-            videoRepository.save(video);
         }
+
+        Video video = new Video(creator, videoUrl, thumbnailUrl, caption, musicTitle, 0L, 0L, 0L);
+        if (caption != null) {
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("#([a-zA-Z0-9_]+)").matcher(caption);
+            while (matcher.find()) {
+                String cleanTag = matcher.group(1).toLowerCase();
+                video.getTags().add(new com.vilo.backend.entity.VideoTag(video, cleanTag));
+            }
+        }
+        videoRepository.save(video);
     }
 
     private User getOrCreateUser(String username, String email, String password,
