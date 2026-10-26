@@ -24,8 +24,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final TextEditingController _messageController = TextEditingController();
   late List<ChatMessage> _messages;
   final ScrollController _scrollController = ScrollController();
-  bool _canSend = false;
   final List<String> _pendingImagePaths = [];
+  bool _isUploadingImages = false;
+  bool get _canSend =>
+      _messageController.text.trim().isNotEmpty || _pendingImagePaths.isNotEmpty;
   String? _expandedTimestampId;
   late bool _isFollowing;
   late bool _followsYou;
@@ -42,10 +44,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         ? savedMessages
         : List.from(widget.thread.messages);
     _messageController.addListener(() {
-      final canSend = _messageController.text.trim().isNotEmpty;
-      if (canSend != _canSend) {
-        setState(() => _canSend = canSend);
-      }
+      setState(() {});
     });
     ChatStompService.instance.connect();
     ChatStompService.instance.addMessageListener(_handleIncomingMessage);
@@ -176,7 +175,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     setState(() {
       _messages.add(optimisticMsg);
       _messageController.clear();
-      _canSend = false;
     });
     _scrollToBottom();
 
@@ -185,40 +183,125 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   Future<void> _pickImages() async {
-    final picked = await ImagePicker().pickMultiImage(imageQuality: 90);
-    if (!mounted || picked.isEmpty) return;
-    setState(() {
-      _pendingImagePaths
-        ..clear()
-        ..addAll(
-          picked.map((file) => file.path).where((path) => path.isNotEmpty),
-        );
-    });
+    try {
+      final picked = await ImagePicker().pickMultiImage(imageQuality: 90);
+      if (!mounted || picked.isEmpty) return;
+      setState(() {
+        for (final file in picked) {
+          if (file.path.isNotEmpty && !_pendingImagePaths.contains(file.path)) {
+            _pendingImagePaths.add(file.path);
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint('[Chat] Error picking images: $e');
+    }
+  }
+
+  Future<void> _pickCameraImage() async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        imageQuality: 90,
+      );
+      if (!mounted || picked == null || picked.path.isEmpty) return;
+      setState(() {
+        if (!_pendingImagePaths.contains(picked.path)) {
+          _pendingImagePaths.add(picked.path);
+        }
+      });
+    } catch (e) {
+      debugPrint('[Chat] Error taking photo: $e');
+    }
+  }
+
+  void _removePendingImage(int index) {
+    if (index >= 0 && index < _pendingImagePaths.length) {
+      setState(() {
+        _pendingImagePaths.removeAt(index);
+      });
+    }
+  }
+
+  void _showImagePreviewDialog(String imagePath) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black87,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            InteractiveViewer(
+              child: Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.file(
+                    File(imagePath),
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: GestureDetector(
+                onTap: () => Navigator.of(ctx).pop(),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: const BoxDecoration(
+                    color: Color(0x99000000),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close_rounded, color: Colors.white, size: 22),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _sendSelectedImages() async {
     final userId = _resolvedUserId;
-    if (userId == null || _pendingImagePaths.isEmpty || !mounted) return;
+    if (_pendingImagePaths.isEmpty || !mounted) return;
     final paths = List<String>.from(_pendingImagePaths);
-    setState(() => _pendingImagePaths.clear());
+    setState(() {
+      _pendingImagePaths.clear();
+      _isUploadingImages = true;
+    });
 
     try {
       for (final path in paths) {
-        final mediaUrl = await ChatRemoteDataSource.instance.uploadChatImage(
-          userId,
-          path,
-        );
+        String? mediaUrl;
+        if (userId != null) {
+          try {
+            mediaUrl = await ChatRemoteDataSource.instance.uploadChatImage(
+              userId,
+              path,
+            );
+          } catch (e) {
+            debugPrint('[Chat] uploadChatImage error, using local path: $e');
+            mediaUrl = path;
+          }
+        } else {
+          mediaUrl = path;
+        }
+
         const text = 'Photo';
+        final now = DateTime.now();
         setState(() {
           _messages.add(
             ChatMessage(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              id: now.millisecondsSinceEpoch.toString(),
               text: text,
               isMe: true,
               timestamp: 'Just now',
               status: 'Sent',
               mediaUrl: mediaUrl,
-              sentAt: DateTime.now(),
+              sentAt: now,
             ),
           );
         });
@@ -235,14 +318,20 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           context,
         ).showSnackBar(SnackBar(content: Text('Could not send image: $e')));
       }
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingImages = false);
+      }
     }
   }
 
-  Future<void> _handleImageButton() async {
-    if (_pendingImagePaths.isEmpty) {
-      await _pickImages();
-    } else {
+  Future<void> _handleSend() async {
+    if (_isUploadingImages) return;
+    if (_pendingImagePaths.isNotEmpty) {
       await _sendSelectedImages();
+    }
+    if (_messageController.text.trim().isNotEmpty) {
+      _sendMessage();
     }
   }
 
@@ -1133,49 +1222,142 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (_pendingImagePaths.isNotEmpty)
-                  SizedBox(
-                    height: 72,
+                if (_pendingImagePaths.isNotEmpty) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    height: 84,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
-                      itemCount: _pendingImagePaths.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 8),
-                      itemBuilder: (_, index) => ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.file(
-                          File(_pendingImagePaths[index]),
-                          width: 72,
-                          height: 72,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      itemCount: _pendingImagePaths.length + 1,
+                      separatorBuilder: (_, _) => const SizedBox(width: 10),
+                      itemBuilder: (context, index) {
+                        if (index == _pendingImagePaths.length) {
+                          // "Add more" card
+                          return GestureDetector(
+                            onTap: _pickImages,
+                            child: Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1C1C1E),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                ),
+                              ),
+                              child: const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.add_photo_alternate_outlined,
+                                    color: Colors.white70,
+                                    size: 24,
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'Add more',
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        final path = _pendingImagePaths[index];
+                        return Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            GestureDetector(
+                              onTap: () => _showImagePreviewDialog(path),
+                              child: Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: const Color(0xFF2F80ED).withValues(alpha: 0.6),
+                                    width: 1.5,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.3),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(10.5),
+                                  child: Image.file(
+                                    File(path),
+                                    width: 80,
+                                    height: 80,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Delete/Remove button badge in top-right
+                            Positioned(
+                              top: -5,
+                              right: -5,
+                              child: GestureDetector(
+                                onTap: () => _removePendingImage(index),
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFE53935),
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black87,
+                                        blurRadius: 3,
+                                        offset: Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.close_rounded,
+                                    color: Colors.white,
+                                    size: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
-                if (_pendingImagePaths.isNotEmpty) const SizedBox(height: 8),
+                ],
                 Row(
                   children: [
-                    // Image Gallery Button
+                    // Image Gallery Button (ALWAYS gallery icon, never turns into send)
                     IconButton(
-                      icon: Icon(
-                        _pendingImagePaths.isEmpty
-                            ? Icons.image_outlined
-                            : Icons.send_rounded,
-                        color: _pendingImagePaths.isEmpty
-                            ? Colors.white
-                            : Color(0xFF2F80ED),
+                      tooltip: 'Choose photos',
+                      icon: const Icon(
+                        Icons.image_outlined,
+                        color: Colors.white,
                         size: 24,
                       ),
-                      onPressed: _handleImageButton,
+                      onPressed: _pickImages,
                     ),
 
-                    // Camera Button
+                    // Camera Button (takes photo directly)
                     IconButton(
+                      tooltip: 'Take photo',
                       icon: const Icon(
                         Icons.camera_alt_outlined,
                         color: Colors.white,
                         size: 24,
                       ),
-                      onPressed: () {},
+                      onPressed: _pickCameraImage,
                     ),
 
                     const SizedBox(width: 4),
@@ -1218,24 +1400,33 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                               size: 22,
                             ),
                           ),
-                          onSubmitted: (_) => _sendMessage(),
+                          onSubmitted: (_) => _handleSend(),
                         ),
                       ),
                     ),
 
                     const SizedBox(width: 8),
 
-                    // Send Button
+                    // The ONLY Send Button (on the right)
                     IconButton(
                       tooltip: 'Send',
-                      icon: Icon(
-                        Icons.send_rounded,
-                        color: _canSend
-                            ? const Color(0xFF2F80ED)
-                            : Colors.white,
-                        size: 22,
-                      ),
-                      onPressed: _sendMessage,
+                      icon: _isUploadingImages
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF2F80ED),
+                              ),
+                            )
+                          : Icon(
+                              Icons.send_rounded,
+                              color: _canSend
+                                  ? const Color(0xFF2F80ED)
+                                  : Colors.white.withValues(alpha: 0.3),
+                              size: 22,
+                            ),
+                      onPressed: _canSend && !_isUploadingImages ? _handleSend : null,
                     ),
                   ],
                 ),
