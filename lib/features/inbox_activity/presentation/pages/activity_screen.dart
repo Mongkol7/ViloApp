@@ -3,6 +3,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../auth/data/datasources/token_storage.dart';
 import '../../data/datasources/notification_remote_data_source.dart';
 import '../../../feed/presentation/pages/video_feed_page.dart';
+import '../../../feed/presentation/widgets/video_likes_bottom_sheet.dart';
 import '../../../profile/presentation/screens/public_profile_screen.dart';
 import '../../data/datasources/chat_manager.dart';
 import '../../data/datasources/thought_story_manager.dart';
@@ -266,6 +267,12 @@ class _ActivityScreenState extends State<ActivityScreen> {
           ),
         ),
       );
+      return;
+    }
+
+    if (activity.type == 'like') {
+      final vidId = int.tryParse(activity.entityId ?? '0') ?? 0;
+      VideoLikesBottomSheet.show(context, videoId: vidId);
       return;
     }
 

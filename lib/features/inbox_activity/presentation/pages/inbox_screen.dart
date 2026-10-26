@@ -24,6 +24,7 @@ import 'new_followers_screen.dart';
 import 'system_notifications_screen.dart';
 import '../../../profile/presentation/screens/public_profile_screen.dart';
 import '../../../feed/presentation/pages/video_feed_page.dart';
+import '../../../feed/presentation/widgets/video_likes_bottom_sheet.dart';
 import '../widgets/story_viewers_bottom_sheet.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
 
@@ -628,7 +629,21 @@ class _InboxScreenState extends State<InboxScreen> {
       return;
     }
 
-    // 4. Video Like, Comment, Mention -> VideoFeedPage
+    // 4. Video Likes -> View who liked video
+    final isLike =
+        typeUpper == 'LIKE' ||
+        item.iconType == 'like' ||
+        titleLower.contains('like') ||
+        subLower.contains('liked your');
+
+    if (isLike) {
+      final vidId = int.tryParse(item.entityId ?? '0') ?? 0;
+      await VideoLikesBottomSheet.show(context, videoId: vidId);
+      if (mounted) setState(() {});
+      return;
+    }
+
+    // 5. Video Comment, Mention -> VideoFeedPage
     if (typeUpper == 'COMMENT' ||
         typeUpper == 'MENTION' ||
         titleLower.contains('comment') ||

@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import '../../data/datasources/chat_manager.dart';
 import '../../data/datasources/story_remote_data_source.dart';
 import '../../domain/entities/shared_thought_story.dart';
 import '../widgets/story_viewers_bottom_sheet.dart';
@@ -47,6 +49,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _progressController;
   final TextEditingController _replyController = TextEditingController();
+  final Set<String> _reactedStoryIds = {};
 
   late List<StoryViewerItem> _activeStories;
   late int _currentIndex;
@@ -101,6 +104,73 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           _openViewersSheet();
         }
       });
+    }
+  }
+
+  void _sendStoryReply(StoryViewerItem item, String text) {
+    final cleanText = text.trim();
+    if (cleanText.isEmpty) return;
+    _replyController.clear();
+    FocusScope.of(context).unfocus();
+
+    final authorName = item.authorName;
+    final authorUsername = item.story.authorUsername ?? authorName;
+    final authorId = item.story.authorId != null ? int.tryParse(item.story.authorId!) : null;
+    final targetUid = authorId ?? ChatManager.instance.resolveUserId(authorUsername, authorName) ??
+        (authorUsername.toLowerCase() == 'liza' ? 2 : (authorUsername.toLowerCase() == 'sak' ? 1 : 0));
+
+    final thread = ChatManager.instance.getOrCreateThread(
+      userId: targetUid,
+      username: authorUsername,
+      avatarUrl: item.authorAvatarUrl ?? '',
+    );
+
+    final replyContent = 'Replied to your story: "$cleanText"';
+    ChatManager.instance.sendMessage(
+      threadId: thread.id,
+      text: replyContent,
+      mediaUrl: item.story.mediaUrl,
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Reply sent to $authorName! ✨'),
+        backgroundColor: const Color(0xFF2F80ED),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _toggleStoryReaction(StoryViewerItem item) {
+    final storyId = item.story.id;
+    final isReacted = _reactedStoryIds.contains(storyId);
+
+    setState(() {
+      if (isReacted) {
+        _reactedStoryIds.remove(storyId);
+      } else {
+        _reactedStoryIds.add(storyId);
+      }
+    });
+
+    if (!isReacted) {
+      HapticFeedback.mediumImpact();
+      StoryRemoteDataSource.instance.reactToStory(storyId);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Sent ❤️ to ${item.authorName}!'),
+          backgroundColor: const Color(0xFFFE2C55),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Reaction removed'),
+          backgroundColor: Color(0xFF333333),
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -1092,71 +1162,32 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                                         color: Color(0xFF2F80ED),
                                         size: 18,
                                       ),
-                                      onPressed: () {
-                                        final text = _replyController.text
-                                            .trim();
-                                        if (text.isEmpty) return;
-                                        _replyController.clear();
-                                        FocusScope.of(context).unfocus();
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              'Reply sent to ${item.authorName}! ✨',
-                                            ),
-                                            backgroundColor: const Color(
-                                              0xFF2F80ED,
-                                            ),
-                                            duration: const Duration(
-                                              seconds: 2,
-                                            ),
-                                          ),
-                                        );
-                                      },
+                                      onPressed: () => _sendStoryReply(
+                                        item,
+                                        _replyController.text,
+                                      ),
                                     ),
                                   ),
-                                  onSubmitted: (text) {
-                                    if (text.trim().isEmpty) return;
-                                    _replyController.clear();
-                                    FocusScope.of(context).unfocus();
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Reply sent to ${item.authorName}! ✨',
-                                        ),
-                                        backgroundColor: const Color(
-                                          0xFF2F80ED,
-                                        ),
-                                        duration: const Duration(seconds: 2),
-                                      ),
-                                    );
-                                  },
+                                  onSubmitted: (text) =>
+                                      _sendStoryReply(item, text),
                                 ),
                               ),
                             ),
                             const SizedBox(width: 8),
 
-                            // Quick Heart Reaction Button
+                            // Quick Heart Reaction Button (Default unreacted)
                             IconButton(
-                              icon: const Icon(
-                                Icons.favorite_rounded,
-                                color: Color(0xFFFE2C55),
+                              icon: Icon(
+                                _reactedStoryIds.contains(item.story.id)
+                                    ? Icons.favorite_rounded
+                                    : Icons.favorite_border_rounded,
+                                color: _reactedStoryIds.contains(item.story.id)
+                                    ? const Color(0xFFFE2C55)
+                                    : Colors.white,
                                 size: 26,
                               ),
-                              onPressed: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Sent ❤️ to ${item.authorName}!',
-                                    ),
-                                    backgroundColor: const Color(0xFFFE2C55),
-                                    duration: const Duration(seconds: 2),
-                                  ),
-                                );
-                              },
+                              onPressed: () => _toggleStoryReaction(item),
                             ),
-
                             IconButton(
                               icon: const Icon(
                                 Icons.more_vert_rounded,

@@ -4,6 +4,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../feed/presentation/pages/home_feed_page.dart';
 import '../../../feed/presentation/widgets/create_action_sheet.dart';
 import '../../../inbox_activity/data/datasources/chat_manager.dart';
+import '../../../inbox_activity/data/datasources/chat_stomp_service.dart';
 import '../../../inbox_activity/domain/entities/inbox_item.dart';
 import '../../../inbox_activity/presentation/pages/inbox_screen.dart';
 import '../../../profile/presentation/pages/people_screen.dart';
@@ -45,6 +46,13 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    ChatStompService.instance.connect();
+    ChatStompService.instance.addNotificationListener(_onGlobalNotificationReceived);
+  }
+
+  void _onGlobalNotificationReceived(NotificationItem notification) {
+    if (!mounted) return;
+    ChatManager.instance.incrementNotificationBadge();
   }
 
   void _onTabSelected(int index) {

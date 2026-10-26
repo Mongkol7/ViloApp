@@ -14,6 +14,7 @@ class SharedThoughtStory {
   final String? authorName;
   final String? authorAvatarUrl;
   final String? authorUsername;
+  final String? authorId;
   final bool isOwner;
 
   const SharedThoughtStory({
@@ -29,6 +30,7 @@ class SharedThoughtStory {
     this.authorName,
     this.authorAvatarUrl,
     this.authorUsername,
+    this.authorId,
     this.isOwner = true,
   });
 

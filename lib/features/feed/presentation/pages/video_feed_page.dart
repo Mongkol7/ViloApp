@@ -8,6 +8,7 @@ import '../../data/models/video_model.dart';
 import '../controllers/video_feed_manager.dart';
 import '../widgets/share_bottom_sheet.dart';
 import '../widgets/comment_bottom_sheet.dart';
+import '../widgets/video_likes_bottom_sheet.dart';
 import 'sound_detail_page.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
@@ -21,6 +22,7 @@ class VideoFeedPage extends StatefulWidget {
   final bool openCommentsOnStart;
   final String? initialCommentReplyUser;
   final String? initialCommentText;
+  final bool openLikesOnStart;
   final bool isStandalone;
   final String feedType; // 'FOR_YOU' or 'FOLLOWING'
   final int refreshToken;
@@ -36,6 +38,7 @@ class VideoFeedPage extends StatefulWidget {
     this.openCommentsOnStart = false,
     this.initialCommentReplyUser,
     this.initialCommentText,
+    this.openLikesOnStart = false,
     this.isStandalone = false,
     this.feedType = 'FOR_YOU',
     this.refreshToken = 0,
@@ -113,15 +116,38 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
     if (widget.openCommentsOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
+        final currentVideo = _videos.isNotEmpty && _currentPage < _videos.length
+            ? _videos[_currentPage]
+            : null;
         showModalBottomSheet(
           context: context,
           isScrollControlled: true,
           backgroundColor: Colors.transparent,
           builder: (context) => CommentBottomSheet(
+            videoId: currentVideo?.id,
+            videoCreatorId: currentVideo?.creatorId,
+            videoCreatorUsername: currentVideo?.username,
+            initialCommentCount: currentVideo?.commentCount ?? 0,
             initialReplyTo: widget.initialCommentReplyUser,
             highlightCommentText: widget.initialCommentText,
           ),
         );
+      });
+    }
+
+    if (widget.openLikesOnStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final currentVideo = _videos.isNotEmpty && _currentPage < _videos.length
+            ? _videos[_currentPage]
+            : null;
+        if (currentVideo != null) {
+          VideoLikesBottomSheet.show(
+            context,
+            videoId: currentVideo.id,
+            initialLikeCount: currentVideo.likeCount,
+          );
+        }
       });
     }
 
@@ -1724,6 +1750,16 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                 isActive: video.isLiked,
                 activeColor: Colors.red,
                 onTap: widget.onLikeTap,
+                onLongPress: () => VideoLikesBottomSheet.show(
+                  context,
+                  videoId: video.id,
+                  initialLikeCount: video.likeCount,
+                ),
+                onLabelTap: () => VideoLikesBottomSheet.show(
+                  context,
+                  videoId: video.id,
+                  initialLikeCount: video.likeCount,
+                ),
               ),
 
               // Comment
@@ -1914,6 +1950,8 @@ class _InteractionButton extends StatelessWidget {
   final Color? activeColor;
   final bool isActive;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onLabelTap;
 
   const _InteractionButton({
     required this.icon,
@@ -1922,6 +1960,8 @@ class _InteractionButton extends StatelessWidget {
     this.activeColor,
     this.isActive = false,
     this.onTap,
+    this.onLongPress,
+    this.onLabelTap,
   });
 
   @override
@@ -1930,6 +1970,7 @@ class _InteractionButton extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       behavior: HitTestBehavior.opaque,
       child: Padding(
         padding: const EdgeInsets.only(bottom: 16.0),
@@ -1949,19 +1990,22 @@ class _InteractionButton extends StatelessWidget {
             ),
             if (showLabel) ...[
               const SizedBox(height: 4),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  shadows: [
-                    Shadow(
-                      color: Colors.black54,
-                      blurRadius: 4,
-                      offset: Offset(0, 1),
-                    ),
-                  ],
+              GestureDetector(
+                onTap: onLabelTap ?? onTap,
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black54,
+                        blurRadius: 4,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ]

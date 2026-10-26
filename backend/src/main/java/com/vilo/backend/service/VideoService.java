@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.vilo.backend.entity.NotificationType;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -36,6 +37,7 @@ public class VideoService {
     private final FileStorageService fileStorageService;
     private final com.vilo.backend.repository.SoundRepository soundRepository;
     private final HashtagRepository hashtagRepository;
+    private final NotificationService notificationService;
 
     public VideoService(VideoRepository videoRepository,
                         UserRepository userRepository,
@@ -44,7 +46,8 @@ public class VideoService {
                         CommentRepository commentRepository,
                         FileStorageService fileStorageService,
                         com.vilo.backend.repository.SoundRepository soundRepository,
-                        HashtagRepository hashtagRepository) {
+                        HashtagRepository hashtagRepository,
+                        NotificationService notificationService) {
         this.videoRepository = videoRepository;
         this.userRepository = userRepository;
         this.videoLikeRepository = videoLikeRepository;
@@ -53,6 +56,7 @@ public class VideoService {
         this.fileStorageService = fileStorageService;
         this.soundRepository = soundRepository;
         this.hashtagRepository = hashtagRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional(readOnly = true)
@@ -637,6 +641,27 @@ MultipartFile thumbnailFile, String thumbnailPath,
             videoLikeRepository.save(new VideoLike(userId, videoId));
             video.setLikeCount(video.getLikeCount() + 1);
             videoRepository.save(video);
+
+            // Notify video creator
+            try {
+                User liker = userRepository.findById(userId).orElse(null);
+                User creator = video.getCreator();
+                if (creator == null && video.getCreatorId() != null) {
+                    creator = userRepository.findById(video.getCreatorId()).orElse(null);
+                }
+                if (creator != null && liker != null && !creator.getId().equals(liker.getId())) {
+                    notificationService.sendNotification(
+                            creator,
+                            liker,
+                            NotificationType.LIKE,
+                            "New Like",
+                            liker.getDisplayName() + " liked your video",
+                            String.valueOf(videoId),
+                            "VIDEO"
+                    );
+                }
+            } catch (Exception ignored) {}
+
             return true;
         }
     }
@@ -723,6 +748,41 @@ MultipartFile thumbnailFile, String thumbnailPath,
                     }
                     return resp;
                 })
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getVideoLikes(Long videoId, User currentUser) {
+        List<VideoLike> likes = videoLikeRepository.findByVideoIdOrderByCreatedAtDesc(videoId);
+        if (likes.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Long> userIds = likes.stream().map(VideoLike::getUserId).toList();
+        List<User> users = userRepository.findAllById(userIds);
+        Map<Long, User> userMap = users.stream().collect(Collectors.toMap(User::getId, u -> u));
+
+        Set<Long> followingIds = (currentUser != null && currentUser.getFollowing() != null)
+                ? currentUser.getFollowing().stream().map(User::getId).collect(Collectors.toSet())
+                : Collections.emptySet();
+
+        return likes.stream()
+                .map(like -> {
+                    User u = userMap.get(like.getUserId());
+                    if (u == null) return null;
+                    Map<String, Object> map = new LinkedHashMap<>();
+                    map.put("id", like.getId());
+                    map.put("userId", u.getId());
+                    map.put("username", u.getUsername());
+                    map.put("displayName", u.getDisplayName());
+                    map.put("avatarUrl", u.getAvatarUrl());
+                    map.put("bio", u.getBio());
+                    map.put("isVerified", u.getIsVerified());
+                    map.put("isFollowing", followingIds.contains(u.getId()));
+                    map.put("createdAt", like.getCreatedAt());
+                    return map;
+                })
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
     }
 }

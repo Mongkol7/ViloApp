@@ -78,6 +78,15 @@ public class StoryController {
         return ResponseEntity.ok(ApiResponse.ok("Story view recorded", story));
     }
 
+    @PostMapping("/{id}/react")
+    public ResponseEntity<ApiResponse<StoryResponse>> reactStory(
+            @AuthenticationPrincipal User currentUser,
+            @PathVariable Long id
+    ) {
+        StoryResponse story = storyService.reactStory(currentUser, id);
+        return ResponseEntity.ok(ApiResponse.ok("Story reaction recorded", story));
+    }
+
     @GetMapping("/{id}/viewers")
     public ResponseEntity<ApiResponse<List<StoryViewerResponse>>> getStoryViewers(
             @AuthenticationPrincipal User currentUser,

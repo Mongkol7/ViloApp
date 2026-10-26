@@ -171,6 +171,31 @@ public class StoryService {
         return mapToResponse(story, currentUser);
     }
 
+    @Transactional
+    public StoryResponse reactStory(User currentUser, Long storyId) {
+        ThoughtStory story = storyRepository.findById(storyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Story not found with id: " + storyId));
+
+        boolean isOwner = isSameUser(story.getUser(), currentUser);
+        if (!isOwner) {
+            try {
+                notificationService.sendNotification(
+                        story.getUser(),
+                        currentUser,
+                        NotificationType.LIKE,
+                        "Story Reaction",
+                        currentUser.getDisplayName() + " reacted ❤️ to your story",
+                        String.valueOf(story.getId()),
+                        "STORY"
+                );
+            } catch (Exception ex) {
+                log.warn("Failed to send story reaction notification: {}", ex.getMessage());
+            }
+        }
+
+        return mapToResponse(story, currentUser);
+    }
+
     @Transactional(readOnly = true)
     public List<StoryViewerResponse> getStoryViewers(User currentUser, Long storyId) {
         ThoughtStory story = storyRepository.findById(storyId)

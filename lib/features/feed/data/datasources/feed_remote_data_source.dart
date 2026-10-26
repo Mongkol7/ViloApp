@@ -367,6 +367,20 @@ class FeedRemoteDataSource {
     };
   }
 
+  /// Get users who liked a video
+  Future<List<Map<String, dynamic>>> getVideoLikes(int videoId) async {
+    try {
+      final response = await _client.get('/videos/$videoId/likes', requireAuth: true);
+      final list = (response is Map && response['data'] is List)
+          ? response['data'] as List
+          : (response is List ? response : []);
+      return list.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] getVideoLikes error: $e');
+      return [];
+    }
+  }
+
   /// Toggle save/bookmark status
   Future<Map<String, dynamic>> toggleSave(
     int videoId, {

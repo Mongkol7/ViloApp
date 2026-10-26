@@ -99,6 +99,7 @@ class StoryRemoteDataSource {
               authorName: username,
               authorAvatarUrl: avatarUrl,
               authorUsername: uname,
+              authorId: item['userId']?.toString(),
               isOwner: isMy,
             );
 
@@ -321,6 +322,14 @@ class StoryRemoteDataSource {
     if (id == null) return;
     try {
       await ApiClient.instance.post('/stories/$id/view');
+    } catch (_) {}
+  }
+
+  Future<void> reactToStory(String storyId) async {
+    final id = int.tryParse(storyId);
+    if (id == null) return;
+    try {
+      await ApiClient.instance.post('/stories/$id/react');
     } catch (_) {}
   }
 

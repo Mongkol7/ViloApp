@@ -362,6 +362,20 @@ public class VideoController {
     }
 
     /**
+     * GET /api/v1/videos/{id}/likes
+     * Retrieves all users who liked a video.
+     */
+    @GetMapping("/{id}/likes")
+    @Operation(summary = "Get video likes", description = "Retrieves users who liked this video")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getVideoLikes(
+            @PathVariable Long id,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        List<Map<String, Object>> likes = videoService.getVideoLikes(id, currentUser);
+        return ResponseEntity.ok(ApiResponse.ok("Video likes retrieved successfully", likes));
+    }
+
+    /**
      * POST /api/v1/videos/{id}/save
      * Toggle bookmark/save for the authenticated user.
      */

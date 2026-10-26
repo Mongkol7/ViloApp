@@ -91,12 +91,62 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
     return false;
   }
 
+  void _ensureHighlightedCommentExists() {
+    if (widget.highlightCommentText == null || widget.highlightCommentText!.trim().isEmpty) return;
+    final hasMatch = _comments.any(_isCommentHighlighted);
+    if (!hasMatch) {
+      String cleanText = widget.highlightCommentText!.trim();
+      if (cleanText.contains('commented: "')) {
+        final start = cleanText.indexOf('commented: "') + 12;
+        final end = cleanText.lastIndexOf('"');
+        if (end > start) cleanText = cleanText.substring(start, end);
+      } else if (cleanText.contains('"')) {
+        final start = cleanText.indexOf('"') + 1;
+        final end = cleanText.lastIndexOf('"');
+        if (end > start) cleanText = cleanText.substring(start, end);
+      }
+      _comments.insert(
+        0,
+        CommentModel(
+          id: DateTime.now().millisecondsSinceEpoch,
+          videoId: widget.videoId ?? 0,
+          userId: 0,
+          username: widget.initialReplyTo ?? 'User',
+          displayName: widget.initialReplyTo ?? 'User',
+          avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500',
+          content: cleanText,
+          createdAt: DateTime.now(),
+        ),
+      );
+    }
+  }
+
+  bool _isCommentHighlighted(CommentModel comment) {
+    if (widget.highlightCommentText == null || widget.highlightCommentText!.trim().isEmpty) {
+      return false;
+    }
+    final hl = widget.highlightCommentText!.toLowerCase().trim();
+    final content = comment.content.toLowerCase().trim();
+    if (content.isNotEmpty && (hl.contains(content) || content.contains(hl))) {
+      return true;
+    }
+    if (widget.initialReplyTo != null && widget.initialReplyTo!.isNotEmpty) {
+      final u = widget.initialReplyTo!.toLowerCase().replaceAll('@', '').trim();
+      final cu = comment.username.toLowerCase().replaceAll('@', '').trim();
+      if (cu == u && content.isNotEmpty && hl.contains(content)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   Future<void> _loadComments() async {
     if (widget.videoId == null) {
       if (mounted) {
         setState(() {
           _comments = [];
-          _commentCount = 0;
+          _ensureHighlightedCommentExists();
+          _commentCount = _comments.length;
           _isLoading = false;
         });
       }
@@ -107,8 +157,9 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
       final comments = await _dataSource.getComments(widget.videoId!);
       if (mounted) {
         setState(() {
-          _comments = comments;
-          _commentCount = comments.length;
+          _comments = List<CommentModel>.from(comments);
+          _ensureHighlightedCommentExists();
+          _commentCount = _comments.length;
           _isLoading = false;
         });
       }
@@ -116,6 +167,8 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
       if (mounted) {
         setState(() {
           _comments = [];
+          _ensureHighlightedCommentExists();
+          _commentCount = _comments.length;
           _isLoading = false;
         });
       }
@@ -320,8 +373,10 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                         itemBuilder: (context, index) {
                           final comment = _comments[index];
                           final canDelete = _canDeleteComment(comment);
+                          final isHighlighted = _isCommentHighlighted(comment);
                           return _CommentCard(
                             comment: comment,
+                            isHighlighted: isHighlighted,
                             onReply: () => _onReplyTap(comment),
                             onDelete: canDelete ? () => _deleteComment(comment) : null,
                           );
@@ -476,11 +531,13 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
 
 class _CommentCard extends StatefulWidget {
   final CommentModel comment;
+  final bool isHighlighted;
   final VoidCallback onReply;
   final VoidCallback? onDelete;
 
   const _CommentCard({
     required this.comment,
+    this.isHighlighted = false,
     required this.onReply,
     this.onDelete,
   });
@@ -532,7 +589,7 @@ class _CommentCardState extends State<_CommentCard> {
             ? ProfileSyncService.instance.currentUserAvatar
             : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150');
 
-    return Padding(
+    final contentWidget = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -766,5 +823,42 @@ class _CommentCardState extends State<_CommentCard> {
         ],
       ),
     );
+
+    if (widget.isHighlighted) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
+        decoration: BoxDecoration(
+          color: const Color(0x1F2F80ED),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF2F80ED), width: 1.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(left: 14.0, top: 8.0, bottom: 2.0),
+              child: Row(
+                children: [
+                  Icon(Icons.stars_rounded, size: 14, color: Color(0xFF2F80ED)),
+                  SizedBox(width: 4),
+                  Text(
+                    'Highlighted comment',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      color: Color(0xFF2F80ED),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            contentWidget,
+          ],
+        ),
+      );
+    }
+
+    return contentWidget;
   }
 }

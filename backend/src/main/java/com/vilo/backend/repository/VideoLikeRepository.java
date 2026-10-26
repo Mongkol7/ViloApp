@@ -13,5 +13,6 @@ public interface VideoLikeRepository extends JpaRepository<VideoLike, Long> {
     void deleteByUserIdAndVideoId(Long userId, Long videoId);
     void deleteByVideoId(Long videoId);
     java.util.List<VideoLike> findByUserIdOrderByCreatedAtDesc(Long userId);
+    java.util.List<VideoLike> findByVideoIdOrderByCreatedAtDesc(Long videoId);
     long countByVideoId(Long videoId);
 }
