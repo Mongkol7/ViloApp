@@ -95,7 +95,6 @@ public class VideoService {
             }
         } else {
             candidateVideos = videoRepository.findAll();
->>>>>>> develop
         }
 
         List<Video> randomizedList = interleaveAndRandomizeVideos(candidateVideos, seed);
