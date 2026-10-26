@@ -35,13 +35,16 @@ public class VideoController {
     private final VideoService videoService;
     private final CommentService commentService;
     private final UserRepository userRepository;
+    private final com.vilo.backend.service.SoundService soundService;
 
     public VideoController(VideoService videoService,
                            CommentService commentService,
-                           UserRepository userRepository) {
+                           UserRepository userRepository,
+                           com.vilo.backend.service.SoundService soundService) {
         this.videoService = videoService;
         this.commentService = commentService;
         this.userRepository = userRepository;
+        this.soundService = soundService;
     }
 
     /**
@@ -49,25 +52,20 @@ public class VideoController {
      * Paginated video feeds (foryou / following).
      */
     @GetMapping("/feed")
-    @Operation(summary = "Get video feed", description = "Retrieves paginated video feed filtered by foryou / following")
+    @Operation(summary = "Get video feed", description = "Retrieves paginated video feed filtered by foryou / following with randomized creator interleaving")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getFeed(
             @Parameter(description = "Feed type: foryou or following")
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "foryou") String type,
+            @RequestParam(required = false) Long seed,
             @AuthenticationPrincipal User currentUser
     ) {
-        List<Long> followingIds = null;
         Long currentUserId = currentUser != null ? currentUser.getId() : null;
-
-        if ("following".equalsIgnoreCase(type) && currentUser != null && currentUser.getFollowing() != null) {
-            followingIds = currentUser.getFollowing().stream()
-                    .map(User::getId)
-                    .toList();
-        }
+        Long effectiveSeed = (seed != null) ? seed : (System.currentTimeMillis() / 60000L);
 
         Pageable pageable = PageRequest.of(page, size);
-        Page<Video> videoPage = videoService.getFeed(type, followingIds, pageable);
+        Page<Video> videoPage = videoService.getFeed(type, currentUserId, pageable, effectiveSeed);
 
         List<VideoResponse> responses = videoPage.getContent().stream()
                 .map(video -> mapToVideoResponse(video, currentUserId))
@@ -79,6 +77,7 @@ public class VideoController {
         data.put("totalItems", videoPage.getTotalElements());
         data.put("totalPages", videoPage.getTotalPages());
         data.put("hasNext", videoPage.hasNext());
+        data.put("seed", effectiveSeed);
 
         return ResponseEntity.ok(ApiResponse.ok("Feed retrieved successfully", data));
     }
@@ -144,6 +143,52 @@ public class VideoController {
     }
 
     /**
+     * GET /api/v1/videos/my-videos
+     * Retrieves all videos posted by the currently authenticated user.
+     */
+    @GetMapping("/my-videos")
+    @Operation(summary = "Get my uploaded videos", description = "Retrieves all videos uploaded by the currently authenticated user")
+    public ResponseEntity<ApiResponse<List<VideoResponse>>> getMyVideos(
+            @AuthenticationPrincipal User currentUser
+    ) {
+        if (currentUser == null) {
+            throw new AccessDeniedException("Authentication required to view your videos");
+        }
+        List<VideoResponse> videos = videoService.getUserVideos(String.valueOf(currentUser.getId()), currentUser);
+        return ResponseEntity.ok(ApiResponse.ok("My videos fetched successfully", videos));
+    }
+
+    /**
+     * GET /api/v1/videos/my-sounds
+     * Retrieves all sound tracks created/uploaded by the currently authenticated user.
+     */
+    @GetMapping("/my-sounds")
+    @Operation(summary = "Get my uploaded sounds", description = "Retrieves all music/sound tracks uploaded by the currently authenticated user")
+    public ResponseEntity<ApiResponse<List<com.vilo.backend.dto.SoundResponse>>> getMySounds(
+            @AuthenticationPrincipal User currentUser
+    ) {
+        if (currentUser == null) {
+            throw new AccessDeniedException("Authentication required to view your sounds");
+        }
+        List<com.vilo.backend.dto.SoundResponse> sounds = soundService.getUserSounds(currentUser.getId(), currentUser.getUsername());
+        return ResponseEntity.ok(ApiResponse.ok("My sounds fetched successfully", sounds));
+    }
+
+    /**
+     * GET /api/v1/videos/by-sound
+     * Retrieves all videos using a specific track or sound title.
+     */
+    @GetMapping("/by-sound")
+    @Operation(summary = "Get videos by sound", description = "Retrieves all videos using a specific sound title")
+    public ResponseEntity<ApiResponse<List<VideoResponse>>> getVideosBySound(
+            @RequestParam String musicName,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        List<VideoResponse> videos = videoService.getVideosBySound(musicName, currentUser);
+        return ResponseEntity.ok(ApiResponse.ok("Videos by sound fetched successfully", videos));
+    }
+
+    /**
      * GET /api/v1/videos/{id}
      * Single video details with creator profile and interaction flags.
      */
@@ -169,6 +214,7 @@ public class VideoController {
             @RequestParam(value = "video", required = false) MultipartFile video,
             @RequestParam(value = "videoFile", required = false) MultipartFile videoFile,
             @RequestParam(value = "photos", required = false) List<MultipartFile> photos,
+            @RequestParam(value = "photoFiles", required = false) List<MultipartFile> photoFiles,
             @RequestParam(value = "videoFiles", required = false) List<MultipartFile> videoFiles,
             @RequestParam(value = "files", required = false) List<MultipartFile> files,
             @RequestParam(value = "videoPath", required = false) String videoPath,
@@ -179,6 +225,14 @@ public class VideoController {
             @RequestParam(value = "title", required = false) String title,
             @RequestParam(value = "description", required = false) String description,
             @RequestParam(value = "caption", required = false) String caption,
+            @RequestParam(value = "soundId", required = false) Long soundId,
+            @RequestParam(value = "audioFile", required = false) MultipartFile audioFile,
+            @RequestParam(value = "musicFile", required = false) MultipartFile musicFile,
+            @RequestParam(value = "audio", required = false) MultipartFile audio,
+            @RequestParam(value = "musicTitle", required = false) String musicTitle,
+            @RequestParam(value = "musicName", required = false) String musicName,
+            @RequestParam(value = "musicArtist", required = false) String musicArtist,
+            @RequestParam(value = "audioUrl", required = false) String audioUrl,
             @RequestParam(value = "tags", required = false) List<String> tags,
             @AuthenticationPrincipal User currentUser
     ) {
@@ -188,9 +242,12 @@ public class VideoController {
 
         MultipartFile effectiveVideoFile = (video != null && !video.isEmpty()) ? video : videoFile;
         MultipartFile effectiveThumbnailFile = (thumbnail != null && !thumbnail.isEmpty()) ? thumbnail : thumbnailFile;
+        MultipartFile effectiveAudioFile = (audioFile != null && !audioFile.isEmpty()) ? audioFile
+                : ((musicFile != null && !musicFile.isEmpty()) ? musicFile : audio);
 
         List<MultipartFile> effectiveMediaFiles = (photos != null && !photos.isEmpty()) ? photos
-                : ((videoFiles != null && !videoFiles.isEmpty()) ? videoFiles : files);
+                : ((photoFiles != null && !photoFiles.isEmpty()) ? photoFiles
+                : ((videoFiles != null && !videoFiles.isEmpty()) ? videoFiles : files));
 
         String directPath = videoPath != null && !videoPath.isBlank() 
                 ? videoPath.trim() 
@@ -208,6 +265,10 @@ public class VideoController {
                 ? caption.trim()
                 : ((title != null ? title : "") + (description != null && !description.isBlank() ? " " + description : "")).trim();
 
+        String effectiveMusicTitle = (musicTitle != null && !musicTitle.isBlank())
+                ? musicTitle.trim()
+                : (musicName != null && !musicName.isBlank() ? musicName.trim() : null);
+
         Video savedVideo = videoService.createVideo(
                 currentUser.getId(),
                 title,
@@ -218,6 +279,11 @@ public class VideoController {
                 directPath,
                 effectiveThumbnailFile,
                 thumbnailPath,
+                soundId,
+                effectiveAudioFile,
+                effectiveMusicTitle,
+                musicArtist,
+                audioUrl,
                 tags
         );
         VideoResponse response = mapToVideoResponse(savedVideo, currentUser.getId());
@@ -415,6 +481,31 @@ public class VideoController {
     }
 
     /**
+     * DELETE /api/v1/videos/{videoId}/comments/{commentId}
+     * Delete comment (author or video creator only).
+     */
+    @DeleteMapping("/{videoId}/comments/{commentId}")
+    @Operation(summary = "Delete comment", description = "Deletes a comment. Only the comment author or the video owner can delete it.")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> deleteComment(
+            @PathVariable Long videoId,
+            @PathVariable Long commentId,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        if (currentUser == null) {
+            throw new AccessDeniedException("Authentication required to delete comments");
+        }
+
+        commentService.deleteComment(videoId, commentId, currentUser.getId());
+        Video video = videoService.getVideoById(videoId);
+
+        Map<String, Object> data = Map.of(
+                "deletedCommentId", commentId,
+                "commentCount", video.getCommentCount() != null ? video.getCommentCount() : 0L
+        );
+        return ResponseEntity.ok(ApiResponse.ok("Comment deleted successfully", data));
+    }
+
+    /**
      * POST /api/v1/videos/{id}/view
      * Increment view count asynchronously.
      */
@@ -459,6 +550,25 @@ public class VideoController {
             }
         }
 
+        List<String> images = new ArrayList<>();
+        if (video.getImageUrls() != null && !video.getImageUrls().isBlank()) {
+            String[] parts = video.getImageUrls().split(",");
+            for (String p : parts) {
+                if (p != null && !p.trim().isEmpty() && VideoResponse.isImageFile(p.trim())) {
+                    images.add(p.trim());
+                }
+            }
+        } else if (video.getVideoUrl() != null && !video.getVideoUrl().isBlank()) {
+            if (VideoResponse.isImageFile(video.getVideoUrl())) {
+                String[] parts = video.getVideoUrl().split(",");
+                for (String p : parts) {
+                    if (p != null && !p.trim().isEmpty() && VideoResponse.isImageFile(p.trim())) {
+                        images.add(p.trim());
+                    }
+                }
+            }
+        }
+
         return VideoResponse.builder()
                 .id(video.getId())
                 .creatorId(video.getCreatorId())
@@ -471,7 +581,11 @@ public class VideoController {
                 .caption(video.getCaption())
                 .videoUrl(video.getVideoUrl())
                 .thumbnailUrl(video.getThumbnailUrl())
+                .imageUrls(images)
+                .soundId(video.getSoundId())
                 .musicTitle(video.getMusicTitle() != null ? video.getMusicTitle() : "Original Sound - " + displayName)
+                .musicArtist(video.getMusicArtist() != null ? video.getMusicArtist() : displayName)
+                .audioUrl(video.getAudioUrl())
                 .viewCount(video.getViewCount())
                 .likeCount(video.getLikeCount())
                 .commentCount(video.getCommentCount())

@@ -8,6 +8,8 @@ import '../../data/models/comment_model.dart';
 
 class CommentBottomSheet extends StatefulWidget {
   final int? videoId;
+  final int? videoCreatorId;
+  final String? videoCreatorUsername;
   final int initialCommentCount;
   final ValueChanged<int>? onCommentCountChanged;
   final String? initialReplyTo;
@@ -16,6 +18,8 @@ class CommentBottomSheet extends StatefulWidget {
   const CommentBottomSheet({
     super.key,
     this.videoId,
+    this.videoCreatorId,
+    this.videoCreatorUsername,
     this.initialCommentCount = 0,
     this.onCommentCountChanged,
     this.initialReplyTo,
@@ -69,6 +73,24 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
     super.dispose();
   }
 
+  bool _canDeleteComment(CommentModel comment) {
+    // 1. Author of the comment
+    final isAuthor = ProfileSyncService.instance.isCurrentUser(
+      username: comment.username,
+      id: comment.userId.toString(),
+    );
+    if (isAuthor) return true;
+
+    // 2. Creator of the post / video
+    final isPostOwner = ProfileSyncService.instance.isCurrentUser(
+      username: widget.videoCreatorUsername,
+      id: widget.videoCreatorId?.toString(),
+    );
+    if (isPostOwner) return true;
+
+    return false;
+  }
+
   Future<void> _loadComments() async {
     if (widget.videoId == null) {
       if (mounted) {
@@ -97,6 +119,29 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _deleteComment(CommentModel comment) async {
+    if (widget.videoId == null) return;
+    try {
+      final success = await _dataSource.deleteComment(widget.videoId!, comment.id);
+      if (success && mounted) {
+        final newCount = (_commentCount - 1).clamp(0, 999999);
+        setState(() {
+          _comments.removeWhere((c) => c.id == comment.id);
+          _commentCount = newCount;
+        });
+        widget.onCommentCountChanged?.call(newCount);
+        ProfileSyncService.instance.notifyVideoInteraction(
+          VideoInteractionEvent(
+            videoId: widget.videoId!,
+            commentCount: newCount,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[CommentBottomSheet] Delete comment error: $e');
     }
   }
 
@@ -251,24 +296,20 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                     child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                   )
                 : _comments.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.chat_bubble_outline_rounded, color: Colors.white24, size: 48),
-                            SizedBox(height: 12),
-                            Text(
+                            const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white24, size: 48),
+                            const SizedBox(height: 12),
+                            const Text(
                               'No comments yet',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
                             ),
-                            SizedBox(height: 4),
+                            const SizedBox(height: 4),
                             Text(
-                              'Be the first to comment!',
-                              style: TextStyle(color: Colors.white38, fontSize: 13),
+                              'Be the first to share your thoughts!',
+                              style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
                             ),
                           ],
                         ),
@@ -277,9 +318,12 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                         itemCount: _comments.length,
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         itemBuilder: (context, index) {
+                          final comment = _comments[index];
+                          final canDelete = _canDeleteComment(comment);
                           return _CommentCard(
-                            comment: _comments[index],
-                            onReply: () => _onReplyTap(_comments[index]),
+                            comment: comment,
+                            onReply: () => _onReplyTap(comment),
+                            onDelete: canDelete ? () => _deleteComment(comment) : null,
                           );
                         },
                       ),
@@ -433,10 +477,12 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
 class _CommentCard extends StatefulWidget {
   final CommentModel comment;
   final VoidCallback onReply;
+  final VoidCallback? onDelete;
 
   const _CommentCard({
     required this.comment,
     required this.onReply,
+    this.onDelete,
   });
 
   @override
@@ -566,6 +612,20 @@ class _CommentCardState extends State<_CommentCard> {
                             ),
                           ),
                         ),
+                        if (widget.onDelete != null) ...[
+                          const SizedBox(width: 16),
+                          GestureDetector(
+                            onTap: widget.onDelete,
+                            child: Text(
+                              'Delete',
+                              style: TextStyle(
+                                color: Colors.redAccent.withValues(alpha: 0.8),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ],

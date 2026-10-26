@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io' show File, Platform;
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import '../../../../core/network/api_client.dart';
 import '../../../auth/data/datasources/token_storage.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
+import '../../../profile/presentation/mock/profile_mock_data.dart';
 import '../models/comment_model.dart';
 import '../models/video_model.dart';
 
@@ -16,6 +18,7 @@ class FeedRemoteDataSource {
   final TokenStorage _tokenStorage;
 
   final Map<String, List<VideoModel>> _feedCache = {};
+  final Map<String, int> _feedCacheSeeds = {};
   final Map<String, List<VideoModel>> _userVideosCache = {};
 
   FeedRemoteDataSource({ApiClient? client, TokenStorage? tokenStorage})
@@ -56,6 +59,21 @@ class FeedRemoteDataSource {
     list.insert(0, video);
   }
 
+  List<VideoModel> getAllCachedVideos() {
+    final Map<int, VideoModel> map = {};
+    for (final list in _feedCache.values) {
+      for (final v in list) {
+        map[v.id] = v;
+      }
+    }
+    for (final list in _userVideosCache.values) {
+      for (final v in list) {
+        map[v.id] = v;
+      }
+    }
+    return map.values.toList();
+  }
+
   void invalidateUserVideos(dynamic identifier) {
     if (identifier == null) return;
     final clean = identifier.toString().replaceAll('@', '').trim().toLowerCase();
@@ -64,6 +82,7 @@ class FeedRemoteDataSource {
 
   void clearCache() {
     _feedCache.clear();
+    _feedCacheSeeds.clear();
     _userVideosCache.clear();
   }
 
@@ -136,24 +155,38 @@ class FeedRemoteDataSource {
     }
   }
 
-  /// Unified getFeed supporting pagination, cache, and both feedType and type parameters
+  /// Unified getFeed supporting pagination, cache, seed, and creator interleaving
   Future<List<VideoModel>> getFeed({
     int page = 0,
     int size = 10,
     String? type,
     String? feedType,
+    int? seed,
     bool forceRefresh = false,
   }) async {
     final rawType = (type ?? feedType ?? 'foryou').trim();
-    final normalizedType = (rawType.toUpperCase() == 'FOLLOWING') ? 'following' : 'foryou';
-    final cacheKey = normalizedType.replaceAll('_', '');
+    final normalizedInput = rawType.toUpperCase();
+    final normalizedType = normalizedInput == 'FOLLOWING' ? 'following' : 'foryou';
+    // Community uses the same backend feed as For You, but must keep its own
+    // cache so refreshing one top category never invalidates the other.
+    final cacheKey = normalizedInput == 'COMMUNITY'
+        ? 'community'
+        : normalizedType.replaceAll('_', '');
 
-    if (!forceRefresh && page == 0 && _feedCache[cacheKey] != null && _feedCache[cacheKey]!.isNotEmpty) {
-      return _feedCache[cacheKey]!;
+    if (forceRefresh) {
+      _feedCache.remove(cacheKey);
+      _feedCacheSeeds.remove(cacheKey);
+    }
+
+    if (!forceRefresh && normalizedType != 'following' && page == 0 && _feedCache[cacheKey] != null && _feedCache[cacheKey]!.isNotEmpty) {
+      if (seed == null || _feedCacheSeeds[cacheKey] == seed) {
+        return _feedCache[cacheKey]!;
+      }
     }
 
     try {
-      final endpoint = '/videos/feed?page=$page&size=$size&type=$normalizedType';
+      final seedParam = (seed != null) ? '&seed=$seed' : '';
+      final endpoint = '/videos/feed?page=$page&size=$size&type=$normalizedType$seedParam';
       final response = await _client.get(endpoint, requireAuth: false);
 
       List<dynamic>? list;
@@ -167,14 +200,22 @@ class FeedRemoteDataSource {
         list = response;
       }
 
-      if (list != null && list.isNotEmpty) {
-        final videos = list
+      if (list != null) {
+        final rawVideos = list
             .whereType<Map<String, dynamic>>()
             .map((item) => VideoModel.fromJson(item))
             .toList();
 
+        // Ensure creator interleaving is respected across creators
+        final videos = (page == 0)
+            ? interleaveAndRandomizeVideos(rawVideos, seed: seed)
+            : rawVideos;
+
         if (page == 0) {
           _feedCache[cacheKey] = videos;
+          if (seed != null) {
+            _feedCacheSeeds[cacheKey] = seed;
+          }
         }
 
         // Pre-cache user videos into _userVideosCache so opening their profiles is instantaneous
@@ -199,9 +240,16 @@ class FeedRemoteDataSource {
       debugPrint('[FeedRemoteDataSource] Remote feed error: $e');
     }
 
+    if (normalizedType == 'following') {
+      return [];
+    }
+
     if (page == 0) {
-      final fallback = _getFallbackFeed(normalizedType);
+      final fallback = _getFallbackFeed(normalizedType, seed: seed);
       _feedCache[cacheKey] = fallback;
+      if (seed != null) {
+        _feedCacheSeeds[cacheKey] = seed;
+      }
       for (final v in fallback) {
         final uName = v.username.replaceAll('@', '').trim().toLowerCase();
         _userVideosCache.putIfAbsent(uName, () => []);
@@ -240,8 +288,12 @@ class FeedRemoteDataSource {
 
   Future<List<VideoModel>> _fetchUserVideosFromNetwork(String clean) async {
     try {
-      final endpoint = '/videos/user/$clean';
-      final response = await _client.get(endpoint, requireAuth: false);
+      dynamic response;
+      try {
+        response = await _client.get('/users/$clean/videos', requireAuth: false);
+      } catch (_) {
+        response = await _client.get('/videos/user/$clean', requireAuth: false);
+      }
 
       List<dynamic>? list;
       if (response is List) {
@@ -308,6 +360,7 @@ class FeedRemoteDataSource {
     final data = (response is Map && response['data'] is Map)
         ? response['data'] as Map<String, dynamic>
         : (response is Map ? response : <String, dynamic>{});
+    ProfileSyncService.instance.notifyInteraction();
     return {
       'isLiked': data['isLiked'] ?? !currentlyLiked,
       'likeCount': (data['likeCount'] as num?)?.toInt() ?? 0,
@@ -329,6 +382,7 @@ class FeedRemoteDataSource {
     final data = (response is Map && response['data'] is Map)
         ? response['data'] as Map<String, dynamic>
         : (response is Map ? response : <String, dynamic>{});
+    ProfileSyncService.instance.notifyInteraction();
     return {
       'isSaved': data['isSaved'] ?? !currentlySaved,
       'saveCount': (data['saveCount'] as num?)?.toInt() ?? 0,
@@ -459,9 +513,382 @@ class FeedRemoteDataSource {
     return CommentModel.fromJson(data);
   }
 
+  /// Delete a comment (author or video creator only)
+  Future<bool> deleteComment(int videoId, int commentId) async {
+    try {
+      await _client.delete(
+        '/videos/$videoId/comments/$commentId',
+        requireAuth: true,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Delete comment error: $e');
+      return false;
+    }
+  }
+
+  /// Fetch current user's posted videos
+  Future<List<VideoModel>> getMyVideos() async {
+    try {
+      final response = await _client.get('/videos/my-videos', requireAuth: true);
+      List<dynamic>? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map && response['data'] is List) {
+        list = response['data'] as List;
+      } else if (response is Map && response['videos'] is List) {
+        list = response['videos'] as List;
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => VideoModel.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get my videos error: $e');
+    }
+    return [];
+  }
+
+
+  /// Fetch specific user's liked videos
+  Future<List<VideoModel>> getUserLikedVideos(dynamic identifier) async {
+    final clean = identifier.toString().replaceAll('@', '').trim();
+    try {
+      final response = await _client.get('/users/$clean/liked', requireAuth: true);
+      List<dynamic>? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map && response['data'] is List) {
+        list = response['data'] as List;
+      } else if (response is Map && response['videos'] is List) {
+        list = response['videos'] as List;
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => VideoModel.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get user liked videos error: $e');
+    }
+    return [];
+  }
+
+
+  /// Fetch specific user's bookmarked/saved videos
+  Future<List<VideoModel>> getUserSavedVideos(dynamic identifier) async {
+    final clean = identifier.toString().replaceAll('@', '').trim();
+    try {
+      final response = await _client.get('/users/$clean/saved', requireAuth: true);
+      List<dynamic>? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map && response['data'] is List) {
+        list = response['data'] as List;
+      } else if (response is Map && response['videos'] is List) {
+        list = response['videos'] as List;
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => VideoModel.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get user saved videos error: $e');
+    }
+    return [];
+  }
+
+  /// Fetch all available sounds for upload picker
+  Future<List<SoundTrack>> getSounds() async {
+    try {
+      final response = await _client.get('/sounds', requireAuth: false);
+      List<dynamic>? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map && response['data'] is List) {
+        list = response['data'] as List;
+      } else if (response is Map && response['sounds'] is List) {
+        list = response['sounds'] as List;
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => SoundTrack.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get sounds error: $e');
+    }
+    return [];
+  }
+
+  /// Fetch current user's uploaded sounds
+  Future<List<SoundTrack>> getMySounds() async {
+    try {
+      final response = await _client.get('/videos/my-sounds', requireAuth: true);
+      List<dynamic>? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map && response['data'] is List) {
+        list = response['data'] as List;
+      } else if (response is Map && response['sounds'] is List) {
+        list = response['sounds'] as List;
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => SoundTrack.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get my sounds error: $e');
+    }
+    return [];
+  }
+
+  /// Fetch specific user's uploaded sounds
+  Future<List<SoundTrack>> getUserSounds(dynamic identifier) async {
+    final clean = identifier.toString().replaceAll('@', '').trim();
+    try {
+      final response = await _client.get('/users/$clean/sounds', requireAuth: false);
+      List<dynamic>? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map && response['data'] is List) {
+        list = response['data'] as List;
+      } else if (response is Map && response['sounds'] is List) {
+        list = response['sounds'] as List;
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => SoundTrack.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get user sounds error: $e');
+    }
+    return [];
+  }
+
+  /// Fetch sound details and videos using this sound
+  Future<Map<String, dynamic>> getSoundDetails(dynamic soundId) async {
+    try {
+      final response = await _client.get('/sounds/$soundId/videos', requireAuth: false);
+      if (response is Map) {
+        final rawSound = response['sound'] ?? response['soundTrack'] ?? response;
+        final rawVideos = response['videos'] ?? (response['data'] is Map ? response['data']['videos'] : null);
+        final sound = rawSound is Map<String, dynamic> ? SoundTrack.fromJson(rawSound) : null;
+        final videos = (rawVideos is List)
+            ? rawVideos.whereType<Map<String, dynamic>>().map((v) => VideoModel.fromJson(v)).toList()
+            : <VideoModel>[];
+        return {
+          'sound': sound,
+          'videos': videos,
+        };
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get sound details error: $e');
+    }
+    return {'sound': null, 'videos': <VideoModel>[]};
+  }
+
+  /// Fetch videos featuring a specific sound track
+  Future<List<VideoModel>> getVideosBySound(String musicName) async {
+    try {
+      final endpoint = '/videos/by-sound?musicName=${Uri.encodeComponent(musicName)}';
+      final response = await _client.get(endpoint, requireAuth: false);
+      List<dynamic>? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map && response['data'] is List) {
+        list = response['data'] as List;
+      } else if (response is Map && response['videos'] is List) {
+        list = response['videos'] as List;
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => VideoModel.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Get videos by sound error: $e');
+    }
+    return [];
+  }
+
+  /// Delete sound permanently from backend (owner only)
+  Future<bool> deleteSound(String soundId) async {
+    try {
+      await _client.delete(
+        '/sounds/$soundId',
+        requireAuth: true,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Delete sound error: $e');
+      return false;
+    }
+  }
+
+  /// Multipart sound/audio upload
+  Future<SoundTrack> uploadSound({
+    String? audioPath,
+    List<int>? audioBytes,
+    String audioFilename = 'sound.mp3',
+    String? title,
+    String? artist,
+    String? coverPath,
+    List<int>? coverBytes,
+    String coverFilename = 'cover.jpg',
+    String? coverUrl,
+  }) async {
+    final uri = Uri.parse('${ApiClient.baseUrl}/sounds/upload');
+    final request = http.MultipartRequest('POST', uri);
+
+    final token = await _tokenStorage.getAccessToken();
+    if (token != null && token.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    if (title != null && title.trim().isNotEmpty) {
+      request.fields['title'] = title.trim();
+    }
+    if (artist != null && artist.trim().isNotEmpty) {
+      request.fields['artist'] = artist.trim();
+    }
+    if (coverUrl != null && coverUrl.trim().isNotEmpty) {
+      request.fields['coverUrl'] = coverUrl.trim();
+    }
+
+    if (audioPath != null && audioPath.trim().isNotEmpty) {
+      final fileOnDisk = File(audioPath.trim());
+      if (fileOnDisk.existsSync()) {
+        request.files.add(
+          await http.MultipartFile.fromPath('audioFile', fileOnDisk.path, filename: audioFilename),
+        );
+      } else if (audioBytes != null && audioBytes.isNotEmpty) {
+        request.files.add(
+          http.MultipartFile.fromBytes('audioFile', audioBytes, filename: audioFilename),
+        );
+      }
+    } else if (audioBytes != null && audioBytes.isNotEmpty) {
+      request.files.add(
+        http.MultipartFile.fromBytes('audioFile', audioBytes, filename: audioFilename),
+      );
+    }
+
+    if (coverPath != null && coverPath.trim().isNotEmpty) {
+      final fileOnDisk = File(coverPath.trim());
+      if (fileOnDisk.existsSync()) {
+        request.files.add(
+          await http.MultipartFile.fromPath('coverFile', fileOnDisk.path, filename: coverFilename),
+        );
+      } else if (coverBytes != null && coverBytes.isNotEmpty) {
+        request.files.add(
+          http.MultipartFile.fromBytes('coverFile', coverBytes, filename: coverFilename),
+        );
+      }
+    } else if (coverBytes != null && coverBytes.isNotEmpty) {
+      request.files.add(
+        http.MultipartFile.fromBytes('coverFile', coverBytes, filename: coverFilename),
+      );
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final json = jsonDecode(response.body);
+      final data = json['data'] ?? json;
+      return SoundTrack.fromJson(data as Map<String, dynamic>);
+    }
+    throw ApiResponseException('Sound upload failed: ${response.statusCode}', response.statusCode);
+  }
+
+  /// Update sound metadata and/or cover art via PATCH /sounds/{id}
+  Future<SoundTrack?> updateSoundCover({
+    required int soundId,
+    String? title,
+    String? coverPath,
+    List<int>? coverBytes,
+    String coverFilename = 'cover.jpg',
+    String? coverUrl,
+  }) async {
+    try {
+      final uri = Uri.parse('${ApiClient.baseUrl}/sounds/$soundId');
+      final request = http.MultipartRequest('PATCH', uri);
+
+      final token = await _tokenStorage.getAccessToken();
+      if (token != null && token.isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+
+      if (title != null && title.trim().isNotEmpty) {
+        request.fields['title'] = title.trim();
+      }
+      if (coverUrl != null && coverUrl.trim().isNotEmpty) {
+        request.fields['coverUrl'] = coverUrl.trim();
+      }
+
+      if (coverPath != null && coverPath.trim().isNotEmpty) {
+        final fileOnDisk = File(coverPath.trim());
+        if (fileOnDisk.existsSync()) {
+          request.files.add(
+            await http.MultipartFile.fromPath('coverFile', fileOnDisk.path, filename: coverFilename),
+          );
+        } else if (coverBytes != null && coverBytes.isNotEmpty) {
+          request.files.add(
+            http.MultipartFile.fromBytes('coverFile', coverBytes, filename: coverFilename),
+          );
+        }
+      } else if (coverBytes != null && coverBytes.isNotEmpty) {
+        request.files.add(
+          http.MultipartFile.fromBytes('coverFile', coverBytes, filename: coverFilename),
+        );
+      }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final decoded = jsonDecode(response.body);
+        final data = decoded is Map && decoded.containsKey('data') ? decoded['data'] : decoded;
+        if (data is Map<String, dynamic>) {
+          return SoundTrack.fromJson(data);
+        }
+      } else {
+        debugPrint('[FeedRemoteDataSource] Update sound cover error: ${response.statusCode} ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('[FeedRemoteDataSource] Update sound cover exception: $e');
+    }
+    return null;
+  }
+
   /// Multipart video upload
   Future<VideoModel> uploadVideo({
     required String caption,
+    int? soundId,
+    String? musicTitle,
+    String? musicName,
+    String? musicArtist,
+    String? audioUrl,
+    String? audioPath,
+    List<int>? audioBytes,
+    String audioFilename = 'music.mp3',
     String? videoPath,
     List<int>? videoBytes,
     String videoFilename = 'upload.mp4',
@@ -482,6 +909,66 @@ class FeedRemoteDataSource {
     }
 
     request.fields['caption'] = caption;
+
+    if (soundId != null && soundId > 0) {
+      request.fields['soundId'] = soundId.toString();
+    }
+
+    final soundTitle = (musicTitle != null && musicTitle.trim().isNotEmpty)
+        ? musicTitle.trim()
+        : (musicName != null && musicName.trim().isNotEmpty ? musicName.trim() : null);
+    if (soundTitle != null) {
+      request.fields['musicTitle'] = soundTitle;
+      request.fields['musicName'] = soundTitle;
+    }
+    if (musicArtist != null && musicArtist.trim().isNotEmpty) {
+      request.fields['musicArtist'] = musicArtist.trim();
+    }
+    if (audioUrl != null && audioUrl.trim().isNotEmpty) {
+      request.fields['audioUrl'] = audioUrl.trim();
+    }
+
+    // Audio file payload (optional uploaded music)
+    if (audioPath != null && audioPath.trim().isNotEmpty) {
+      final audioOnDisk = File(audioPath.trim());
+      if (audioOnDisk.existsSync()) {
+        try {
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              'audioFile',
+              audioOnDisk.path,
+              filename: audioFilename.isNotEmpty ? audioFilename : audioOnDisk.path.split(Platform.pathSeparator).last,
+            ),
+          );
+        } catch (e) {
+          debugPrint('[FeedRemoteDataSource] Audio fromPath failed: $e');
+          final bytes = await audioOnDisk.readAsBytes();
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'audioFile',
+              bytes,
+              filename: audioFilename,
+            ),
+          );
+        }
+      } else if (audioBytes != null && audioBytes.isNotEmpty) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'audioFile',
+            audioBytes,
+            filename: audioFilename,
+          ),
+        );
+      }
+    } else if (audioBytes != null && audioBytes.isNotEmpty) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'audioFile',
+          audioBytes,
+          filename: audioFilename,
+        ),
+      );
+    }
 
     // Handle tags (normalize, strip leading #, join by comma)
     final tagsList = <String>[];
@@ -659,7 +1146,7 @@ class FeedRemoteDataSource {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final json = jsonDecode(response.body);
       final data = json['data'] ?? json;
-      final newVideo = VideoModel.fromJson(data as Map<String, dynamic>);
+final newVideo = VideoModel.fromJson(data as Map<String, dynamic>);
 
       // Prepend to creator's caches for instant profile grid display
       if (newVideo.creatorId > 0) {
@@ -668,7 +1155,7 @@ class FeedRemoteDataSource {
       if (newVideo.username.isNotEmpty) {
         prependUserVideo(newVideo.username, newVideo);
       }
-
+      ProfileSyncService.instance.notifyInteraction();
       return newVideo;
     } else {
       String errorMessage = 'Failed to upload video (${response.statusCode})';
@@ -682,125 +1169,279 @@ class FeedRemoteDataSource {
     }
   }
 
-  List<VideoModel> _getFallbackFeed(String feedType) {
+  /// Shuffles and round-robin interleaves videos across distinct creators.
+  /// Ensures consecutive videos are not by the same user, and feed order is randomized.
+  List<VideoModel> interleaveAndRandomizeVideos(List<VideoModel> videos, {int? seed}) {
+    if (videos.isEmpty) return videos;
+
+    final random = (seed != null) ? math.Random(seed) : math.Random();
+
+    // 1. Group videos by creator identifier (creatorId or username)
+    final byCreator = <String, List<VideoModel>>{};
+    for (final v in videos) {
+      final key = v.creatorId > 0
+          ? v.creatorId.toString()
+          : (v.username.isNotEmpty ? v.username.toLowerCase() : v.id.toString());
+      byCreator.putIfAbsent(key, () => []).add(v);
+    }
+
+    // 2. Shuffle videos within each creator's list
+    for (final list in byCreator.values) {
+      list.shuffle(random);
+    }
+
+    // 3. Shuffle creator order
+    final queues = byCreator.values.toList()..shuffle(random);
+
+    // 4. Interleave round-robin across creators
+    final result = <VideoModel>[];
+    bool hasMore = true;
+    while (hasMore) {
+      hasMore = false;
+      for (final queue in queues) {
+        if (queue.isNotEmpty) {
+          result.add(queue.removeAt(0));
+          if (queue.isNotEmpty) {
+            hasMore = true;
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  List<VideoModel> _getFallbackFeed(String feedType, {int? seed}) {
     final allVideos = [
       const VideoModel(
         id: 1,
+        creatorId: 1,
+        username: '@mongkol',
+        displayName: 'Thoeung Sereymongkol',
+        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid1.mp4',
+        caption: 'Building responsive Flutter UI with Spring Boot 🚀 #coding #flutterdev #vilo',
+        musicTitle: 'Original Sound - Thoeung Sereymongkol',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
+        isMe: true,
+      ),
+      const VideoModel(
+        id: 2,
         creatorId: 2,
         username: '@bunheng',
         displayName: 'Lim Bunheng',
         avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500',
         isVerified: true,
-        videoUrl: 'assets/videos/vid2.mp4',
-        caption: 'Night walk through the neon streets #citylife #neon #cyberpunk',
-        musicTitle: 'Cyberpunk Beats - Synthwave',
-        likeCount: 890000,
-        commentCount: 12100,
-        saveCount: 85000,
-        isFollowing: true,
-        isMe: false,
-      ),
-      const VideoModel(
-        id: 2,
-        creatorId: 7,
-        username: '@sophia_art',
-        displayName: 'Sophia Vance',
-        avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500',
-        isVerified: true,
-        videoUrl: 'assets/videos/vid1.mp4',
-        caption: 'The view from the top is breathtaking ⛰️ #mountains #visuals',
-        musicTitle: 'Epic Mountain Theme - Hans Zimmer',
-        likeCount: 2100000,
-        commentCount: 110000,
-        saveCount: 400000,
+        videoUrl: 'assets/videos/vid9.mp4',
+        caption: '60fps video engine rendering benchmarks 🚀 #tech #videoengine #performance',
+        musicTitle: 'High FPS Pulse - Seven7',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
         isFollowing: true,
         isMe: false,
       ),
       const VideoModel(
         id: 3,
-        creatorId: 10,
-        username: '@davi_beats',
-        displayName: 'David Miller',
-        avatarUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500',
+        creatorId: 8,
+        username: '@rithysak',
+        displayName: 'Sok Rithysak',
+        avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500',
         isVerified: true,
         videoUrl: 'assets/videos/vid3.mp4',
-        caption: 'Found this hidden waterfall today! 🌿💧 #hiking #nature',
-        musicTitle: 'Nature Sounds - Waterfall',
-        likeCount: 340000,
-        commentCount: 3200,
-        saveCount: 20000,
+        caption: 'Designing smooth micro-animations in Flutter 🎨 #ui #flutter #animation',
+        musicTitle: 'Smooth Motion Beats - Seven7',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
         isFollowing: true,
         isMe: false,
       ),
       const VideoModel(
         id: 4,
-        creatorId: 11,
-        username: '@sarah_fit',
-        displayName: 'Sarah Connor',
-        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500',
-        isVerified: false,
-        videoUrl: 'assets/videos/vid4.mp4',
-        caption: 'Morning workout done! 💪 HIIT session #fitness #gym',
-        musicTitle: 'Workout Mix 2026 - DJ Flex',
-        likeCount: 550000,
-        commentCount: 8400,
-        saveCount: 15000,
-        isFollowing: false,
+        creatorId: 9,
+        username: '@setkimliza',
+        displayName: 'Set Kimliza',
+        avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid5.mp4',
+        caption: 'Coffee shop morning aesthetics & Lo-Fi ☕ #coffee #vibes #morning',
+        musicTitle: 'Rainy Day Acoustic - LoFi',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
         isMe: false,
       ),
       const VideoModel(
         id: 5,
-        creatorId: 9,
-        username: '@linda_travel',
-        displayName: 'Linda Chen',
-        avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500',
+        creatorId: 10,
+        username: '@trenmono',
+        displayName: 'Tren Mono',
+        avatarUrl: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500',
         isVerified: true,
-        videoUrl: 'assets/videos/vid2.mp4',
-        caption: 'Peaceful morning on the lake 🛶 #lake #peace',
-        musicTitle: 'Morning Coffee Acoustic - Indie Band',
-        likeCount: 420000,
-        commentCount: 5100,
-        saveCount: 18000,
-        isFollowing: false,
+        videoUrl: 'assets/videos/vid7.mp4',
+        caption: 'Analog modular synth jam session in the lab 🎛️ #synth #modular #beats',
+        musicTitle: 'Analog Pulse - Tren Mono',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
         isMe: false,
       ),
       const VideoModel(
         id: 6,
-        creatorId: 16,
-        username: '@kevin_tech',
-        displayName: 'Kevin Zhang',
-        avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=500',
+        creatorId: 25,
+        username: '@tryphien',
+        displayName: 'Try Phien',
+        avatarUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500',
         isVerified: true,
-        videoUrl: 'assets/videos/vid3.mp4',
-        caption: 'Next-gen desk setup tour 🖥️ Minimal aesthetic #tech',
-        musicTitle: 'Midnight City Pulse - Neon Dreams',
-        likeCount: 310000,
-        commentCount: 4200,
-        saveCount: 31000,
-        isFollowing: false,
+        videoUrl: 'assets/videos/vid11.mp4',
+        caption: 'Next-gen creative setup tour 🖥️ Minimal aesthetic #creativesetup #tech',
+        musicTitle: 'Creative Waves - LoFi',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
         isMe: false,
       ),
       const VideoModel(
         id: 7,
-        creatorId: 99,
-        username: '@demo_vilo',
-        displayName: 'Demo Creator',
+        creatorId: 26,
+        username: '@nenseanghai',
+        displayName: 'Nen Seanghai',
+        avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid13.mp4',
+        caption: 'Designing clean responsive layouts & mobile interactions 📱 #flutterdev #uiux',
+        musicTitle: 'Motion Design Beats',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
+        isMe: false,
+      ),
+      const VideoModel(
+        id: 8,
+        creatorId: 1,
+        username: '@mongkol',
+        displayName: 'Thoeung Sereymongkol',
         avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500',
         isVerified: true,
-        videoUrl: 'assets/videos/vid1.mp4',
-        caption: 'Building modern reactive Flutter UI with Spring Boot #coding',
-        musicTitle: 'Seven7 Team Anthem - Seven7 Beats',
-        likeCount: 1200000,
-        commentCount: 45200,
-        saveCount: 120000,
-        isFollowing: false,
+        videoUrl: 'assets/videos/vid2.mp4',
+        caption: 'Late night coding session & neon vibes 🌃 #developer #tech #viloapp',
+        musicTitle: 'Midnight City Pulse - Neon Dreams',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
+        isMe: true,
+      ),
+      const VideoModel(
+        id: 9,
+        creatorId: 8,
+        username: '@rithysak',
+        displayName: 'Sok Rithysak',
+        avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid4.mp4',
+        caption: 'Weekend mountain trail ride 🚴 #nature #adventure #outdoor',
+        musicTitle: 'Open Road Acoustic',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
+        isMe: false,
+      ),
+      const VideoModel(
+        id: 10,
+        creatorId: 9,
+        username: '@setkimliza',
+        displayName: 'Set Kimliza',
+        avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid6.mp4',
+        caption: 'Golden hour city stroll after rain 🌧️✨ #aesthetic #mood #vilo',
+        musicTitle: 'After The Rain - Chillhop',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
+        isMe: false,
+      ),
+      const VideoModel(
+        id: 11,
+        creatorId: 10,
+        username: '@trenmono',
+        displayName: 'Tren Mono',
+        avatarUrl: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid8.mp4',
+        caption: 'Minimalist architecture walk in the city 🏢 #architecture #design #minimalism',
+        musicTitle: 'Mono Wave Vol 1',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
+        isMe: false,
+      ),
+      const VideoModel(
+        id: 12,
+        creatorId: 2,
+        username: '@bunheng',
+        displayName: 'Lim Bunheng',
+        avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid10.mp4',
+        caption: 'Cyberpunk neon street walk at night #citylife #neon #cyberpunk',
+        musicTitle: 'Cyberpunk Beats - Synthwave',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
+        isMe: false,
+      ),
+      const VideoModel(
+        id: 13,
+        creatorId: 25,
+        username: '@tryphien',
+        displayName: 'Try Phien',
+        avatarUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid12.mp4',
+        caption: 'Exploring neon night streets & cinematic moments 🌆 #cinematic #night #vilo',
+        musicTitle: 'Night Drive - Ambient',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
+        isMe: false,
+      ),
+      const VideoModel(
+        id: 14,
+        creatorId: 26,
+        username: '@nenseanghai',
+        displayName: 'Nen Seanghai',
+        avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=500',
+        isVerified: true,
+        videoUrl: 'assets/videos/vid14.mp4',
+        caption: 'Sunset vibes by the river with acoustic melodies 🌅🎸 #sunset #acoustic #chill',
+        musicTitle: 'Sunset Glow - Acoustic',
+        likeCount: 0,
+        commentCount: 0,
+        saveCount: 0,
+        isFollowing: true,
         isMe: false,
       ),
     ];
 
-    if (feedType.toLowerCase() == 'following') {
-      return allVideos.where((v) => v.isFollowing).toList();
-    }
-    return allVideos;
+    final filtered = (feedType.toLowerCase() == 'following')
+        ? allVideos.where((v) => v.isFollowing && !v.isMe).toList()
+        : allVideos;
+
+    return interleaveAndRandomizeVideos(filtered, seed: seed);
   }
 }

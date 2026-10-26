@@ -36,7 +36,7 @@ class QrCodeScreen extends StatelessWidget {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.blueAccent.withOpacity(0.5),
+                    color: Colors.blueAccent.withValues(alpha: 0.5),
                     blurRadius: 20,
                     spreadRadius: 5,
                   ),
@@ -65,10 +65,7 @@ class QrCodeScreen extends StatelessWidget {
           ),
           const Text(
             '@Vilo',
-            style: TextStyle(
-              color: Colors.grey,
-              fontSize: 16,
-            ),
+            style: TextStyle(color: Colors.grey, fontSize: 16),
           ),
           const SizedBox(height: 30),
           // QR Code Card
@@ -95,7 +92,10 @@ class QrCodeScreen extends StatelessWidget {
                           color: Colors.blueAccent,
                         ),
                         child: const Center(
-                          child: Text('v', style: TextStyle(color: Colors.white, fontSize: 10)),
+                          child: Text(
+                            'v',
+                            style: TextStyle(color: Colors.white, fontSize: 10),
+                          ),
                         ),
                       );
                     }
@@ -152,7 +152,10 @@ class QrCodeScreen extends StatelessWidget {
         children: [
           Icon(icon, color: Colors.white),
           const SizedBox(height: 8),
-          Text(label, style: const TextStyle(color: Colors.white, fontSize: 12)),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white, fontSize: 12),
+          ),
         ],
       ),
     );

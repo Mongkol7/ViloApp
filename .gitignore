@@ -49,11 +49,9 @@ android/build/
 backend/target/
 
 # Documentation & Local Spec files
-docs/
 project_structure.md
 
 # AI & Editor Assistants
-.ai/
 .cursor/
 .agents/
 .gemini/

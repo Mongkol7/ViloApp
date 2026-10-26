@@ -9,14 +9,15 @@ import 'video_grid_item.dart';
 
 /// Builds the sliver(s) for whichever tab is selected.
 ///
-/// IMPORTANT: this returns plain slivers (SliverList / SliverGrid), not a
-/// scrollable widget. They get spread directly into the parent
-/// CustomScrollView's `slivers` list, so the video grid / sounds list / shop
-/// list scroll together with the header as ONE page scroll — there is no
-/// nested/inner scroll view here.
+/// Tab 0: Sounds (user-specific uploaded/created sounds)
+/// Tab 1: Postings (user-specific uploaded videos/photos)
+/// Tab 2: Shop (untouched product showcase)
+/// Tab 3: Saved (user's bookmarked videos)
+/// Tab 4: Liked (user's liked videos)
 List<Widget> buildProfileTabSlivers(
   int selectedIndex, {
   bool isCleanSlate = false,
+  List<SoundTrack>? userSounds,
   List<VideoFeedModel>? userVideos,
   List<VideoFeedModel>? savedVideos,
   List<VideoFeedModel>? likedVideos,
@@ -26,6 +27,8 @@ List<Widget> buildProfileTabSlivers(
   void Function(VideoFeedModel video, int index)? onVideoLongPress,
   void Function(VideoFeedModel video, int index)? onSavedVideoTap,
   void Function(VideoFeedModel video, int index)? onLikedVideoTap,
+  void Function(SoundTrack updatedSound)? onSoundUpdated,
+  void Function(SoundTrack deletedSound)? onSoundDeleted,
 }) {
   if (isCleanSlate) {
     IconData icon;
@@ -106,41 +109,69 @@ List<Widget> buildProfileTabSlivers(
     ];
   }
   switch (selectedIndex) {
-    case 0: // Sounds (Music on Left)
-      return [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            PulseSpacing.edgeMargin,
-            PulseSpacing.stackGap,
-            PulseSpacing.edgeMargin,
-            PulseSpacing.sectionMargin,
+    case 0: // Sounds
+      if (userSounds != null && userSounds.isNotEmpty) {
+        return [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              PulseSpacing.edgeMargin,
+              PulseSpacing.stackGap,
+              PulseSpacing.edgeMargin,
+              PulseSpacing.sectionMargin,
+            ),
+            sliver: SliverList.builder(
+              itemCount: userSounds.length,
+              itemBuilder: (context, i) =>
+                  SoundListItem(
+                    sound: userSounds[i],
+                    isCreator: isCurrentUser,
+                    onSoundUpdated: onSoundUpdated,
+                    onSoundDeleted: onSoundDeleted,
+                  ),
+            ),
           ),
-          sliver: SliverList.builder(
-            itemCount: ProfileMockData.sounds.length,
-            itemBuilder: (context, i) =>
-                SoundListItem(sound: ProfileMockData.sounds[i]),
+        ];
+      }
+
+      if (isLoading && (userSounds == null || userSounds.isEmpty)) {
+        return [
+          const SliverPadding(
+            padding: EdgeInsets.symmetric(vertical: 48),
+            sliver: SliverToBoxAdapter(
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2),
+                ),
+              ),
+            ),
+          ),
+        ];
+      }
+
+      return [
+        const SliverPadding(
+          padding: EdgeInsets.symmetric(vertical: 48),
+          sliver: SliverToBoxAdapter(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.music_note_outlined, color: Colors.white24, size: 48),
+                  SizedBox(height: 12),
+                  Text(
+                    'No sounds uploaded yet',
+                    style: TextStyle(color: Colors.white60, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ];
 
-    case 2: // Shop
-      return [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            PulseSpacing.edgeMargin,
-            PulseSpacing.stackGap,
-            PulseSpacing.edgeMargin,
-            PulseSpacing.sectionMargin,
-          ),
-          sliver: SliverList.builder(
-            itemCount: ProfileMockData.products.length,
-            itemBuilder: (context, i) =>
-                ShopProductCard(product: ProfileMockData.products[i]),
-          ),
-        ),
-      ];
-
-    case 1: // Grid / Postings (Posted Videos on Right of Music)
+    case 1: // Postings
       if (userVideos != null && userVideos.isNotEmpty) {
         return [
           SliverPadding(
@@ -166,13 +197,12 @@ List<Widget> buildProfileTabSlivers(
                   } else if (video.isImagePost && video.videoUrl.trim().isNotEmpty) {
                     thumb = video.videoUrl.trim();
                   } else {
-                    final mockThumbs = ProfileMockData.videoThumbnails;
-                    thumb = mockThumbs[video.id.abs() % mockThumbs.length];
+                    thumb = '';
                   }
 
                   return VideoGridItem(
                     thumbnailUrl: thumb,
-                    viewsLabel: video.likes,
+                    viewsLabel: video.views,
                     onTap: onVideoTap != null ? () => onVideoTap(video, i) : null,
                     onLongPress: onVideoLongPress != null ? () => onVideoLongPress(video, i) : null,
                   );
@@ -235,6 +265,23 @@ List<Widget> buildProfileTabSlivers(
         ),
       ];
 
+    case 2: // Shop (Untouched)
+      return [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            PulseSpacing.edgeMargin,
+            PulseSpacing.stackGap,
+            PulseSpacing.edgeMargin,
+            PulseSpacing.sectionMargin,
+          ),
+          sliver: SliverList.builder(
+            itemCount: ProfileMockData.products.length,
+            itemBuilder: (context, i) =>
+                ShopProductCard(product: ProfileMockData.products[i]),
+          ),
+        ),
+      ];
+
     case 3: // Saved
       if (savedVideos != null && savedVideos.isNotEmpty) {
         return [
@@ -261,12 +308,12 @@ List<Widget> buildProfileTabSlivers(
                   } else if (video.isImagePost && video.videoUrl.trim().isNotEmpty) {
                     thumb = video.videoUrl.trim();
                   } else {
-                    thumb = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500';
+                    thumb = '';
                   }
 
                   return VideoGridItem(
                     thumbnailUrl: thumb,
-                    viewsLabel: video.likes,
+                    viewsLabel: video.views,
                     onTap: onSavedVideoTap != null
                         ? () => onSavedVideoTap(video, i)
                         : (onVideoTap != null ? () => onVideoTap(video, i) : null),
@@ -360,7 +407,6 @@ List<Widget> buildProfileTabSlivers(
       ];
 
     case 4: // Liked
-    default:
       if (likedVideos != null && likedVideos.isNotEmpty) {
         return [
           SliverPadding(
@@ -386,12 +432,12 @@ List<Widget> buildProfileTabSlivers(
                   } else if (video.isImagePost && video.videoUrl.trim().isNotEmpty) {
                     thumb = video.videoUrl.trim();
                   } else {
-                    thumb = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500';
+                    thumb = '';
                   }
 
                   return VideoGridItem(
                     thumbnailUrl: thumb,
-                    viewsLabel: video.likes,
+                    viewsLabel: video.views,
                     onTap: onLikedVideoTap != null
                         ? () => onLikedVideoTap(video, i)
                         : (onVideoTap != null ? () => onVideoTap(video, i) : null),
@@ -453,6 +499,11 @@ List<Widget> buildProfileTabSlivers(
             ),
           ),
         ),
+      ];
+
+    default:
+      return [
+        const SliverToBoxAdapter(child: SizedBox.shrink()),
       ];
   }
 }

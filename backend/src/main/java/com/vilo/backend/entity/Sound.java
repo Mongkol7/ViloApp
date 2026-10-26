@@ -21,8 +21,17 @@ public class Sound {
     @Column(nullable = false)
     private String artist;
 
+    @Column(name = "creator_id")
+    private Long creatorId;
+
+    @Column(name = "creator_username")
+    private String creatorUsername;
+
     @Column(name = "audio_url", length = 1000)
     private String audioUrl;
+
+    @Column(name = "cover_url", length = 1000)
+    private String coverUrl;
 
     @Column(name = "album_art_url", length = 1000)
     private String albumArtUrl;
@@ -52,9 +61,25 @@ public class Sound {
         this.artist = artist;
         this.audioUrl = audioUrl;
         this.albumArtUrl = albumArtUrl;
+        this.coverUrl = albumArtUrl;
         this.durationSeconds = durationSeconds;
         this.usageCount = usageCount;
         this.isTrending = isTrending;
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public Sound(String title, Long creatorId, String creatorUsername, String audioUrl, String coverUrl, Long usageCount) {
+        this.title = title;
+        this.creatorId = creatorId;
+        this.creatorUsername = creatorUsername;
+        this.artist = creatorUsername != null ? "@" + creatorUsername : "Original Sound";
+        this.audioUrl = audioUrl;
+        this.coverUrl = coverUrl;
+        this.albumArtUrl = coverUrl;
+        this.usageCount = usageCount != null ? usageCount : 0L;
+        this.durationSeconds = 30;
+        this.isTrending = false;
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
@@ -158,5 +183,32 @@ public class Sound {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public Long getCreatorId() {
+        return creatorId;
+    }
+
+    public void setCreatorId(Long creatorId) {
+        this.creatorId = creatorId;
+    }
+
+    public String getCreatorUsername() {
+        return creatorUsername != null ? creatorUsername : artist;
+    }
+
+    public void setCreatorUsername(String creatorUsername) {
+        this.creatorUsername = creatorUsername;
+    }
+
+    public String getCoverUrl() {
+        return coverUrl != null && !coverUrl.isEmpty() ? coverUrl : albumArtUrl;
+    }
+
+    public void setCoverUrl(String coverUrl) {
+        this.coverUrl = coverUrl;
+        if (this.albumArtUrl == null || this.albumArtUrl.isEmpty()) {
+            this.albumArtUrl = coverUrl;
+        }
     }
 }

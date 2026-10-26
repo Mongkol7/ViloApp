@@ -1,28 +1,34 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../data/models/video_model.dart';
+import 'upload_sound_sheet.dart';
 import 'upload_video_sheet.dart';
 
 enum CreateActionType {
   camera,
   upload,
+  uploadSound,
 }
 
 class CreateActionSheet extends StatelessWidget {
   final VoidCallback onCameraSelected;
   final VoidCallback onUploadSelected;
+  final VoidCallback? onUploadSoundSelected;
 
   const CreateActionSheet({
     super.key,
     required this.onCameraSelected,
     required this.onUploadSelected,
+    this.onUploadSoundSelected,
   });
 
   /// Displays the TikTok-style split action chooser modal and coordinates camera capture or file upload.
-  static Future<VideoModel?> show(
+  static Future<dynamic> show(
     BuildContext context, {
     ImagePicker? imagePicker,
+    int? initialSoundId,
+    String? initialSoundTitle,
+    String? initialAudioUrl,
   }) async {
     final action = await showModalBottomSheet<CreateActionType>(
       context: context,
@@ -33,10 +39,16 @@ class CreateActionSheet extends StatelessWidget {
       builder: (ctx) => CreateActionSheet(
         onCameraSelected: () => Navigator.of(ctx).pop(CreateActionType.camera),
         onUploadSelected: () => Navigator.of(ctx).pop(CreateActionType.upload),
+        onUploadSoundSelected: () => Navigator.of(ctx).pop(CreateActionType.uploadSound),
       ),
     );
 
     if (action == null || !context.mounted) return null;
+
+    if (action == CreateActionType.uploadSound) {
+      if (!context.mounted) return null;
+      return UploadSoundSheet.show(context);
+    }
 
     if (action == CreateActionType.camera) {
       try {
@@ -58,7 +70,13 @@ class CreateActionSheet extends StatelessWidget {
           );
 
           if (!context.mounted) return null;
-          return UploadVideoSheet.show(context, initialFile: capturedFile);
+          return UploadVideoSheet.show(
+            context,
+            initialFile: capturedFile,
+            initialSoundId: initialSoundId,
+            initialSoundTitle: initialSoundTitle,
+            initialAudioUrl: initialAudioUrl,
+          );
         }
       } catch (e) {
         if (context.mounted) {
@@ -74,7 +92,12 @@ class CreateActionSheet extends StatelessWidget {
     } else {
       // Flow 2: Open standard upload sheet from files
       if (!context.mounted) return null;
-      return UploadVideoSheet.show(context);
+      return UploadVideoSheet.show(
+        context,
+        initialSoundId: initialSoundId,
+        initialSoundTitle: initialSoundTitle,
+        initialAudioUrl: initialAudioUrl,
+      );
     }
   }
 
@@ -296,6 +319,84 @@ class CreateActionSheet extends StatelessWidget {
                             SizedBox(height: 4),
                             Text(
                               'Choose media from your device files',
+                              style: TextStyle(
+                                color: Color(0xFF8E8E93),
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: Color(0xFF8E8E93),
+                        size: 24,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              // Bottom Option: Upload Music / Sound Option Card
+              InkWell(
+                key: const Key('create_upload_sound_option_button'),
+                onTap: onUploadSoundSelected,
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E1E24),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFF323238),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFF2D55), Color(0xFFAF52DE)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFAF52DE).withValues(alpha: 0.35),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.library_music_rounded,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Upload Music / Sound',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Upload standalone audio or music tracks',
                               style: TextStyle(
                                 color: Color(0xFF8E8E93),
                                 fontSize: 13,

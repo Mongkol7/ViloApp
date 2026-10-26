@@ -53,11 +53,13 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
   late bool _isFollowing;
   int _followersCount = 0;
   UserModel? _loadedUser;
+  List<SoundTrack> _userSounds = [];
   List<VideoFeedModel> _userVideos = [];
   List<VideoFeedModel> _savedVideos = [];
   List<VideoFeedModel> _likedVideos = [];
   List<StoryItem> _userStories = [];
   bool _isLoading = false;
+  final Set<int> _loadingCategories = <int>{};
 
   @override
   void initState() {
@@ -109,8 +111,16 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
       _userVideos = List.from(cachedVideos);
     }
 
+    ProfileSyncService.instance.interactionEvents.addListener(_onInteractionEvent);
+
     if (widget.userId != null ||
         (widget.username != null && widget.username!.isNotEmpty)) {
+      _fetchPublicProfile();
+    }
+  }
+
+  void _onInteractionEvent() {
+    if (mounted) {
       _fetchPublicProfile();
     }
   }
@@ -126,20 +136,17 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
     }
 
     try {
-      // Execute profile fetch and video postings fetch concurrently in parallel
+      // Execute profile fetch, sounds, postings, saved, and liked concurrently
       await Future.wait([
-        ProfileRemoteDataSource.instance
-            .getUser(identifier)
-            .then((user) {
-              if (mounted) {
-                setState(() {
-                  _loadedUser = user;
-                  _isFollowing = user.isFollowing;
-                  _followersCount = user.followersCount;
-                });
-              }
-            })
-            .catchError((_) {}),
+        ProfileRemoteDataSource.instance.getUser(identifier).then((user) {
+          if (mounted) {
+            setState(() {
+              _loadedUser = user;
+              _isFollowing = user.isFollowing;
+              _followersCount = user.followersCount;
+            });
+          }
+        }).catchError((_) {}),
         FeedRemoteDataSource.instance
             .getUserVideos(identifier, forceRefresh: true)
             .then((videos) {
@@ -152,16 +159,21 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
               }
             })
             .catchError((_) {}),
-        FeedRemoteDataSource.instance
-            .getLikedVideos(userId: identifier)
-            .then((liked) {
-              if (mounted) {
-                setState(() {
-                  _likedVideos = List.from(liked);
-                });
-              }
-            })
-            .catchError((_) {}),
+        FeedRemoteDataSource.instance.getUserSounds(identifier).then((sounds) {
+          if (mounted) {
+            setState(() => _userSounds = sounds);
+          }
+        }).catchError((_) {}),
+        FeedRemoteDataSource.instance.getUserSavedVideos(identifier).then((saved) {
+          if (mounted) {
+            setState(() => _savedVideos = saved);
+          }
+        }).catchError((_) {}),
+        FeedRemoteDataSource.instance.getUserLikedVideos(identifier).then((liked) {
+          if (mounted) {
+            setState(() => _likedVideos = liked);
+          }
+        }).catchError((_) {}),
         StoryRemoteDataSource.instance
             .getActiveStories()
             .then((stories) {
@@ -246,6 +258,67 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
     );
   }
 
+  Future<void> _refreshCategory(int categoryIndex) async {
+    if (categoryIndex < 0 || categoryIndex > 4 ||
+        _loadingCategories.contains(categoryIndex)) {
+      return;
+    }
+
+    final identifier = (widget.username != null && widget.username!.isNotEmpty)
+        ? widget.username!
+        : widget.userId?.toString();
+    if (identifier == null) return;
+
+    final minimumAnimation = Future<void>.delayed(const Duration(milliseconds: 450));
+    setState(() => _loadingCategories.add(categoryIndex));
+    try {
+      switch (categoryIndex) {
+        case 1:
+          final videos = await FeedRemoteDataSource.instance.getUserVideos(
+            identifier,
+            forceRefresh: true,
+          );
+          if (mounted) setState(() => _userVideos = List.from(videos));
+          break;
+        case 3:
+          if (ProfileSyncService.instance.isCurrentUser(
+            username: widget.username,
+            id: widget.userId?.toString() ?? identifier,
+          )) {
+            final saved = await FeedRemoteDataSource.instance.getSavedVideos();
+            if (mounted) setState(() => _savedVideos = List.from(saved));
+          }
+          break;
+        case 4:
+          final liked = await FeedRemoteDataSource.instance.getLikedVideos(userId: identifier);
+          if (mounted) setState(() => _likedVideos = List.from(liked));
+          break;
+      }
+    } finally {
+      await minimumAnimation;
+      if (mounted) setState(() => _loadingCategories.remove(categoryIndex));
+    }
+  }
+
+  Widget _buildCategoryPage(int categoryIndex, List<Widget> slivers) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: slivers,
+        ),
+        if (_loadingCategories.contains(categoryIndex))
+          const ColoredBox(
+            color: Color(0x66000000),
+            child: Center(
+              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   void dispose() {
     ProfileSyncService.instance.videoInteractionEvents.removeListener(
@@ -255,6 +328,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
       _onVideoDeleted,
     );
     _tabController.dispose();
+    ProfileSyncService.instance.interactionEvents.removeListener(_onInteractionEvent);
     super.dispose();
   }
 
@@ -381,9 +455,9 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
         : (widget.avatarUrl?.isNotEmpty == true
               ? widget.avatarUrl!
               : ProfileMockData.avatarUrl);
-    final bio = _loadedUser?.bio?.isNotEmpty == true
-        ? _loadedUser!.bio!
-        : (widget.bio?.isNotEmpty == true ? widget.bio! : ProfileMockData.bio);
+    final bio = _loadedUser?.bio != null && _loadedUser!.bio!.trim().isNotEmpty
+        ? _loadedUser!.bio!.trim()
+        : (widget.bio?.isNotEmpty == true ? widget.bio! : 'No bio yet.');
     final isVerified = _loadedUser?.isVerified ?? false;
 
     return Scaffold(
@@ -725,6 +799,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
               delegate: _SliverTabBarDelegate(
                 TabBar(
                   controller: _tabController,
+                  onTap: _refreshCategory,
                   indicatorColor: Colors.white,
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.grey,
@@ -745,13 +820,13 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
         body: ViloTabBarView(
           controller: _tabController,
           children: [
-            CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(0),
+            _buildCategoryPage(
+              0,
+              buildProfileTabSlivers(0, userSounds: _userSounds, isLoading: _isLoading),
             ), // Music (Index 0)
-            CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(
+            _buildCategoryPage(
+              1,
+              buildProfileTabSlivers(
                 1,
                 userVideos: _userVideos,
                 isLoading: _isLoading,
@@ -769,16 +844,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
                 },
               ),
             ), // Grid (Index 1)
-            CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(2),
-            ), // Shop
-            CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(
+            _buildCategoryPage(2, buildProfileTabSlivers(2)), // Shop
+            _buildCategoryPage(3, buildProfileTabSlivers(
                 3,
                 savedVideos: _savedVideos,
-                isLoading: _isLoading,
+                isLoading: _isLoading || _loadingCategories.contains(3),
                 isCurrentUser: ProfileSyncService.instance.isCurrentUser(
                   username: username,
                   id: _loadedUser?.id.toString() ?? widget.userId?.toString(),
@@ -796,12 +866,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
                 },
               ),
             ), // Saved
-            CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: buildProfileTabSlivers(
+            _buildCategoryPage(4, buildProfileTabSlivers(
                 4,
                 likedVideos: _likedVideos,
-                isLoading: _isLoading,
+                isLoading: _isLoading || _loadingCategories.contains(4),
                 onLikedVideoTap: (video, index) {
                   Navigator.of(context).push(
                     MaterialPageRoute(

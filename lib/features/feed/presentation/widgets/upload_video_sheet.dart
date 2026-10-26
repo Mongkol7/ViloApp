@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../auth/data/datasources/auth_remote_data_source.dart';
 import '../../../auth/data/datasources/token_storage.dart';
+import '../../../profile/presentation/mock/profile_mock_data.dart';
 import '../../data/datasources/feed_remote_data_source.dart';
 import '../../data/models/video_model.dart';
 import '../controllers/video_feed_manager.dart';
@@ -14,12 +15,18 @@ class UploadVideoSheet extends StatefulWidget {
   final PlatformFile? initialFile;
   final List<PlatformFile>? initialFiles;
   final PlatformFile? initialThumbnail;
+  final int? initialSoundId;
+  final String? initialSoundTitle;
+  final String? initialAudioUrl;
 
   const UploadVideoSheet({
     super.key,
     this.initialFile,
     this.initialFiles,
     this.initialThumbnail,
+    this.initialSoundId,
+    this.initialSoundTitle,
+    this.initialAudioUrl,
   });
 
   static Future<VideoModel?> show(
@@ -27,6 +34,9 @@ class UploadVideoSheet extends StatefulWidget {
     PlatformFile? initialFile,
     List<PlatformFile>? initialFiles,
     PlatformFile? initialThumbnail,
+    int? initialSoundId,
+    String? initialSoundTitle,
+    String? initialAudioUrl,
   }) {
     return showModalBottomSheet<VideoModel>(
       context: context,
@@ -38,6 +48,9 @@ class UploadVideoSheet extends StatefulWidget {
         initialFile: initialFile,
         initialFiles: initialFiles,
         initialThumbnail: initialThumbnail,
+        initialSoundId: initialSoundId,
+        initialSoundTitle: initialSoundTitle,
+        initialAudioUrl: initialAudioUrl,
       ),
     );
   }
@@ -54,9 +67,14 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   PlatformFile? _selectedFile;
   List<PlatformFile> _selectedFiles = [];
   PlatformFile? _selectedThumbnail;
+  PlatformFile? _selectedAudioFile;
+  String _selectedSound = 'None';
+  int? _selectedSoundId;
+  List<SoundTrack> _availableSounds = [];
 
   final TextEditingController _captionController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
+  final TextEditingController _customSoundController = TextEditingController();
 
   bool _isUploading = false;
   bool _isLoggingIn = false;
@@ -79,26 +97,69 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
     if (widget.initialThumbnail != null) {
       _selectedThumbnail = widget.initialThumbnail;
     }
+    if (widget.initialSoundTitle != null && widget.initialSoundTitle!.isNotEmpty) {
+      _selectedSound = widget.initialSoundTitle!;
+      _selectedSoundId = widget.initialSoundId;
+      _customSoundController.text = widget.initialSoundTitle!;
+    } else if (widget.initialSoundId != null) {
+      _selectedSoundId = widget.initialSoundId;
+    }
     _checkAuthStatus();
+    _loadAvailableSounds();
+  }
+
+  Future<void> _loadAvailableSounds() async {
+    try {
+      final sounds = await _feedDataSource.getSounds();
+      if (mounted && sounds.isNotEmpty) {
+        setState(() {
+          _availableSounds = sounds;
+          if (_selectedSoundId != null) {
+            final match = sounds.where((s) => s.id == _selectedSoundId).firstOrNull;
+            if (match != null) {
+              _selectedSound = match.title;
+            }
+          } else if (_selectedSound != 'None' && _selectedSound.isNotEmpty) {
+            final match = sounds.where((s) => s.title.toLowerCase() == _selectedSound.toLowerCase()).firstOrNull;
+            if (match != null) {
+              _selectedSoundId = match.id;
+              _selectedSound = match.title;
+            }
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('[UploadVideoSheet] Load sounds error: $e');
+    }
   }
 
   @override
   void didUpdateWidget(UploadVideoSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialFiles != null && widget.initialFiles != oldWidget.initialFiles) {
+    if (widget.initialFiles != null &&
+        widget.initialFiles != oldWidget.initialFiles) {
       setState(() {
         _selectedFiles = List.from(widget.initialFiles!);
         _selectedFile = _selectedFiles.isNotEmpty ? _selectedFiles.first : null;
       });
-    } else if (widget.initialFile != oldWidget.initialFile && widget.initialFile != null) {
+    } else if (widget.initialFile != oldWidget.initialFile &&
+        widget.initialFile != null) {
       setState(() {
         _selectedFile = widget.initialFile;
         _selectedFiles = [widget.initialFile!];
       });
     }
-    if (widget.initialThumbnail != oldWidget.initialThumbnail && widget.initialThumbnail != null) {
+    if (widget.initialThumbnail != oldWidget.initialThumbnail &&
+        widget.initialThumbnail != null) {
       setState(() {
         _selectedThumbnail = widget.initialThumbnail;
+      });
+    }
+    if (widget.initialSoundTitle != null && widget.initialSoundTitle != oldWidget.initialSoundTitle) {
+      setState(() {
+        _selectedSound = widget.initialSoundTitle!;
+        _selectedSoundId = widget.initialSoundId;
+        _customSoundController.text = widget.initialSoundTitle!;
       });
     }
   }
@@ -107,7 +168,30 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   void dispose() {
     _captionController.dispose();
     _tagsController.dispose();
+    _customSoundController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickAudioFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'wav', 'aac', 'm4a', 'ogg'],
+        allowMultiple: false,
+        withData: true,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final picked = result.files.first;
+        setState(() {
+          _selectedAudioFile = picked;
+          _selectedSound = picked.name;
+          _selectedSoundId = null;
+          _customSoundController.text = picked.name;
+        });
+      }
+    } catch (e) {
+      debugPrint('[UploadVideoSheet] Pick audio error: $e');
+    }
   }
 
   Future<void> _checkAuthStatus() async {
@@ -153,8 +237,10 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
     }
   }
 
-  bool _isImageFile(PlatformFile file) =>
-      RegExp(r'\.(jpg|jpeg|png|webp|gif)$', caseSensitive: false).hasMatch(file.name);
+  bool _isImageFile(PlatformFile file) => RegExp(
+    r'\.(jpg|jpeg|png|webp|gif)$',
+    caseSensitive: false,
+  ).hasMatch(file.name);
 
   bool get _isSelectedFileImage {
     if (_selectedFiles.isNotEmpty) {
@@ -201,12 +287,14 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
               size = bytes.length;
             }
 
-            parsed.add(PlatformFile(
-              name: xFile.name.isNotEmpty ? xFile.name : 'media_upload.mp4',
-              size: size,
-              bytes: bytes,
-              path: xFile.path.isNotEmpty ? xFile.path : null,
-            ));
+            parsed.add(
+              PlatformFile(
+                name: xFile.name.isNotEmpty ? xFile.name : 'media_upload.mp4',
+                size: size,
+                bytes: bytes,
+                path: xFile.path.isNotEmpty ? xFile.path : null,
+              ),
+            );
           }
 
           // Invariant: Video uploads are strictly single file at a time!
@@ -219,7 +307,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
             setState(() {
               _selectedFiles = [firstVideo];
               _selectedFile = firstVideo;
-              _errorMessage = parsed.length > 1 ? 'Videos can only be posted one at a time. The first video was selected.' : null;
+              _errorMessage = parsed.length > 1
+                  ? 'Videos can only be posted one at a time. The first video was selected.'
+                  : null;
             });
           } else {
             // All images: take up to 10 photos
@@ -235,33 +325,47 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
           return;
         }
       } catch (pickerErr) {
-        debugPrint('[UploadVideoSheet] ImagePicker fell back or unavailable: $pickerErr');
+        debugPrint(
+          '[UploadVideoSheet] ImagePicker fell back or unavailable: $pickerErr',
+        );
       }
 
       // 2. Fallback to FilePicker (desktop or alternate picker)
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['mp4', 'mov', 'mkv', 'webm', 'jpg', 'jpeg', 'png', 'webp', 'gif'],
+        allowedExtensions: [
+          'mp4',
+          'mov',
+          'mkv',
+          'webm',
+          'jpg',
+          'jpeg',
+          'png',
+          'webp',
+          'gif',
+        ],
         allowMultiple: true,
-        withData: false,
+        withData: true,
       );
 
       if (result != null && result.files.isNotEmpty) {
         final List<PlatformFile> parsed = [];
         for (final picked in result.files) {
           Uint8List? bytes = picked.bytes;
-          if (bytes == null && picked.path != null) {
+          if ((bytes == null || bytes.isEmpty) && picked.path != null) {
             final file = File(picked.path!);
             if (file.existsSync() && file.lengthSync() <= 25 * 1024 * 1024) {
               bytes = await file.readAsBytes();
             }
           }
-          parsed.add(PlatformFile(
-            name: picked.name,
-            size: picked.size,
-            bytes: bytes,
-            path: picked.path,
-          ));
+          parsed.add(
+            PlatformFile(
+              name: picked.name,
+              size: picked.size,
+              bytes: bytes,
+              path: picked.path,
+            ),
+          );
         }
 
         final hasVideo = parsed.any((f) => !_isImageFile(f));
@@ -273,7 +377,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
           setState(() {
             _selectedFiles = [firstVideo];
             _selectedFile = firstVideo;
-            _errorMessage = parsed.length > 1 ? 'Videos can only be posted one at a time. The first video was selected.' : null;
+            _errorMessage = parsed.length > 1
+                ? 'Videos can only be posted one at a time. The first video was selected.'
+                : null;
           });
         } else {
           final limited = parsed.take(10).toList();
@@ -288,7 +394,8 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
       if (mounted) {
         String msg = 'Could not select file: $e';
         if (e.toString().contains('MissingPluginException')) {
-          msg = 'File picker plugin requires an app restart. Please rebuild/restart the app or pick from Gallery.';
+          msg =
+              'File picker plugin requires an app restart. Please rebuild/restart the app or pick from Gallery.';
         }
         setState(() {
           _errorMessage = msg;
@@ -299,55 +406,83 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
   Future<void> _pickMorePhotos() async {
     try {
-      final picker = ImagePicker();
-      final xFiles = await picker.pickMultiImage();
-      if (xFiles.isNotEmpty) {
-        for (final xFile in xFiles) {
-          if (_selectedFiles.length >= 10) break;
-          int size = 0;
-          Uint8List? bytes;
-          if (xFile.path.isNotEmpty) {
-            final file = File(xFile.path);
-            if (file.existsSync()) {
-              size = file.lengthSync();
-              if (size <= 25 * 1024 * 1024) {
-                bytes = await file.readAsBytes();
+      try {
+        final picker = ImagePicker();
+        final xFiles = await picker.pickMultiImage();
+        if (xFiles.isNotEmpty) {
+          for (final xFile in xFiles) {
+            if (_selectedFiles.length >= 10) break;
+            int size = 0;
+            Uint8List? bytes;
+            if (xFile.path.isNotEmpty) {
+              final file = File(xFile.path);
+              if (file.existsSync()) {
+                size = file.lengthSync();
+                if (size <= 25 * 1024 * 1024) {
+                  bytes = await file.readAsBytes();
+                }
               }
             }
+            if (bytes == null && size == 0) {
+              bytes = await xFile.readAsBytes();
+              size = bytes.length;
+            }
+            _selectedFiles.add(
+              PlatformFile(
+                name: xFile.name.isNotEmpty
+                    ? xFile.name
+                    : 'photo_${_selectedFiles.length + 1}.jpg',
+                size: size,
+                bytes: bytes,
+                path: xFile.path.isNotEmpty ? xFile.path : null,
+              ),
+            );
           }
-          if (bytes == null && size == 0) {
-            bytes = await xFile.readAsBytes();
-            size = bytes.length;
-          }
-          _selectedFiles.add(PlatformFile(
-            name: xFile.name.isNotEmpty ? xFile.name : 'photo_${_selectedFiles.length + 1}.jpg',
-            size: size,
-            bytes: bytes,
-            path: xFile.path.isNotEmpty ? xFile.path : null,
-          ));
+          setState(() {
+            _selectedFile = _selectedFiles.first;
+            _errorMessage = null;
+          });
+          return;
         }
-        setState(() {
-          _selectedFile = _selectedFiles.first;
-          _errorMessage = null;
-        });
-        return;
+      } catch (pickerErr) {
+        debugPrint('[UploadVideoSheet] ImagePicker pickMultiImage fell back: $pickerErr');
       }
-    } catch (e) {
-      // Fallback to FilePicker
+
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
         allowMultiple: true,
-        withData: false,
+        withData: true,
       );
+
       if (result != null && result.files.isNotEmpty) {
         setState(() {
           for (final picked in result.files) {
             if (_selectedFiles.length >= 10) break;
-            _selectedFiles.add(picked);
+            Uint8List? bytes = picked.bytes;
+            if ((bytes == null || bytes.isEmpty) && picked.path != null) {
+              final file = File(picked.path!);
+              if (file.existsSync() && file.lengthSync() <= 25 * 1024 * 1024) {
+                bytes = file.readAsBytesSync();
+              }
+            }
+            _selectedFiles.add(PlatformFile(
+              name: picked.name,
+              size: picked.size,
+              bytes: bytes,
+              path: picked.path,
+            ));
           }
-          _selectedFile = _selectedFiles.first;
+          if (_selectedFiles.isNotEmpty) {
+            _selectedFile = _selectedFiles.first;
+          }
           _errorMessage = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Could not select more photos: $e';
         });
       }
     }
@@ -375,21 +510,23 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
           return;
         }
       } catch (pickerErr) {
-        debugPrint('[UploadVideoSheet] ImagePicker pickThumbnail fell back: $pickerErr');
+        debugPrint(
+          '[UploadVideoSheet] ImagePicker pickThumbnail fell back: $pickerErr',
+        );
       }
 
       // 2. Fallback to FilePicker
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
         allowMultiple: false,
-        withData: false,
+        withData: true,
       );
 
       if (result != null && result.files.isNotEmpty) {
         final picked = result.files.first;
         Uint8List? bytes = picked.bytes;
-        if (bytes == null && picked.path != null) {
+        if ((bytes == null || bytes.isEmpty) && picked.path != null) {
           final file = File(picked.path!);
           if (file.existsSync() && file.lengthSync() <= 10 * 1024 * 1024) {
             bytes = await file.readAsBytes();
@@ -402,6 +539,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
             bytes: bytes,
             path: picked.path,
           );
+          _errorMessage = null;
         });
       }
     } catch (e) {
@@ -420,7 +558,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   }
 
   Future<void> _handleUpload() async {
-    final currentFile = _selectedFiles.isNotEmpty ? _selectedFiles.first : _selectedFile;
+    final currentFile = _selectedFiles.isNotEmpty
+        ? _selectedFiles.first
+        : _selectedFile;
     if (currentFile == null) {
       setState(() {
         _errorMessage = 'Please select a video or photo file.';
@@ -440,10 +580,10 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
     final tagsText = _tagsController.text.trim();
     final List<String> tags = tagsText.isNotEmpty
         ? tagsText
-            .split(RegExp(r'[, ]+'))
-            .map((t) => t.replaceAll('#', '').trim())
-            .where((t) => t.isNotEmpty)
-            .toList()
+              .split(RegExp(r'[, ]+'))
+              .map((t) => t.replaceAll('#', '').trim())
+              .where((t) => t.isNotEmpty)
+              .toList()
         : [];
 
     String finalCaption = caption;
@@ -454,7 +594,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
       }).toList();
       if (missingTags.isNotEmpty) {
         final hashtagsStr = missingTags.map((t) => '#$t').join(' ');
-        finalCaption = finalCaption.isEmpty ? hashtagsStr : '$finalCaption $hashtagsStr';
+        finalCaption = finalCaption.isEmpty
+            ? hashtagsStr
+            : '$finalCaption $hashtagsStr';
       }
     }
 
@@ -478,6 +620,22 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
         return;
       }
 
+      int? soundIdToSend = _selectedSoundId;
+      String? musicTitleToSend;
+      if (_selectedSound != 'None' && _selectedSound.trim().isNotEmpty) {
+        musicTitleToSend = _selectedSound.trim();
+      }
+
+      List<int>? audioBytes = _selectedAudioFile?.bytes;
+      if ((audioBytes == null || audioBytes.isEmpty) && _selectedAudioFile?.path != null) {
+        final localAudio = File(_selectedAudioFile!.path!);
+        if (localAudio.existsSync()) {
+          try {
+            audioBytes = await localAudio.readAsBytes();
+          } catch (_) {}
+        }
+      }
+
       if (_isMultiImage) {
         // Multi-image carousel upload
         final List<String> paths = [];
@@ -495,6 +653,12 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
         final newVideo = await _feedDataSource.uploadVideo(
           caption: finalCaption,
+          soundId: soundIdToSend,
+          musicTitle: musicTitleToSend,
+          audioUrl: widget.initialAudioUrl,
+          audioPath: _selectedAudioFile?.path,
+          audioBytes: audioBytes,
+          audioFilename: _selectedAudioFile?.name ?? 'music.mp3',
           imagePaths: paths.isNotEmpty ? paths : null,
           imageBytesList: bytesList.isNotEmpty ? bytesList : null,
           imageFilenames: filenames,
@@ -510,15 +674,25 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
             SnackBar(
               backgroundColor: const Color(0xFF1E1E24),
               behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               content: Row(
                 children: [
-                  const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 20),
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: Colors.greenAccent,
+                    size: 20,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'Photo carousel posted (${_selectedFiles.length} photos)! Now appearing in feed.',
-                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -532,29 +706,42 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
       final isImage = _isSelectedFileImage;
 
       List<int>? videoBytes = currentFile.bytes;
-      if ((videoBytes == null || videoBytes.isEmpty) && currentFile.path != null) {
+      if ((videoBytes == null || videoBytes.isEmpty) &&
+          currentFile.path != null) {
         final localFile = File(currentFile.path!);
-        if (localFile.existsSync() && localFile.lengthSync() <= 25 * 1024 * 1024) {
+        if (localFile.existsSync() &&
+            localFile.lengthSync() <= 25 * 1024 * 1024) {
           videoBytes = await localFile.readAsBytes();
         }
       }
 
       List<int>? thumbnailBytes = isImage ? null : _selectedThumbnail?.bytes;
-      if (!isImage && (thumbnailBytes == null || thumbnailBytes.isEmpty) && _selectedThumbnail?.path != null) {
+      if (!isImage &&
+          (thumbnailBytes == null || thumbnailBytes.isEmpty) &&
+          _selectedThumbnail?.path != null) {
         final localThumb = File(_selectedThumbnail!.path!);
-        if (localThumb.existsSync() && localThumb.lengthSync() <= 10 * 1024 * 1024) {
+        if (localThumb.existsSync() &&
+            localThumb.lengthSync() <= 10 * 1024 * 1024) {
           thumbnailBytes = await localThumb.readAsBytes();
         }
       }
 
       final newVideo = await _feedDataSource.uploadVideo(
         caption: finalCaption,
+        soundId: soundIdToSend,
+        musicTitle: musicTitleToSend,
+        audioUrl: widget.initialAudioUrl,
+        audioPath: _selectedAudioFile?.path,
+        audioBytes: audioBytes,
+        audioFilename: _selectedAudioFile?.name ?? 'music.mp3',
         videoPath: currentFile.path,
         videoBytes: videoBytes,
         videoFilename: currentFile.name,
         thumbnailPath: isImage ? null : _selectedThumbnail?.path,
         thumbnailBytes: thumbnailBytes,
-        thumbnailFilename: isImage ? 'thumbnail.jpg' : (_selectedThumbnail?.name ?? 'thumbnail.jpg'),
+        thumbnailFilename: isImage
+            ? 'thumbnail.jpg'
+            : (_selectedThumbnail?.name ?? 'thumbnail.jpg'),
         tags: tags,
       );
 
@@ -568,15 +755,27 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
           SnackBar(
             backgroundColor: const Color(0xFF1E1E24),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             content: Row(
               children: [
-                const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 20),
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.greenAccent,
+                  size: 20,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    isImage ? 'Photo posted! Now appearing in feed.' : 'Video posted! Now playing at top of feed.',
-                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                    isImage
+                        ? 'Photo posted! Now appearing in feed.'
+                        : 'Video posted! Now playing at top of feed.',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -670,7 +869,10 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                     ),
                     IconButton(
                       key: const Key('upload_video_sheet_close_btn'),
-                      icon: const Icon(Icons.close_rounded, color: Colors.white),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white,
+                      ),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],
@@ -680,7 +882,10 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
                 // Auth Status Pill / Quick Login Banner
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: _hasToken
                         ? const Color(0xFF1B241E)
@@ -699,7 +904,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                         _hasToken
                             ? Icons.verified_user_rounded
                             : Icons.account_circle_outlined,
-                        color: _hasToken ? Colors.greenAccent : Colors.orangeAccent,
+                        color: _hasToken
+                            ? Colors.greenAccent
+                            : Colors.orangeAccent,
                         size: 18,
                       ),
                       const SizedBox(width: 10),
@@ -709,7 +916,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                               ? 'Logged in as ${_loggedInDisplayName != null && _loggedInDisplayName!.isNotEmpty ? '$_loggedInDisplayName (@$_loggedInUsername)' : '@${_loggedInUsername ?? 'user'}'}'
                               : 'Sign in required to publish videos',
                           style: TextStyle(
-                            color: _hasToken ? Colors.greenAccent : Colors.orangeAccent,
+                            color: _hasToken
+                                ? Colors.greenAccent
+                                : Colors.orangeAccent,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
@@ -719,21 +928,35 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                         TextButton(
                           onPressed: _isLoggingIn ? null : _quickLogin,
                           style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 4,
+                            ),
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            backgroundColor: Colors.white.withValues(alpha: 0.12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            backgroundColor: Colors.white.withValues(
+                              alpha: 0.12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                           child: _isLoggingIn
                               ? const SizedBox(
                                   width: 14,
                                   height: 14,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : const Text(
                                   'Sign In (@bunheng)',
-                                  style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                         ),
                     ],
@@ -761,7 +984,10 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                     onTap: _isUploading ? null : _pickVideo,
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 24,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF1E1E24),
                         borderRadius: BorderRadius.circular(16),
@@ -825,16 +1051,29 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
-                                color: Colors.blueAccent.withValues(alpha: 0.15),
+                                color: Colors.blueAccent.withValues(
+                                  alpha: 0.15,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.4)),
+                                border: Border.all(
+                                  color: Colors.blueAccent.withValues(
+                                    alpha: 0.4,
+                                  ),
+                                ),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.view_carousel_rounded, color: Colors.blueAccent, size: 14),
+                                  const Icon(
+                                    Icons.view_carousel_rounded,
+                                    color: Colors.blueAccent,
+                                    size: 14,
+                                  ),
                                   const SizedBox(width: 4),
                                   Text(
                                     'Photo Carousel (${_selectedFiles.length}/10)',
@@ -851,24 +1090,48 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                             if (_selectedFiles.length < 10)
                               TextButton.icon(
                                 key: const Key('upload_add_more_photos_button'),
-                                onPressed: _isUploading ? null : _pickMorePhotos,
-                                icon: const Icon(Icons.add_rounded, size: 16, color: Colors.white70),
-                                label: const Text('Add', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                                onPressed: _isUploading
+                                    ? null
+                                    : _pickMorePhotos,
+                                icon: const Icon(
+                                  Icons.add_rounded,
+                                  size: 16,
+                                  color: Colors.white70,
+                                ),
+                                label: const Text(
+                                  'Add',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
                                 style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                   minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
                                 ),
                               ),
                             IconButton(
                               key: const Key('upload_change_video_button'),
-                              icon: const Icon(Icons.sync_rounded, color: Colors.white70, size: 20),
+                              icon: const Icon(
+                                Icons.sync_rounded,
+                                color: Colors.white70,
+                                size: 20,
+                              ),
                               tooltip: 'Reselect photos',
                               onPressed: _isUploading ? null : _pickVideo,
                             ),
                             IconButton(
                               key: const Key('upload_remove_video_button'),
-                              icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 20),
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                color: Colors.white70,
+                                size: 20,
+                              ),
                               tooltip: 'Clear all',
                               onPressed: _isUploading
                                   ? null
@@ -887,7 +1150,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                           child: ListView.separated(
                             scrollDirection: Axis.horizontal,
                             itemCount: _selectedFiles.length + (_selectedFiles.length < 10 ? 1 : 0),
-                            separatorBuilder: (_, __) => const SizedBox(width: 8),
+                            separatorBuilder: (_, _) => const SizedBox(width: 8),
                             itemBuilder: (context, index) {
                               if (index == _selectedFiles.length) {
                                 return InkWell(
@@ -897,16 +1160,29 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                                     width: 64,
                                     height: 74,
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.05),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.05,
+                                      ),
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(color: Colors.white24),
                                     ),
                                     child: const Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
-                                        Icon(Icons.add_rounded, color: Colors.white70, size: 22),
+                                        Icon(
+                                          Icons.add_rounded,
+                                          color: Colors.white70,
+                                          size: 22,
+                                        ),
                                         SizedBox(height: 2),
-                                        Text('Add', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                                        Text(
+                                          'Add',
+                                          style: TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 10,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -922,20 +1198,37 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                                       width: 64,
                                       height: 74,
                                       color: const Color(0xFF2B2B36),
-                                      child: file.bytes != null && file.bytes!.isNotEmpty
-                                          ? Image.memory(file.bytes!, fit: BoxFit.cover)
-                                          : (file.path != null && File(file.path!).existsSync())
-                                              ? Image.file(File(file.path!), fit: BoxFit.cover)
-                                              : const Icon(Icons.image_rounded, color: Colors.white54),
+                                      child:
+                                          file.bytes != null &&
+                                              file.bytes!.isNotEmpty
+                                          ? Image.memory(
+                                              file.bytes!,
+                                              fit: BoxFit.cover,
+                                            )
+                                          : (file.path != null &&
+                                                File(file.path!).existsSync())
+                                          ? Image.file(
+                                              File(file.path!),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : const Icon(
+                                              Icons.image_rounded,
+                                              color: Colors.white54,
+                                            ),
                                     ),
                                   ),
                                   Positioned(
                                     top: 4,
                                     left: 4,
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 2,
+                                      ),
                                       decoration: BoxDecoration(
-                                        color: Colors.black.withValues(alpha: 0.7),
+                                        color: Colors.black.withValues(
+                                          alpha: 0.7,
+                                        ),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: Text(
@@ -959,7 +1252,8 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                                               setState(() {
                                                 _selectedFiles.removeAt(index);
                                                 if (_selectedFiles.isNotEmpty) {
-                                                  _selectedFile = _selectedFiles.first;
+                                                  _selectedFile =
+                                                      _selectedFiles.first;
                                                 } else {
                                                   _selectedFile = null;
                                                 }
@@ -968,10 +1262,16 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                                       child: Container(
                                         padding: const EdgeInsets.all(2),
                                         decoration: BoxDecoration(
-                                          color: Colors.black.withValues(alpha: 0.75),
+                                          color: Colors.black.withValues(
+                                            alpha: 0.75,
+                                          ),
                                           shape: BoxShape.circle,
                                         ),
-                                        child: const Icon(Icons.close_rounded, size: 12, color: Colors.white),
+                                        child: const Icon(
+                                          Icons.close_rounded,
+                                          size: 12,
+                                          color: Colors.white,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -983,7 +1283,10 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                         const SizedBox(height: 8),
                         Text(
                           '${_selectedFiles.first.name} (+${_selectedFiles.length - 1} more)',
-                          style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 11),
+                          style: const TextStyle(
+                            color: Color(0xFF8E8E93),
+                            fontSize: 11,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -994,7 +1297,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                   // Selected State: Single File Preview Tile
                   Builder(
                     builder: (context) {
-                      final currentDisplayFile = _selectedFiles.isNotEmpty ? _selectedFiles.first : _selectedFile!;
+                      final currentDisplayFile = _selectedFiles.isNotEmpty
+                          ? _selectedFiles.first
+                          : _selectedFile!;
                       return Container(
                         key: const Key('upload_selected_video_tile'),
                         padding: const EdgeInsets.all(14),
@@ -1019,7 +1324,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                                       ? Image.memory(
                                           currentDisplayFile.bytes!,
                                           fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) => const Icon(
+                                          errorBuilder: (_, _, _) => const Icon(
                                             Icons.image_outlined,
                                             color: Colors.white70,
                                             size: 24,
@@ -1030,7 +1335,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                                           ? Image.file(
                                               File(currentDisplayFile.path!),
                                               fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) => const Icon(
+                                              errorBuilder: (_, _, _) => const Icon(
                                                 Icons.image_outlined,
                                                 color: Colors.white70,
                                                 size: 24,
@@ -1087,19 +1392,35 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                             if (_isSelectedFileImage)
                               IconButton(
                                 key: const Key('upload_add_more_photos_button'),
-                                icon: const Icon(Icons.add_photo_alternate_rounded, color: Colors.blueAccent, size: 20),
+                                icon: const Icon(
+                                  Icons.add_photo_alternate_rounded,
+                                  color: Colors.blueAccent,
+                                  size: 20,
+                                ),
                                 tooltip: 'Add more photos to make carousel',
-                                onPressed: _isUploading ? null : _pickMorePhotos,
+                                onPressed: _isUploading
+                                    ? null
+                                    : _pickMorePhotos,
                               ),
                             IconButton(
                               key: const Key('upload_change_video_button'),
-                              icon: const Icon(Icons.sync_rounded, color: Colors.white70, size: 20),
-                              tooltip: _isSelectedFileImage ? 'Change photo' : 'Change video',
+                              icon: const Icon(
+                                Icons.sync_rounded,
+                                color: Colors.white70,
+                                size: 20,
+                              ),
+                              tooltip: _isSelectedFileImage
+                                  ? 'Change photo'
+                                  : 'Change video',
                               onPressed: _isUploading ? null : _pickVideo,
                             ),
                             IconButton(
                               key: const Key('upload_remove_video_button'),
-                              icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 20),
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                color: Colors.white70,
+                                size: 20,
+                              ),
                               tooltip: 'Remove',
                               onPressed: _isUploading
                                   ? null
@@ -1139,7 +1460,10 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                       onTap: _isUploading ? null : _pickThumbnail,
                       borderRadius: BorderRadius.circular(16),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF1E1E24),
                           borderRadius: BorderRadius.circular(16),
@@ -1220,7 +1544,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                                   ? Image.memory(
                                       _selectedThumbnail!.bytes!,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => const Icon(
+                                      errorBuilder: (_, _, _) => const Icon(
                                         Icons.image_outlined,
                                         color: Colors.white70,
                                         size: 22,
@@ -1231,7 +1555,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                                       ? Image.file(
                                           File(_selectedThumbnail!.path!),
                                           fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) => const Icon(
+                                          errorBuilder: (_, _, _) => const Icon(
                                             Icons.image_outlined,
                                             color: Colors.white70,
                                             size: 22,
@@ -1273,13 +1597,21 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                           const SizedBox(width: 8),
                           IconButton(
                             key: const Key('upload_change_thumbnail_button'),
-                            icon: const Icon(Icons.sync_rounded, color: Colors.white70, size: 20),
+                            icon: const Icon(
+                              Icons.sync_rounded,
+                              color: Colors.white70,
+                              size: 20,
+                            ),
                             tooltip: 'Change thumbnail',
                             onPressed: _isUploading ? null : _pickThumbnail,
                           ),
                           IconButton(
                             key: const Key('upload_remove_thumbnail_button'),
-                            icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 20),
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              color: Colors.white70,
+                              size: 20,
+                            ),
                             tooltip: 'Remove thumbnail',
                             onPressed: _isUploading
                                 ? null
@@ -1294,6 +1626,222 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                     ),
                   ],
                 ],
+
+                const SizedBox(height: 18),
+
+                // Music / Sound Section (Optional)
+                const Text(
+                  'MUSIC / SOUND (OPTIONAL)',
+                  style: TextStyle(
+                    color: Color(0xFF8E8E93),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    // Option 1: None (Default)
+                    () {
+                      final isSelected = _selectedSound == 'None' || _selectedSound.isEmpty;
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () {
+                          setState(() {
+                            _selectedSound = 'None';
+                            _selectedSoundId = null;
+                            _customSoundController.clear();
+                            _selectedAudioFile = null;
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: isSelected ? Colors.white : const Color(0xFF1E1E24),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isSelected ? Colors.white : const Color(0xFF323238),
+                              width: 1.0,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.music_off_rounded,
+                                size: 14,
+                                color: isSelected ? Colors.black : Colors.white70,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'None',
+                                style: TextStyle(
+                                  color: isSelected ? Colors.black : Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }(),
+
+                    // Option 2: Dynamic Available Sounds from DB
+                    if (_availableSounds.isNotEmpty)
+                      ..._availableSounds.map((sound) {
+                        final isSelected = _selectedSoundId == sound.id ||
+                            (_selectedSound.toLowerCase() == sound.title.toLowerCase() && _selectedSound != 'None');
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () {
+                            setState(() {
+                              _selectedSound = sound.title;
+                              _selectedSoundId = sound.id;
+                              _customSoundController.clear();
+                              _selectedAudioFile = null;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: isSelected ? Colors.white : const Color(0xFF1E1E24),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isSelected ? Colors.white : const Color(0xFF323238),
+                                width: 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.music_note_rounded,
+                                  size: 14,
+                                  color: isSelected ? Colors.black : Colors.white70,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  sound.title,
+                                  style: TextStyle(
+                                    color: isSelected ? Colors.black : Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      })
+                    else
+                      ...[
+                        'Phnom Penh Sunset Lo-Fi',
+                        'Seven7 Team Anthem',
+                        'Obsidian Pulse Beat',
+                        'Lo-Fi Chill',
+                      ].map((sound) {
+                        final isSelected = _selectedSound == sound;
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () {
+                            setState(() {
+                              _selectedSound = sound;
+                              _selectedSoundId = null;
+                              _customSoundController.clear();
+                              _selectedAudioFile = null;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: isSelected ? Colors.white : const Color(0xFF1E1E24),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isSelected ? Colors.white : const Color(0xFF323238),
+                                width: 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.music_note_rounded,
+                                  size: 14,
+                                  color: isSelected ? Colors.black : Colors.white70,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  sound,
+                                  style: TextStyle(
+                                    color: isSelected ? Colors.black : Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        key: const Key('upload_custom_sound_field'),
+                        controller: _customSoundController,
+                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                        decoration: InputDecoration(
+                          hintText: 'Or enter custom sound title...',
+                          hintStyle: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13),
+                          filled: true,
+                          fillColor: const Color(0xFF1E1E24),
+                          prefixIcon: const Icon(Icons.audiotrack_rounded, color: Colors.white70, size: 18),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: Color(0xFF323238), width: 1.0),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: Colors.white, width: 1.5),
+                          ),
+                        ),
+                        onChanged: (val) {
+                          setState(() {
+                            if (val.trim().isNotEmpty) {
+                              _selectedSound = val.trim();
+                              _selectedSoundId = null;
+                            } else {
+                              _selectedSound = 'None';
+                              _selectedSoundId = null;
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Pick audio file from device',
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xFF1E1E24),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: const BorderSide(color: Color(0xFF323238), width: 1.0),
+                        ),
+                        padding: const EdgeInsets.all(12),
+                      ),
+                      icon: const Icon(Icons.file_upload_outlined, color: Colors.white, size: 20),
+                      onPressed: _pickAudioFile,
+                    ),
+                  ],
+                ),
 
                 const SizedBox(height: 18),
 
@@ -1316,18 +1864,30 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                   style: const TextStyle(color: Colors.white, fontSize: 14),
                   decoration: InputDecoration(
                     hintText: 'Write a caption...',
-                    hintStyle: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
+                    hintStyle: const TextStyle(
+                      color: Color(0xFF8E8E93),
+                      fontSize: 14,
+                    ),
                     filled: true,
                     fillColor: const Color(0xFF1E1E24),
-                    counterStyle: const TextStyle(color: Color(0xFF8E8E93), fontSize: 11),
+                    counterStyle: const TextStyle(
+                      color: Color(0xFF8E8E93),
+                      fontSize: 11,
+                    ),
                     contentPadding: const EdgeInsets.all(14),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: Color(0xFF323238), width: 1.0),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF323238),
+                        width: 1.0,
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: Colors.white, width: 1.5),
+                      borderSide: const BorderSide(
+                        color: Colors.white,
+                        width: 1.5,
+                      ),
                     ),
                   ),
                 ),
@@ -1348,40 +1908,55 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: ['#vilo', '#trending', '#fyp', '#viral', '#coding', '#sunset']
-                      .map(
-                        (tag) => InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () {
-                            final current = _tagsController.text.trim();
-                            final tagWord = tag.replaceAll('#', '');
-                            if (!current.contains(tagWord) && !current.contains(tag)) {
-                              if (current.isEmpty) {
-                                _tagsController.text = tag;
-                              } else {
-                                _tagsController.text = '$current, $tag';
-                              }
-                            }
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1E1E24),
+                  children:
+                      [
+                            '#vilo',
+                            '#trending',
+                            '#fyp',
+                            '#viral',
+                            '#coding',
+                            '#sunset',
+                          ]
+                          .map(
+                            (tag) => InkWell(
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: const Color(0xFF323238), width: 1.0),
-                            ),
-                            child: Text(
-                              tag,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
+                              onTap: () {
+                                final current = _tagsController.text.trim();
+                                final tagWord = tag.replaceAll('#', '');
+                                if (!current.contains(tagWord) &&
+                                    !current.contains(tag)) {
+                                  if (current.isEmpty) {
+                                    _tagsController.text = tag;
+                                  } else {
+                                    _tagsController.text = '$current, $tag';
+                                  }
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1E1E24),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: const Color(0xFF323238),
+                                    width: 1.0,
+                                  ),
+                                ),
+                                child: Text(
+                                  tag,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                        ),
-                      )
-                      .toList(),
+                          )
+                          .toList(),
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -1390,18 +1965,34 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                   style: const TextStyle(color: Colors.white, fontSize: 13),
                   decoration: InputDecoration(
                     hintText: '#vilo, #trending',
-                    hintStyle: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13),
+                    hintStyle: const TextStyle(
+                      color: Color(0xFF8E8E93),
+                      fontSize: 13,
+                    ),
                     filled: true,
                     fillColor: const Color(0xFF1E1E24),
-                    prefixIcon: const Icon(Icons.tag_rounded, color: Colors.white70, size: 20),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    prefixIcon: const Icon(
+                      Icons.tag_rounded,
+                      color: Colors.white70,
+                      size: 20,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: Color(0xFF323238), width: 1.0),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF323238),
+                        width: 1.0,
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: Colors.white, width: 1.5),
+                      borderSide: const BorderSide(
+                        color: Colors.white,
+                        width: 1.5,
+                      ),
                     ),
                   ),
                 ),
@@ -1413,16 +2004,25 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                     decoration: BoxDecoration(
                       color: const Color(0xFF2C1A1D),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6)),
+                      border: Border.all(
+                        color: Colors.redAccent.withValues(alpha: 0.6),
+                      ),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 18),
+                        const Icon(
+                          Icons.error_outline_rounded,
+                          color: Colors.redAccent,
+                          size: 18,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             _errorMessage!,
-                            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                            style: const TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ],
@@ -1464,7 +2064,9 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                               Text(
                                 _isMultiImage
                                     ? 'Uploading Carousel...'
-                                    : (_isSelectedFileImage ? 'Uploading Photo...' : 'Uploading Video...'),
+                                    : (_isSelectedFileImage
+                                          ? 'Uploading Photo...'
+                                          : 'Uploading Video...'),
                                 style: const TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
@@ -1476,12 +2078,18 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
                         : Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.arrow_upward_rounded, size: 20, color: Colors.black),
+                              const Icon(
+                                Icons.arrow_upward_rounded,
+                                size: 20,
+                                color: Colors.black,
+                              ),
                               const SizedBox(width: 8),
                               Text(
                                 _isMultiImage
                                     ? 'Post Carousel (${_selectedFiles.length} Photos)'
-                                    : (_isSelectedFileImage ? 'Post Photo' : 'Post Video'),
+                                    : (_isSelectedFileImage
+                                          ? 'Post Photo'
+                                          : 'Post Video'),
                                 style: const TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,

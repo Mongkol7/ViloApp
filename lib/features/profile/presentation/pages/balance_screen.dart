@@ -32,10 +32,7 @@ class BalanceScreen extends StatelessWidget {
                 const SizedBox(width: 4),
                 Text(
                   'Secure',
-                  style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 11,
-                  ),
+                  style: TextStyle(color: Colors.grey[400], fontSize: 11),
                 ),
               ],
             ),
@@ -61,9 +58,17 @@ class BalanceScreen extends StatelessWidget {
                   'Estimated balance USD',
                   style: TextStyle(color: Colors.grey[400], fontSize: 14),
                 ),
-                const Icon(Icons.keyboard_arrow_down, color: Colors.grey, size: 18),
+                const Icon(
+                  Icons.keyboard_arrow_down,
+                  color: Colors.grey,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
-                const Icon(Icons.visibility_outlined, color: Colors.grey, size: 18),
+                const Icon(
+                  Icons.visibility_outlined,
+                  color: Colors.grey,
+                  size: 18,
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -83,7 +88,7 @@ class BalanceScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
-            
+
             // Coins Section
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 40),
@@ -98,25 +103,48 @@ class BalanceScreen extends StatelessWidget {
                   const CircleAvatar(
                     radius: 10,
                     backgroundColor: Colors.orange,
-                    child: Text('d', style: TextStyle(fontSize: 12, color: Colors.white)),
+                    child: Text(
+                      'd',
+                      style: TextStyle(fontSize: 12, color: Colors.white),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   const Text('Coins', style: TextStyle(color: Colors.white)),
                   const SizedBox(width: 4),
-                  const Text('0', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  const Text(
+                    '0',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(width: 12),
                   Container(width: 1, height: 15, color: Colors.grey[700]),
                   const SizedBox(width: 12),
-                  const Icon(Icons.card_giftcard, color: Colors.pinkAccent, size: 16),
+                  const Icon(
+                    Icons.card_giftcard,
+                    color: Colors.pinkAccent,
+                    size: 16,
+                  ),
                   const SizedBox(width: 4),
-                  const Text('Get Coins', style: TextStyle(color: Colors.pinkAccent, fontWeight: FontWeight.bold)),
-                  const Icon(Icons.chevron_right, color: Colors.pinkAccent, size: 16),
+                  const Text(
+                    'Get Coins',
+                    style: TextStyle(
+                      color: Colors.pinkAccent,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right,
+                    color: Colors.pinkAccent,
+                    size: 16,
+                  ),
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 30),
-            
+
             // Transactions Card
             _buildActionCard(
               child: Row(
@@ -124,18 +152,29 @@ class BalanceScreen extends StatelessWidget {
                 children: [
                   const Text(
                     'Transactions',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   Row(
                     children: [
-                      Text('View all', style: TextStyle(color: Colors.grey[400], fontSize: 14)),
-                      Icon(Icons.chevron_right, color: Colors.grey[400], size: 18),
+                      Text(
+                        'View all',
+                        style: TextStyle(color: Colors.grey[400], fontSize: 14),
+                      ),
+                      Icon(
+                        Icons.chevron_right,
+                        color: Colors.grey[400],
+                        size: 18,
+                      ),
                     ],
                   ),
                 ],
               ),
             ),
-            
+
             // Recharge Offer Card
             _buildActionCard(
               child: Row(
@@ -148,15 +187,26 @@ class BalanceScreen extends StatelessWidget {
                           children: [
                             Text(
                               'First recharge offer',
-                              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                            Icon(Icons.chevron_right, color: Colors.white, size: 18),
+                            Icon(
+                              Icons.chevron_right,
+                              color: Colors.white,
+                              size: 18,
+                            ),
                           ],
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'Get Gifts and bonus Coins',
-                          style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 13,
+                          ),
                         ),
                       ],
                     ),
@@ -164,18 +214,24 @@ class BalanceScreen extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.pinkAccent.withOpacity(0.2),
+                      color: Colors.pinkAccent.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.pinkAccent.withOpacity(0.5)),
+                      border: Border.all(
+                        color: Colors.pinkAccent.withValues(alpha: 0.5),
+                      ),
                     ),
-                    child: const Icon(Icons.card_giftcard, color: Colors.pinkAccent, size: 32),
+                    child: const Icon(
+                      Icons.card_giftcard,
+                      color: Colors.pinkAccent,
+                      size: 32,
+                    ),
                   ),
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Services Section
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -183,7 +239,11 @@ class BalanceScreen extends StatelessWidget {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Services',
-                  style: TextStyle(color: Colors.grey[400], fontSize: 14, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
@@ -192,9 +252,15 @@ class BalanceScreen extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildServiceItem(Icons.account_balance_wallet, 'LIVE rewards'),
+                  _buildServiceItem(
+                    Icons.account_balance_wallet,
+                    'LIVE rewards',
+                  ),
                   _buildServiceItem(Icons.bar_chart, 'Monetisation'),
-                  _buildServiceItem(Icons.calendar_today, 'Subscriptions\nManager'),
+                  _buildServiceItem(
+                    Icons.calendar_today,
+                    'Subscriptions\nManager',
+                  ),
                 ],
               ),
             ),
@@ -222,7 +288,7 @@ class BalanceScreen extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
+            color: Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(icon, color: Colors.white, size: 28),

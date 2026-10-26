@@ -13,10 +13,14 @@ import 'package:viloapp/features/profile/presentation/pages/settings_and_privacy
 import 'package:viloapp/features/profile/presentation/screens/profile_screen.dart';
 import 'package:viloapp/features/profile/presentation/screens/public_profile_screen.dart';
 import 'package:viloapp/features/feed/data/models/video_feed_model.dart';
+import 'package:viloapp/features/feed/data/models/video_model.dart';
 import 'package:viloapp/features/feed/presentation/pages/home_feed_page.dart';
 import 'package:viloapp/features/search_discover/presentation/pages/search_screen.dart';
 import 'package:viloapp/features/feed/presentation/pages/sound_detail_page.dart';
 import 'package:viloapp/features/feed/presentation/pages/video_feed_page.dart';
+import 'package:viloapp/features/auth/data/datasources/token_storage.dart';
+import 'package:viloapp/features/profile/data/datasources/profile_sync_service.dart';
+import 'package:viloapp/features/profile/data/datasources/profile_remote_data_source.dart';
 
 Widget _buildTestApp({required Widget child}) {
   return MaterialApp(
@@ -27,10 +31,13 @@ Widget _buildTestApp({required Widget child}) {
 }
 
 void main() {
-  setUp(() {
+  setUp(() async {
     ThoughtStoryManager.instance.deleteStory();
     ChatManager.instance.reset();
     ChatManager.immediateRepliesForTesting = true;
+    await TokenStorage.instance.clear();
+    ProfileSyncService.instance.clear();
+    ProfileRemoteDataSource.instance.clearCache();
   });
 
   testWidgets('ViloFloatingBottomBar renders navigation icons and action plus button', (WidgetTester tester) async {
@@ -312,14 +319,14 @@ void main() {
 
     // Verify initial users in Followers tab
     expect(find.text('Lim Bunheng'), findsOneWidget);
-    expect(find.text('Chhuon Rithysak'), findsOneWidget);
+    expect(find.text('Sok Rithysak'), findsOneWidget);
 
     // Search for "bunheng"
     await tester.enterText(find.byType(TextField), 'bunheng');
     await tester.pumpAndSettle();
 
     expect(find.text('Lim Bunheng'), findsOneWidget);
-    expect(find.text('Chhuon Rithysak'), findsNothing);
+    expect(find.text('Sok Rithysak'), findsNothing);
 
     // Clear search
     await tester.enterText(find.byType(TextField), '');
@@ -750,15 +757,39 @@ void main() {
   });
 
   testWidgets('VideoFeedPage renders real DB creator account with follow status and hides + button when followed', (WidgetTester tester) async {
+    const testVideo = VideoModel(
+      id: 2,
+      creatorId: 2,
+      username: '@bunheng',
+      displayName: 'Lim Bunheng',
+      caption: 'Night walk through the neon streets #citylife #neon #cyberpunk',
+      videoUrl: 'https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4',
+      isFollowing: true,
+      musicTitle: 'Original Sound - @bunheng',
+    );
+    await tester.pumpWidget(_buildTestApp(child: const VideoFeedPage(feedType: 'FOLLOWING', isActive: false, initialVideos: [testVideo])));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Verify creator from DB is rendered and has followed status
+    final followedUsernames = ['@bunheng', '@rithysak', '@setkimliza', '@trenmono', '@tryphien', '@nenseanghai'];
+    expect(
+      find.byWidgetPredicate((widget) => widget is Text && followedUsernames.contains(widget.data)),
+      findsOneWidget,
+    );
+    // Because followed creators have isFollowing: true, + icon is NOT shown on avatar
+    expect(find.byIcon(Icons.add), findsNothing);
+  });
+
+  testWidgets('VideoFeedPage Following tab displays clean empty state message when following list is empty', (WidgetTester tester) async {
     await tester.pumpWidget(_buildTestApp(child: const VideoFeedPage(feedType: 'FOLLOWING', isActive: false)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    // Verify creator from DB is rendered (@bunheng)
-    expect(find.text('@bunheng'), findsOneWidget);
-    expect(find.text('Night walk through the neon streets #citylife #neon #cyberpunk'), findsOneWidget);
-    // Because bunheng is already followed, + icon is NOT shown on avatar
-    expect(find.byIcon(Icons.add), findsNothing);
+    expect(
+      find.text('No posts from people you follow yet. Follow creators to see their latest videos and photos here!'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('PublicProfileScreen renders creator clean username without double @ and shows video grid', (WidgetTester tester) async {
@@ -806,6 +837,7 @@ void main() {
       videoUrl: 'assets/videos/vid2.mp4',
       caption: 'Instant profile video test',
       musicTitle: 'Cyber Beats',
+      views: '999K',
       likes: '999K',
       comments: '1K',
       saves: '500',

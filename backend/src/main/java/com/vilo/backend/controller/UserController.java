@@ -18,9 +18,15 @@ import java.util.Map;
 public class UserController {
 
     private final UserService userService;
+    private final com.vilo.backend.service.VideoService videoService;
+    private final com.vilo.backend.service.SoundService soundService;
 
-    public UserController(UserService userService) {
+    public UserController(UserService userService,
+                          com.vilo.backend.service.VideoService videoService,
+                          com.vilo.backend.service.SoundService soundService) {
         this.userService = userService;
+        this.videoService = videoService;
+        this.soundService = soundService;
     }
 
     @GetMapping("/me")
@@ -94,5 +100,44 @@ public class UserController {
         Long id = userService.resolveUserId(identifier);
         userService.unfollow(currentUser, id);
         return ResponseEntity.ok(ApiResponse.ok("Unfollowed successfully", Map.of("following", false, "userId", id)));
+    }
+
+    @GetMapping("/{identifier}/sounds")
+    public ResponseEntity<ApiResponse<List<com.vilo.backend.dto.SoundResponse>>> getUserSounds(
+            @PathVariable String identifier
+    ) {
+        Long id = null;
+        try {
+            id = Long.parseLong(identifier);
+        } catch (NumberFormatException ignored) {}
+        List<com.vilo.backend.dto.SoundResponse> sounds = soundService.getUserSounds(id, identifier);
+        return ResponseEntity.ok(ApiResponse.ok("User sounds retrieved", sounds));
+    }
+
+    @GetMapping("/{identifier}/videos")
+    public ResponseEntity<ApiResponse<List<com.vilo.backend.dto.VideoResponse>>> getUserVideos(
+            @PathVariable String identifier,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        List<com.vilo.backend.dto.VideoResponse> videos = videoService.getUserVideos(identifier, currentUser);
+        return ResponseEntity.ok(ApiResponse.ok("User videos retrieved", videos));
+    }
+
+    @GetMapping("/{identifier}/saved")
+    public ResponseEntity<ApiResponse<List<com.vilo.backend.dto.VideoResponse>>> getUserSavedVideos(
+            @PathVariable String identifier
+    ) {
+        Long id = userService.resolveUserId(identifier);
+        List<com.vilo.backend.dto.VideoResponse> savedVideos = videoService.getSavedVideos(id);
+        return ResponseEntity.ok(ApiResponse.ok("User saved videos retrieved", savedVideos));
+    }
+
+    @GetMapping("/{identifier}/liked")
+    public ResponseEntity<ApiResponse<List<com.vilo.backend.dto.VideoResponse>>> getUserLikedVideos(
+            @PathVariable String identifier
+    ) {
+        Long id = userService.resolveUserId(identifier);
+        List<com.vilo.backend.dto.VideoResponse> likedVideos = videoService.getLikedVideos(id);
+        return ResponseEntity.ok(ApiResponse.ok("User liked videos retrieved", likedVideos));
     }
 }

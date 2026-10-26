@@ -1,3 +1,5 @@
+import '../../../feed/data/models/video_model.dart';
+
 class TrendingVideo {
   final String id;
   final String thumbnailUrl;
@@ -6,6 +8,15 @@ class TrendingVideo {
   final String authorUsername;
   final String authorName;
   final List<String> tags;
+  final String videoUrl;
+  final String caption;
+  final int? creatorId;
+  final String? avatarUrl;
+  final int viewCount;
+  final int likeCount;
+  final int commentCount;
+  final int saveCount;
+  final String musicTitle;
 
   const TrendingVideo({
     required this.id,
@@ -15,7 +26,41 @@ class TrendingVideo {
     this.authorUsername = '',
     this.authorName = '',
     this.tags = const [],
+    this.videoUrl = '',
+    this.caption = '',
+    this.creatorId,
+    this.avatarUrl,
+    this.viewCount = 0,
+    this.likeCount = 0,
+    this.commentCount = 0,
+    this.saveCount = 0,
+    this.musicTitle = 'Original Sound',
   });
+
+  /// Converts this search result video into a full VideoModel ready for playback in VideoFeedPage
+  VideoModel toVideoModel() {
+    final int vidId = int.tryParse(id) ?? id.hashCode;
+    final int authorId = creatorId ?? (vidId > 0 ? vidId : 1);
+    final String cleanUsername = authorUsername.replaceAll('@', '');
+    final String cleanDisplayName = authorName.isNotEmpty ? authorName : cleanUsername;
+
+    return VideoModel(
+      id: vidId,
+      creatorId: authorId,
+      username: cleanUsername,
+      displayName: cleanDisplayName,
+      avatarUrl: avatarUrl,
+      caption: caption.isNotEmpty ? caption : title,
+      videoUrl: videoUrl.isNotEmpty ? videoUrl : (thumbnailUrl.endsWith('.mp4') ? thumbnailUrl : 'assets/videos/vid1.mp4'),
+      thumbnailUrl: thumbnailUrl,
+      musicTitle: musicTitle,
+      viewCount: viewCount > 0 ? viewCount : 1200,
+      likeCount: likeCount,
+      commentCount: commentCount,
+      saveCount: saveCount,
+      tags: tags,
+    );
+  }
 }
 
 class SearchAccount {

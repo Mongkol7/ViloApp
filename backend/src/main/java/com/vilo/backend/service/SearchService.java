@@ -9,10 +9,14 @@ import com.vilo.backend.entity.Hashtag;
 import com.vilo.backend.entity.SearchHistory;
 import com.vilo.backend.entity.Sound;
 import com.vilo.backend.entity.User;
+import com.vilo.backend.entity.Video;
+import com.vilo.backend.entity.VideoTag;
 import com.vilo.backend.repository.HashtagRepository;
 import com.vilo.backend.repository.SearchHistoryRepository;
 import com.vilo.backend.repository.SoundRepository;
 import com.vilo.backend.repository.UserRepository;
+import com.vilo.backend.repository.VideoRepository;
+import com.vilo.backend.repository.VideoTagRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,15 +31,21 @@ public class SearchService {
     private final SoundRepository soundRepository;
     private final HashtagRepository hashtagRepository;
     private final SearchHistoryRepository searchHistoryRepository;
+    private final VideoRepository videoRepository;
+    private final VideoTagRepository videoTagRepository;
 
     public SearchService(UserRepository userRepository,
                          SoundRepository soundRepository,
                          HashtagRepository hashtagRepository,
-                         SearchHistoryRepository searchHistoryRepository) {
+                         SearchHistoryRepository searchHistoryRepository,
+                         VideoRepository videoRepository,
+                         VideoTagRepository videoTagRepository) {
         this.userRepository = userRepository;
         this.soundRepository = soundRepository;
         this.hashtagRepository = hashtagRepository;
         this.searchHistoryRepository = searchHistoryRepository;
+        this.videoRepository = videoRepository;
+        this.videoTagRepository = videoTagRepository;
     }
 
     @Transactional
@@ -85,6 +95,18 @@ public class SearchService {
                     })
                     .collect(Collectors.toList());
             response.setUsers(userDtos);
+
+            // User search also returns the public videos posted by the
+            // matched accounts so the client can show them below the users.
+            if ("USERS".equals(normalizedType) && !users.isEmpty()) {
+                List<Map<String, Object>> userVideoDtos = videoRepository
+                        .findByCreatorInOrderByCreatedAtDesc(users, PageRequest.of(0, 30))
+                        .getContent()
+                        .stream()
+                        .map(this::convertVideoToMap)
+                        .collect(Collectors.toList());
+                response.setTrendingVideos(userVideoDtos);
+            }
         }
 
         // 2. Search Sounds
@@ -97,7 +119,7 @@ public class SearchService {
             response.setSounds(soundDtos);
         }
 
-        // 3. Search Hashtags
+        // 3. Search Hashtags (from Hashtag entity + VideoTag table)
         if ("ALL".equals(normalizedType) || "HASHTAGS".equals(normalizedType)) {
             String tagQuery = trimmed.replaceAll("^#+", "").trim();
             List<Hashtag> hashtags = tagQuery.isEmpty()
@@ -106,13 +128,64 @@ public class SearchService {
             List<HashtagResponse> tagDtos = hashtags.stream()
                     .map(HashtagResponse::fromEntity)
                     .collect(Collectors.toList());
+
+            if (videoTagRepository != null && !tagQuery.isEmpty()) {
+                Set<String> seenTags = tagDtos.stream()
+                        .map(h -> h.getTag().toLowerCase())
+                        .collect(Collectors.toSet());
+                List<String> videoTags = videoTagRepository.searchTagNames(tagQuery, PageRequest.of(0, 10));
+                for (String vt : videoTags) {
+                    if (vt != null && !vt.isBlank() && seenTags.add(vt.toLowerCase())) {
+                        HashtagResponse customTag = new HashtagResponse();
+                        customTag.setTag(vt);
+                        customTag.setFormattedTag("#" + vt);
+                        customTag.setUsageCount(1L);
+                        customTag.setFormattedUsageCount("1 post");
+                        customTag.setIsTrending(false);
+                        tagDtos.add(customTag);
+                    }
+                }
+            }
+
             response.setHashtags(tagDtos);
         }
 
-        // 4. Trending Videos matching query
+        // 4. Videos matching query (searches real DB videos by title, caption, hashtag, author)
         if ("ALL".equals(normalizedType) || "VIDEOS".equals(normalizedType)) {
             String videoQuery = trimmed.replaceAll("^[#@]+", "").trim();
-            response.setTrendingVideos(getSampleMatchingVideos(videoQuery));
+            List<Map<String, Object>> videoDtos = new ArrayList<>();
+            Set<Long> seenIds = new HashSet<>();
+
+            if (!videoQuery.isEmpty()) {
+                // 1. Primary phrase match
+                List<Video> dbVideos = videoRepository.searchVideos(videoQuery, PageRequest.of(0, 30));
+                for (Video v : dbVideos) {
+                    if (seenIds.add(v.getId())) {
+                        videoDtos.add(convertVideoToMap(v));
+                    }
+                }
+
+                // 2. Tokenized search if multi-word query
+                String[] tokens = videoQuery.split("[\\s_.-]+");
+                if (tokens.length > 1) {
+                    for (String token : tokens) {
+                        if (token.length() >= 2) {
+                            List<Video> tokenVideos = videoRepository.searchVideos(token, PageRequest.of(0, 15));
+                            for (Video v : tokenVideos) {
+                                if (seenIds.add(v.getId())) {
+                                    videoDtos.add(convertVideoToMap(v));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            videoDtos.sort((left, right) -> Long.compare(
+                    getViewCount(right),
+                    getViewCount(left)
+            ));
+            response.setTrendingVideos(videoDtos);
         }
 
         return response;
@@ -136,10 +209,80 @@ public class SearchService {
         }
         summary.setSounds(trendingSounds.stream().map(SoundResponse::fromEntity).collect(Collectors.toList()));
 
-        // Trending video grid
-        summary.setTrendingVideos(getDefaultTrendingVideos());
+        // Trending video grid (real database videos only)
+        List<Video> trendingDbVideos = videoRepository.findAllByOrderByViewCountDesc(PageRequest.of(0, 20)).getContent();
+        if (!trendingDbVideos.isEmpty()) {
+            List<Map<String, Object>> exploreVideos = trendingDbVideos.stream()
+                    .map(this::convertVideoToMap)
+                    .collect(Collectors.toList());
+            summary.setTrendingVideos(exploreVideos);
+        } else {
+            summary.setTrendingVideos(Collections.emptyList());
+        }
 
         return summary;
+    }
+
+    private Map<String, Object> convertVideoToMap(Video v) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", String.valueOf(v.getId()));
+        String title = v.getTitle() != null && !v.getTitle().isBlank() ? v.getTitle()
+                : (v.getCaption() != null ? v.getCaption() : "");
+        map.put("title", title);
+        map.put("caption", v.getCaption() != null ? v.getCaption() : "");
+        map.put("videoUrl", v.getVideoUrl() != null ? v.getVideoUrl() : "");
+        map.put("thumbnailUrl", v.getThumbnailUrl() != null ? v.getThumbnailUrl() : (v.getVideoUrl() != null && !v.getVideoUrl().contains(",") ? v.getVideoUrl() : ""));
+        Long viewCount = v.getViewCount();
+        Long likeCount = v.getLikeCount();
+        Long commentCount = v.getCommentCount();
+        Long saveCount = v.getSaveCount();
+
+        map.put("views", formatCount(viewCount));
+        map.put("viewCount", viewCount != null ? viewCount : 0L);
+        map.put("likeCount", likeCount != null ? likeCount : 0L);
+        map.put("likesCount", likeCount != null ? likeCount : 0L);
+        map.put("commentCount", commentCount != null ? commentCount : 0L);
+        map.put("commentsCount", commentCount != null ? commentCount : 0L);
+        map.put("saveCount", saveCount != null ? saveCount : 0L);
+        map.put("savesCount", saveCount != null ? saveCount : 0L);
+        map.put("musicTitle", v.getMusicTitle() != null ? v.getMusicTitle() : "Original Sound");
+
+        if (v.getCreator() != null) {
+            String u = v.getCreator().getUsername();
+            map.put("authorUsername", u != null && u.startsWith("@") ? u : "@" + u);
+            map.put("authorName", v.getCreator().getDisplayName() != null ? v.getCreator().getDisplayName() : u);
+            map.put("creatorId", v.getCreator().getId());
+            map.put("avatarUrl", v.getCreator().getAvatarUrl());
+        } else {
+            map.put("authorUsername", "@vilo");
+            map.put("authorName", "Vilo Creator");
+            map.put("creatorId", null);
+            map.put("avatarUrl", null);
+        }
+
+        List<String> tagList = new ArrayList<>();
+        if (v.getTags() != null) {
+            for (VideoTag tag : v.getTags()) {
+                if (tag != null && tag.getTagName() != null && !tag.getTagName().isBlank()) {
+                    tagList.add(tag.getTagName());
+                }
+            }
+        }
+        map.put("tags", tagList);
+
+        return map;
+    }
+
+    private String formatCount(Long count) {
+        if (count == null || count <= 0) return "0";
+        if (count >= 1_000_000) return String.format(Locale.US, "%.1fM", count / 1_000_000.0);
+        if (count >= 1_000) return String.format(Locale.US, "%.1fK", count / 1_000.0);
+        return String.valueOf(count);
+    }
+
+    private long getViewCount(Map<String, Object> video) {
+        Object value = video.get("viewCount");
+        return value instanceof Number ? ((Number) value).longValue() : 0L;
     }
 
     @Transactional
@@ -204,80 +347,4 @@ public class SearchService {
         }
     }
 
-    private List<Map<String, Object>> getDefaultTrendingVideos() {
-        List<Map<String, Object>> videos = new ArrayList<>();
-        String[] thumbs = {
-                "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=80",
-                "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=500&auto=format&fit=crop&q=80",
-                "https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=80",
-                "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80",
-                "https://images.unsplash.com/photo-1514565131-fce0801e5785?w=500&auto=format&fit=crop&q=80",
-                "https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=500&auto=format&fit=crop&q=80",
-                "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80",
-                "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=500&auto=format&fit=crop&q=80"
-        };
-        String[] views = {"2.4M", "940K", "1.1M", "482K", "1.7M", "820K", "280K", "195K"};
-        String[] titles = {
-                "Tokyo Cyberpunk Night",
-                "Retro Synth Wave",
-                "Flutter 3.x Liquid Glass",
-                "Urban Flow Beats",
-                "Future Neon Horizon",
-                "Lo-Fi Coding Session",
-                "Aesthetic Morning Routine & Studio Vlog",
-                "Minimalist Architecture Walk"
-        };
-        String[] authors = {"noir_pulse", "bunheng", "mongkol", "rithysak", "mongkol", "mongkol", "kimliza", "trenmono"};
-        String[] authorNames = {
-                "Noir Pulse",
-                "Lim Bunheng",
-                "Thoeung Sereymongkol",
-                "Chhuon Rithysak",
-                "Thoeung Sereymongkol",
-                "Thoeung Sereymongkol",
-                "Kim Liza",
-                "Tren Mono"
-        };
-
-        for (int i = 0; i < thumbs.length; i++) {
-            Map<String, Object> map = new HashMap<>();
-            map.put("id", "trend_" + (i + 1));
-            map.put("thumbnailUrl", thumbs[i]);
-            map.put("views", views[i]);
-            map.put("title", titles[i]);
-            map.put("authorUsername", "@" + authors[i]);
-            map.put("authorName", authorNames[i]);
-            videos.add(map);
-        }
-        return videos;
-    }
-
-    private List<Map<String, Object>> getSampleMatchingVideos(String query) {
-        String clean = query.replaceAll("^[#@]+", "").trim().toLowerCase();
-        if (clean.isEmpty()) return getDefaultTrendingVideos();
-
-        String cleanNorm = clean.replaceAll("[^a-z0-9]", "");
-        String[] tokens = clean.split("[\\s_.-]+");
-        List<Map<String, Object>> all = getDefaultTrendingVideos();
-
-        return all.stream()
-                .filter(v -> {
-                    String title = String.valueOf(v.get("title")).toLowerCase();
-                    String author = String.valueOf(v.getOrDefault("authorUsername", "")).toLowerCase().replaceAll("^@", "");
-                    String authorName = String.valueOf(v.getOrDefault("authorName", "")).toLowerCase();
-                    String combined = (title + " " + author + " " + authorName).toLowerCase();
-                    String combinedNorm = combined.replaceAll("[^a-z0-9]", "");
-
-                    if (combined.contains(clean) || (cleanNorm.length() >= 2 && combinedNorm.contains(cleanNorm))) {
-                        return true;
-                    }
-                    for (String token : tokens) {
-                        if (!token.isEmpty() && (combined.contains(token) || combinedNorm.contains(token))) {
-                            return true;
-                        }
-                    }
-                    return false;
-                })
-                .collect(Collectors.toList());
-    }
 }

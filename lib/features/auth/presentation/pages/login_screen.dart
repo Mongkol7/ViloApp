@@ -8,7 +8,9 @@ import '../widgets/vilo_primary_button.dart';
 import '../widgets/vilo_social_login_section.dart';
 import '../../../bottom_nav/presentation/pages/main_navigation_shell.dart';
 import '../../data/datasources/auth_remote_data_source.dart';
+import '../../data/datasources/token_storage.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
+import '../../../profile/data/datasources/profile_remote_data_source.dart';
 import '../../../inbox_activity/data/datasources/chat_manager.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
@@ -51,7 +53,26 @@ class _LoginScreenState extends State<LoginScreen>
     _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
     _slide = Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
-    WidgetsBinding.instance.addPostFrameCallback((_) => _ctrl.forward());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _ctrl.forward();
+      _checkAutoLogin();
+    });
+  }
+
+  Future<void> _checkAutoLogin() async {
+    try {
+      final hasToken = await TokenStorage.instance.hasValidToken();
+      if (hasToken && mounted) {
+        final user = TokenStorage.instance.getUserModel();
+        if (user != null) {
+          ProfileSyncService.instance.cachedMyProfile = user;
+          ProfileRemoteDataSource.instance.cacheUser(user);
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const MainNavigationShell(initialIndex: 0)),
+          );
+        }
+      }
+    } catch (_) {}
   }
 
   @override

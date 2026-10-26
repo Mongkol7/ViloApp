@@ -17,7 +17,11 @@ class CartPage extends StatelessWidget {
                 children: [
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
-                    child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                    child: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -36,12 +40,19 @@ class CartPage extends StatelessWidget {
                           Expanded(
                             child: Text(
                               'Keyboard',
-                              style: TextStyle(color: Colors.white, fontSize: 14),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
                           Text(
                             'Search',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -56,15 +67,29 @@ class CartPage extends StatelessWidget {
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white24),
                         ),
-                        child: const Icon(Icons.shopping_bag_outlined, color: Colors.white, size: 22),
+                        child: const Icon(
+                          Icons.shopping_bag_outlined,
+                          color: Colors.white,
+                          size: 22,
+                        ),
                       ),
                       Positioned(
                         right: 0,
                         top: 0,
                         child: Container(
                           padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                          child: const Text('4', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Text(
+                            '4',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -87,7 +112,8 @@ class CartPage extends StatelessWidget {
                         title: 'Stealth TKL Keyboard',
                         price: '\$149.00',
                         attrs: 'Black · Wireless',
-                        imageUrl: 'https://images.unsplash.com/photo-1587829741301-dc798b83bac1?q=80&w=400',
+                        imageUrl:
+                            'https://images.unsplash.com/photo-1587829741301-dc798b83bac1?q=80&w=400',
                       ),
                     ],
                     showChatIcon: true,
@@ -102,13 +128,15 @@ class CartPage extends StatelessWidget {
                         title: 'Gaming Mouse',
                         price: '\$89.00',
                         attrs: 'RGB · 16k DPI',
-                        imageUrl: 'https://images.unsplash.com/photo-1625842268584-8f3bf9ff16a0?q=80&w=400',
+                        imageUrl:
+                            'https://images.unsplash.com/photo-1625842268584-8f3bf9ff16a0?q=80&w=400',
                       ),
                       _ProductData(
                         title: 'Mouse Pad',
                         price: '\$29.00',
                         attrs: 'Extra Large · Anti-slip',
-                        imageUrl: 'https://images.unsplash.com/photo-1546435770-a3e426bf472b?q=80&w=400',
+                        imageUrl:
+                            'https://images.unsplash.com/photo-1546435770-a3e426bf472b?q=80&w=400',
                       ),
                     ],
                     showSendMessage: true,
@@ -123,13 +151,15 @@ class CartPage extends StatelessWidget {
                         title: 'Gaming Mouse',
                         price: '\$89.00',
                         attrs: 'RGB · 16k DPI',
-                        imageUrl: 'https://images.unsplash.com/photo-1625842268584-8f3bf9ff16a0?q=80&w=400',
+                        imageUrl:
+                            'https://images.unsplash.com/photo-1625842268584-8f3bf9ff16a0?q=80&w=400',
                       ),
                       _ProductData(
                         title: 'Mouse Pad',
                         price: '\$29.00',
                         attrs: 'Extra Large · Anti-slip',
-                        imageUrl: 'https://images.unsplash.com/photo-1546435770-a3e426bf472b?q=80&w=400',
+                        imageUrl:
+                            'https://images.unsplash.com/photo-1546435770-a3e426bf472b?q=80&w=400',
                       ),
                     ],
                     showSendMessage: true,
@@ -144,7 +174,8 @@ class CartPage extends StatelessWidget {
                         title: 'Stealth TKL Keyboard',
                         price: '\$149.00',
                         attrs: 'Black · Wireless',
-                        imageUrl: 'https://images.unsplash.com/photo-1587829741301-dc798b83bac1?q=80&w=400',
+                        imageUrl:
+                            'https://images.unsplash.com/photo-1587829741301-dc798b83bac1?q=80&w=400',
                       ),
                     ],
                     showChatIcon: true,
@@ -185,13 +216,19 @@ class CartPage extends StatelessWidget {
                 height: 36,
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: LinearGradient(colors: [Colors.blue, Colors.lightBlueAccent]),
+                  gradient: LinearGradient(
+                    colors: [Colors.blue, Colors.lightBlueAccent],
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               Text(
                 sellerHandle,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
               ),
               if (isVerified) ...[
                 const SizedBox(width: 4),
@@ -238,7 +275,7 @@ class CartPage extends StatelessWidget {
               height: 48,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: Colors.white12),
               ),
@@ -247,7 +284,14 @@ class CartPage extends StatelessWidget {
                 children: const [
                   Icon(Icons.chat_bubble, color: Colors.white, size: 16),
                   SizedBox(width: 8),
-                  Text('Send Message', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text(
+                    'Send Message',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -263,9 +307,7 @@ class CartPage extends StatelessWidget {
         Container(
           width: 72,
           height: 72,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: Image.network(
@@ -283,11 +325,28 @@ class CartPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(p.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 14)),
+              Text(
+                p.title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                ),
+              ),
               const SizedBox(height: 4),
-              Text(p.price, style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 16)),
+              Text(
+                p.price,
+                style: const TextStyle(
+                  color: Colors.blueAccent,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
               const SizedBox(height: 2),
-              Text(p.attrs, style: const TextStyle(color: Colors.white38, fontSize: 12)),
+              Text(
+                p.attrs,
+                style: const TextStyle(color: Colors.white38, fontSize: 12),
+              ),
             ],
           ),
         ),
@@ -295,7 +354,7 @@ class CartPage extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.chat_bubble, color: Colors.white, size: 18),
@@ -311,5 +370,10 @@ class _ProductData {
   final String attrs;
   final String imageUrl;
 
-  _ProductData({required this.title, required this.price, required this.attrs, required this.imageUrl});
+  _ProductData({
+    required this.title,
+    required this.price,
+    required this.attrs,
+    required this.imageUrl,
+  });
 }
