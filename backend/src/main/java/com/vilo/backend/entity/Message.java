@@ -40,6 +40,15 @@ public class Message {
     @Column(name = "is_read", nullable = false)
     private Boolean isRead = false;
 
+    @Column(name = "deleted_for_everyone", nullable = false)
+    private Boolean deletedForEveryone = false;
+
+    @Column(name = "deleted_by_sender", nullable = false)
+    private Boolean deletedBySender = false;
+
+    @Column(name = "deleted_by_recipient", nullable = false)
+    private Boolean deletedByRecipient = false;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
@@ -56,6 +65,9 @@ public class Message {
         this.content = content;
         this.mediaUrl = mediaUrl;
         this.isRead = isRead != null ? isRead : false;
+        this.deletedForEveryone = false;
+        this.deletedBySender = false;
+        this.deletedByRecipient = false;
         this.createdAt = createdAt;
     }
 
@@ -111,6 +123,15 @@ public class Message {
         this.mediaUrl = mediaUrl;
     }
 
+    public Boolean getDeletedForEveryone() { return deletedForEveryone; }
+    public void setDeletedForEveryone(Boolean deletedForEveryone) { this.deletedForEveryone = deletedForEveryone; }
+
+    public Boolean getDeletedBySender() { return deletedBySender; }
+    public void setDeletedBySender(Boolean deletedBySender) { this.deletedBySender = deletedBySender; }
+
+    public Boolean getDeletedByRecipient() { return deletedByRecipient; }
+    public void setDeletedByRecipient(Boolean deletedByRecipient) { this.deletedByRecipient = deletedByRecipient; }
+
     public Boolean getIsRead() {
         return isRead;
     }
@@ -135,6 +156,9 @@ public class Message {
         private String content;
         private String mediaUrl;
         private Boolean isRead = false;
+        private Boolean deletedForEveryone = false;
+        private Boolean deletedBySender = false;
+        private Boolean deletedByRecipient = false;
         private Instant createdAt;
 
         public Builder id(Long id) {
@@ -172,13 +196,32 @@ public class Message {
             return this;
         }
 
+        public Builder deletedForEveryone(Boolean deletedForEveryone) {
+            this.deletedForEveryone = deletedForEveryone;
+            return this;
+        }
+
+        public Builder deletedBySender(Boolean deletedBySender) {
+            this.deletedBySender = deletedBySender;
+            return this;
+        }
+
+        public Builder deletedByRecipient(Boolean deletedByRecipient) {
+            this.deletedByRecipient = deletedByRecipient;
+            return this;
+        }
+
         public Builder createdAt(Instant createdAt) {
             this.createdAt = createdAt;
             return this;
         }
 
         public Message build() {
-            return new Message(id, conversation, sender, recipient, content, mediaUrl, isRead, createdAt);
+            Message msg = new Message(id, conversation, sender, recipient, content, mediaUrl, isRead, createdAt);
+            if (deletedForEveryone != null) msg.setDeletedForEveryone(deletedForEveryone);
+            if (deletedBySender != null) msg.setDeletedBySender(deletedBySender);
+            if (deletedByRecipient != null) msg.setDeletedByRecipient(deletedByRecipient);
+            return msg;
         }
     }
 }

@@ -53,6 +53,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   VideoPlayerController? _videoPlayerController;
   bool _isVideoInitialized = false;
+  String? _videoError;
 
   StoryViewerItem get _currentItem => _activeStories[_currentIndex];
 
@@ -120,12 +121,17 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     } catch (_) {}
     _videoPlayerController = null;
     _isVideoInitialized = false;
+    _videoError = null;
   }
 
   void _initVideoPlayer(String url) {
     try {
+      debugPrint('[StoryViewer] Initializing video: $url');
       if (url.startsWith('http://') || url.startsWith('https://')) {
-        _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(url));
+        _videoPlayerController = VideoPlayerController.networkUrl(
+          Uri.parse(url),
+          formatHint: VideoFormat.other,
+        );
       } else if (url.startsWith('assets/')) {
         _videoPlayerController = VideoPlayerController.asset(url);
       } else {
@@ -134,30 +140,45 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           if (file.existsSync()) {
             _videoPlayerController = VideoPlayerController.file(file);
           } else {
-            _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(url));
+            _videoPlayerController = VideoPlayerController.networkUrl(
+              Uri.parse(url),
+              formatHint: VideoFormat.other,
+            );
           }
         } catch (_) {
-          _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(url));
+          _videoPlayerController = VideoPlayerController.networkUrl(
+            Uri.parse(url),
+            formatHint: VideoFormat.other,
+          );
         }
       }
 
-      _videoPlayerController!.initialize().then((_) {
-        if (!mounted) return;
-        _videoPlayerController!.setLooping(true);
-        _videoPlayerController!.play();
-        setState(() {
-          _isVideoInitialized = true;
-        });
-      }).catchError((err) {
-        debugPrint('[StoryViewer] Video player initialization error: $err');
-        if (mounted) {
-          setState(() {
-            _isVideoInitialized = false;
+      _videoPlayerController!
+          .initialize()
+          .timeout(const Duration(seconds: 15))
+          .then((_) {
+            if (!mounted) return;
+            _videoPlayerController!.setLooping(true);
+            _videoPlayerController!.play();
+            setState(() {
+              _isVideoInitialized = true;
+            });
+          })
+          .catchError((err) {
+            debugPrint(
+              '[StoryViewer] Video player initialization error for $url: $err',
+            );
+            if (mounted) {
+              setState(() {
+                _isVideoInitialized = false;
+                _videoError = 'This video could not be played.';
+              });
+            }
           });
-        }
-      });
     } catch (e) {
       debugPrint('[StoryViewer] Error starting video controller: $e');
+      if (mounted)
+        setState(() => _videoError = 'This video could not be played.');
     }
   }
 
@@ -210,7 +231,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       viewCount: _currentItem.story.viewCount,
       storyId: _currentItem.story.id,
       authorId: _currentItem.story.authorUsername,
-      authorUsername: _currentItem.story.authorUsername ?? _currentItem.authorName,
+      authorUsername:
+          _currentItem.story.authorUsername ?? _currentItem.authorName,
     ).then((_) {
       if (mounted && _progressController.status != AnimationStatus.completed) {
         _progressController.forward();
@@ -286,12 +308,19 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                       ),
                     ),
                     onTap: () {
-                      StoryRemoteDataSource.instance.deleteStory(_currentItem.story.id);
+                      StoryRemoteDataSource.instance.deleteStory(
+                        _currentItem.story.id,
+                      );
                       Navigator.of(modalContext).pop();
                       Navigator.of(context).pop('delete');
                     },
                   ),
-                  const Divider(color: Color(0xFF2C2C32), height: 1, indent: 16, endIndent: 16),
+                  const Divider(
+                    color: Color(0xFF2C2C32),
+                    height: 1,
+                    indent: 16,
+                    endIndent: 16,
+                  ),
                   ListTile(
                     leading: Container(
                       width: 38,
@@ -300,7 +329,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                         color: Color(0xFF2A2A30),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.arrow_downward_rounded, color: Colors.white, size: 20),
+                      child: const Icon(
+                        Icons.arrow_downward_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
                     title: const Text(
                       'Save story',
@@ -313,7 +346,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                     ),
                     onTap: () {
                       Navigator.of(modalContext).pop();
-                      if (mounted && _progressController.status != AnimationStatus.completed) {
+                      if (mounted &&
+                          _progressController.status !=
+                              AnimationStatus.completed) {
                         _progressController.forward();
                       }
                     },
@@ -328,7 +363,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                         color: Color(0xFF2A2A30),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.volume_off_rounded, color: Colors.white, size: 20),
+                      child: const Icon(
+                        Icons.volume_off_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
                     title: Text(
                       'Mute @${_currentItem.authorName}',
@@ -342,11 +381,20 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                     onTap: () {
                       Navigator.of(modalContext).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Muted stories from ${_currentItem.authorName}')),
+                        SnackBar(
+                          content: Text(
+                            'Muted stories from ${_currentItem.authorName}',
+                          ),
+                        ),
                       );
                     },
                   ),
-                  const Divider(color: Color(0xFF2C2C32), height: 1, indent: 16, endIndent: 16),
+                  const Divider(
+                    color: Color(0xFF2C2C32),
+                    height: 1,
+                    indent: 16,
+                    endIndent: 16,
+                  ),
                   ListTile(
                     leading: Container(
                       width: 38,
@@ -355,7 +403,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                         color: Color(0xFF2A2A30),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.link_rounded, color: Colors.white, size: 20),
+                      child: const Icon(
+                        Icons.link_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
                     title: const Text(
                       'Copy link',
@@ -369,11 +421,18 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                     onTap: () {
                       Navigator.of(modalContext).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Story link copied to clipboard')),
+                        const SnackBar(
+                          content: Text('Story link copied to clipboard'),
+                        ),
                       );
                     },
                   ),
-                  const Divider(color: Color(0xFF2C2C32), height: 1, indent: 16, endIndent: 16),
+                  const Divider(
+                    color: Color(0xFF2C2C32),
+                    height: 1,
+                    indent: 16,
+                    endIndent: 16,
+                  ),
                   ListTile(
                     leading: Container(
                       width: 38,
@@ -382,7 +441,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                         color: const Color(0xFFEB5757).withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.report_problem_outlined, color: Color(0xFFEB5757), size: 20),
+                      child: const Icon(
+                        Icons.report_problem_outlined,
+                        color: Color(0xFFEB5757),
+                        size: 20,
+                      ),
                     ),
                     title: const Text(
                       'Report story',
@@ -396,7 +459,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                     onTap: () {
                       Navigator.of(modalContext).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Story reported. Thank you for keeping Vilo safe.')),
+                        const SnackBar(
+                          content: Text(
+                            'Story reported. Thank you for keeping Vilo safe.',
+                          ),
+                        ),
                       );
                     },
                   ),
@@ -428,9 +495,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         child: Stack(
           children: [
             // Layer 0: Background Media (Photo / Video / Color Gradient)
-            Positioned.fill(
-              child: _buildStoryMediaBackground(item.story),
-            ),
+            Positioned.fill(child: _buildStoryMediaBackground(item.story)),
 
             // Layer 1: Left / Right Tap and Long-press gesture areas
             Positioned.fill(
@@ -448,13 +513,16 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                         _videoPlayerController?.pause();
                       },
                       onLongPressEnd: (_) {
-                        if (mounted && _progressController.status != AnimationStatus.completed) {
+                        if (mounted &&
+                            _progressController.status !=
+                                AnimationStatus.completed) {
                           _progressController.forward();
                           _videoPlayerController?.play();
                         }
                       },
                       onVerticalDragEnd: (details) {
-                        if (details.primaryVelocity != null && details.primaryVelocity! < -100) {
+                        if (details.primaryVelocity != null &&
+                            details.primaryVelocity! < -100) {
                           if (item.isOwner) _openViewersSheet();
                         }
                       },
@@ -473,13 +541,16 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                         _videoPlayerController?.pause();
                       },
                       onLongPressEnd: (_) {
-                        if (mounted && _progressController.status != AnimationStatus.completed) {
+                        if (mounted &&
+                            _progressController.status !=
+                                AnimationStatus.completed) {
                           _progressController.forward();
                           _videoPlayerController?.play();
                         }
                       },
                       onVerticalDragEnd: (details) {
-                        if (details.primaryVelocity != null && details.primaryVelocity! < -100) {
+                        if (details.primaryVelocity != null &&
+                            details.primaryVelocity! < -100) {
                           if (item.isOwner) _openViewersSheet();
                         }
                       },
@@ -495,7 +566,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
               children: [
                 // 1. Top Story Progress Bar (Multi-Segment)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   child: Row(
                     children: List.generate(_activeStories.length, (index) {
                       return Expanded(
@@ -515,8 +589,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                               }
                               return LinearProgressIndicator(
                                 value: value,
-                                backgroundColor: Colors.white.withValues(alpha: 0.25),
-                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                backgroundColor: Colors.white.withValues(
+                                  alpha: 0.25,
+                                ),
+                                valueColor: const AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
                                 minHeight: 2.5,
                                 borderRadius: BorderRadius.circular(2),
                               );
@@ -530,26 +608,35 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
                 // 2. Top User Info Bar
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
                   child: Row(
                     children: [
-                      if (!item.isOwner && item.authorAvatarUrl != null && item.authorAvatarUrl!.isNotEmpty)
+                      if (!item.isOwner &&
+                          item.authorAvatarUrl != null &&
+                          item.authorAvatarUrl!.isNotEmpty)
                         Container(
                           width: 38,
                           height: 38,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white24, width: 1.0),
+                            border: Border.all(
+                              color: Colors.white24,
+                              width: 1.0,
+                            ),
                           ),
                           child: ClipOval(
                             child: Image.network(
                               item.authorAvatarUrl!,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => const Icon(
-                                Icons.person,
-                                color: Colors.white,
-                                size: 20,
-                              ),
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Icon(
+                                    Icons.person,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
                             ),
                           ),
                         )
@@ -564,7 +651,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                             ),
                           ),
                           child: const Center(
-                            child: Icon(Icons.cloud_rounded, color: Colors.white, size: 22),
+                            child: Icon(
+                              Icons.cloud_rounded,
+                              color: Colors.white,
+                              size: 22,
+                            ),
                           ),
                         ),
                       const SizedBox(width: 10),
@@ -585,16 +676,28 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                               if (item.story.privacy == 'FRIENDS') ...[
                                 const SizedBox(width: 8),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF27AE60).withValues(alpha: 0.25),
+                                    color: const Color(
+                                      0xFF27AE60,
+                                    ).withValues(alpha: 0.25),
                                     borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: const Color(0xFF27AE60), width: 0.8),
+                                    border: Border.all(
+                                      color: const Color(0xFF27AE60),
+                                      width: 0.8,
+                                    ),
                                   ),
                                   child: const Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.favorite_rounded, size: 10, color: Color(0xFF2ECC71)),
+                                      Icon(
+                                        Icons.favorite_rounded,
+                                        size: 10,
+                                        color: Color(0xFF2ECC71),
+                                      ),
                                       SizedBox(width: 3),
                                       Text(
                                         'Friends',
@@ -611,16 +714,28 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                               ] else if (item.story.privacy == 'FOLLOWERS') ...[
                                 const SizedBox(width: 8),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF2F80ED).withValues(alpha: 0.25),
+                                    color: const Color(
+                                      0xFF2F80ED,
+                                    ).withValues(alpha: 0.25),
                                     borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: const Color(0xFF56CCF2), width: 0.8),
+                                    border: Border.all(
+                                      color: const Color(0xFF56CCF2),
+                                      width: 0.8,
+                                    ),
                                   ),
                                   child: const Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.people_outline_rounded, size: 10, color: Color(0xFF56CCF2)),
+                                      Icon(
+                                        Icons.people_outline_rounded,
+                                        size: 10,
+                                        color: Color(0xFF56CCF2),
+                                      ),
                                       SizedBox(width: 3),
                                       Text(
                                         'Followers',
@@ -650,7 +765,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                       ),
                       const Spacer(),
                       IconButton(
-                        icon: const Icon(Icons.close_rounded, color: Colors.white, size: 26),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                          size: 26,
+                        ),
                         onPressed: () => Navigator.of(context).pop(),
                       ),
                     ],
@@ -664,8 +783,14 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                   // Media Story layout: clear view with caption pill and music chip at bottom
                   if (item.story.message.isNotEmpty)
                     Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 6,
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.65),
                         borderRadius: BorderRadius.circular(16),
@@ -689,7 +814,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                   if (item.story.musicTrack != null) ...[
                     const SizedBox(height: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF222228).withValues(alpha: 0.85),
                         borderRadius: BorderRadius.circular(16),
@@ -734,7 +862,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                           painter: _ViewerBubblePainter(),
                           child: Container(
                             padding: const EdgeInsets.fromLTRB(28, 16, 28, 22),
-                            constraints: const BoxConstraints(minWidth: 170, maxWidth: 280),
+                            constraints: const BoxConstraints(
+                              minWidth: 170,
+                              maxWidth: 280,
+                            ),
                             child: Text(
                               item.story.message,
                               textAlign: TextAlign.center,
@@ -752,7 +883,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                         if (item.story.musicTrack != null) ...[
                           const SizedBox(height: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 6,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0xFF222228),
                               borderRadius: BorderRadius.circular(16),
@@ -789,7 +923,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                         const SizedBox(height: 14),
 
                         // Center Avatar
-                        if (!item.isOwner && item.authorAvatarUrl != null && item.authorAvatarUrl!.isNotEmpty)
+                        if (!item.isOwner &&
+                            item.authorAvatarUrl != null &&
+                            item.authorAvatarUrl!.isNotEmpty)
                           Container(
                             width: 90,
                             height: 90,
@@ -797,7 +933,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF2F80ED).withValues(alpha: 0.35),
+                                  color: const Color(
+                                    0xFF2F80ED,
+                                  ).withValues(alpha: 0.35),
                                   blurRadius: 20,
                                   spreadRadius: 2,
                                 ),
@@ -807,10 +945,15 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                               child: Image.network(
                                 item.authorAvatarUrl!,
                                 fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => Container(
-                                  color: const Color(0xFF222228),
-                                  child: const Icon(Icons.person, color: Colors.white, size: 48),
-                                ),
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Container(
+                                      color: const Color(0xFF222228),
+                                      child: const Icon(
+                                        Icons.person,
+                                        color: Colors.white,
+                                        size: 48,
+                                      ),
+                                    ),
                               ),
                             ),
                           )
@@ -825,14 +968,20 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF2F80ED).withValues(alpha: 0.35),
+                                  color: const Color(
+                                    0xFF2F80ED,
+                                  ).withValues(alpha: 0.35),
                                   blurRadius: 20,
                                   spreadRadius: 2,
                                 ),
                               ],
                             ),
                             child: const Center(
-                              child: Icon(Icons.cloud_rounded, color: Colors.white, size: 48),
+                              child: Icon(
+                                Icons.cloud_rounded,
+                                color: Colors.white,
+                                size: 48,
+                              ),
                             ),
                           ),
                       ],
@@ -852,7 +1001,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                             GestureDetector(
                               onTap: _openViewersSheet,
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
                                 decoration: BoxDecoration(
                                   color: Colors.black.withValues(alpha: 0.5),
                                   borderRadius: BorderRadius.circular(24),
@@ -890,7 +1042,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                               ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 24),
+                              icon: const Icon(
+                                Icons.more_vert_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                               onPressed: _showStoryOptionsMenu,
                             ),
                           ],
@@ -902,7 +1058,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                               child: Container(
                                 height: 44,
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF1C1C1E).withValues(alpha: 0.8),
+                                  color: const Color(
+                                    0xFF1C1C1E,
+                                  ).withValues(alpha: 0.8),
                                   borderRadius: BorderRadius.circular(22),
                                   border: Border.all(
                                     color: Colors.white.withValues(alpha: 0.2),
@@ -935,15 +1093,24 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                                         size: 18,
                                       ),
                                       onPressed: () {
-                                        final text = _replyController.text.trim();
+                                        final text = _replyController.text
+                                            .trim();
                                         if (text.isEmpty) return;
                                         _replyController.clear();
                                         FocusScope.of(context).unfocus();
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
                                           SnackBar(
-                                            content: Text('Reply sent to ${item.authorName}! ✨'),
-                                            backgroundColor: const Color(0xFF2F80ED),
-                                            duration: const Duration(seconds: 2),
+                                            content: Text(
+                                              'Reply sent to ${item.authorName}! ✨',
+                                            ),
+                                            backgroundColor: const Color(
+                                              0xFF2F80ED,
+                                            ),
+                                            duration: const Duration(
+                                              seconds: 2,
+                                            ),
                                           ),
                                         );
                                       },
@@ -955,8 +1122,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                                     FocusScope.of(context).unfocus();
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
-                                        content: Text('Reply sent to ${item.authorName}! ✨'),
-                                        backgroundColor: const Color(0xFF2F80ED),
+                                        content: Text(
+                                          'Reply sent to ${item.authorName}! ✨',
+                                        ),
+                                        backgroundColor: const Color(
+                                          0xFF2F80ED,
+                                        ),
                                         duration: const Duration(seconds: 2),
                                       ),
                                     );
@@ -976,7 +1147,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                               onPressed: () {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text('Sent ❤️ to ${item.authorName}!'),
+                                    content: Text(
+                                      'Sent ❤️ to ${item.authorName}!',
+                                    ),
                                     backgroundColor: const Color(0xFFFE2C55),
                                     duration: const Duration(seconds: 2),
                                   ),
@@ -985,7 +1158,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                             ),
 
                             IconButton(
-                              icon: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 24),
+                              icon: const Icon(
+                                Icons.more_vert_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                               onPressed: _showStoryOptionsMenu,
                             ),
                           ],
@@ -1001,7 +1178,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   Widget _buildStoryMediaBackground(SharedThoughtStory story) {
     final mediaUrl = story.mediaUrl;
-    final isVid = story.isVideo ||
+    final isVid =
+        story.isVideo ||
         (mediaUrl != null &&
             (mediaUrl.toLowerCase().endsWith('.mp4') ||
                 mediaUrl.toLowerCase().endsWith('.mov') ||
@@ -1023,6 +1201,24 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                     child: VideoPlayer(_videoPlayerController!),
                   ),
                 ),
+              ),
+            )
+          else if (_videoError != null)
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: Colors.white70,
+                    size: 32,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _videoError!,
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                ],
               ),
             )
           else
@@ -1096,7 +1292,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       return Image.network(
         url,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => Container(color: fallbackColor),
+        errorBuilder: (context, error, stackTrace) =>
+            Container(color: fallbackColor),
       );
     }
 
@@ -1104,7 +1301,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       return Image.asset(
         url,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => Container(color: fallbackColor),
+        errorBuilder: (context, error, stackTrace) =>
+            Container(color: fallbackColor),
       );
     }
 
@@ -1114,7 +1312,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         return Image.file(
           file,
           fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => Container(color: fallbackColor),
+          errorBuilder: (context, error, stackTrace) =>
+              Container(color: fallbackColor),
         );
       }
     } catch (_) {}
@@ -1122,7 +1321,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     return Image.network(
       url,
       fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) => Container(color: fallbackColor),
+      errorBuilder: (context, error, stackTrace) =>
+          Container(color: fallbackColor),
     );
   }
 }

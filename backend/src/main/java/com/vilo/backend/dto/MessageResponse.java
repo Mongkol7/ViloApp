@@ -16,6 +16,8 @@ public class MessageResponse {
     private String mediaUrl;
     private Boolean isRead;
     private Boolean isMe;
+    private Boolean deleted;
+    private Boolean deletedForEveryone;
     private Instant createdAt;
 
     public MessageResponse() {
@@ -148,6 +150,12 @@ public class MessageResponse {
         this.createdAt = createdAt;
     }
 
+    public Boolean getDeleted() { return deleted; }
+    public void setDeleted(Boolean deleted) { this.deleted = deleted; }
+
+    public Boolean getDeletedForEveryone() { return deletedForEveryone; }
+    public void setDeletedForEveryone(Boolean deletedForEveryone) { this.deletedForEveryone = deletedForEveryone; }
+
     public static class Builder {
         private Long id;
         private Long conversationId;
@@ -161,6 +169,8 @@ public class MessageResponse {
         private String mediaUrl;
         private Boolean isRead;
         private Boolean isMe;
+        private Boolean deleted;
+        private Boolean deletedForEveryone;
         private Instant createdAt;
 
         public Builder id(Long id) {
@@ -223,14 +233,29 @@ public class MessageResponse {
             return this;
         }
 
+        public Builder deleted(Boolean deleted) {
+            this.deleted = deleted;
+            this.deletedForEveryone = deleted;
+            return this;
+        }
+
+        public Builder deletedForEveryone(Boolean deletedForEveryone) {
+            this.deletedForEveryone = deletedForEveryone;
+            this.deleted = deletedForEveryone;
+            return this;
+        }
+
         public Builder createdAt(Instant createdAt) {
             this.createdAt = createdAt;
             return this;
         }
 
         public MessageResponse build() {
-            return new MessageResponse(id, conversationId, senderId, senderUsername, senderDisplayName,
+            MessageResponse response = new MessageResponse(id, conversationId, senderId, senderUsername, senderDisplayName,
                     senderAvatarUrl, recipientId, recipientUsername, content, mediaUrl, isRead, isMe, createdAt);
+            response.deleted = deleted != null ? deleted : deletedForEveryone;
+            response.deletedForEveryone = deletedForEveryone != null ? deletedForEveryone : deleted;
+            return response;
         }
     }
 }

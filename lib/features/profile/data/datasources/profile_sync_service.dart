@@ -78,7 +78,19 @@ class ProfileSyncService {
   /// Cached user profile for immediate optimistic updates across screens
   UserModel? _cachedMyProfile;
   UserModel? get cachedMyProfile {
-    if (_cachedMyProfile != null) return _cachedMyProfile;
+    // A singleton can survive account changes during the app session. Never
+    // reuse the previous account's profile for the currently authenticated
+    // user.
+    final currentUserId = TokenStorage.instance.currentUserIdSync;
+    if (_cachedMyProfile != null &&
+        (currentUserId == null || _cachedMyProfile!.id == currentUserId)) {
+      return _cachedMyProfile;
+    }
+    if (_cachedMyProfile != null &&
+        currentUserId != null &&
+        _cachedMyProfile!.id != currentUserId) {
+      _cachedMyProfile = null;
+    }
     final stored = TokenStorage.instance.getUserModel();
     if (stored != null) {
       _cachedMyProfile = stored;

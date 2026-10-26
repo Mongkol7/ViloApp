@@ -107,8 +107,7 @@ class _NewFollowersScreenState extends State<NewFollowersScreen> {
   @override
   void initState() {
     super.initState();
-    final isDemo = TokenStorage.instance.isDemoUserSync;
-    _followers = isDemo ? List.from(_demoFollowers) : [];
+    _followers = List.from(_demoFollowers);
     _loadFollowers();
   }
 

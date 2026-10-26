@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -98,17 +98,52 @@ public class ChatService {
     }
 
     @Transactional
+    public void markMessagesAsRead(User currentUser, Long otherUserId) {
+        User otherUser = userRepository.findById(otherUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + otherUserId));
+
+        Optional<Conversation> convOpt = conversationRepository.findBetweenUsers(currentUser, otherUser);
+        if (convOpt.isEmpty()) return;
+
+        Conversation conversation = convOpt.get();
+        List<Message> unreadMessages = messageRepository
+                .findByConversationAndRecipientAndIsReadFalse(conversation, currentUser);
+
+        if (!unreadMessages.isEmpty()) {
+            unreadMessages.forEach(message -> message.setIsRead(true));
+            messageRepository.saveAll(unreadMessages);
+
+            for (Message message : unreadMessages) {
+                try {
+                    MessageResponse receiptForSender = mapToMessageResponse(message, message.getSender());
+                    messagingTemplate.convertAndSendToUser(
+                            message.getSender().getUsername(),
+                            "/queue/messages",
+                            receiptForSender
+                    );
+                    messagingTemplate.convertAndSend(
+                            "/topic/conversations/" + conversation.getId(),
+                            receiptForSender
+                    );
+                } catch (Exception ex) {
+                    log.warn("Failed to push read receipt for message {}: {}", message.getId(), ex.getMessage());
+                }
+            }
+        }
+    }
+
+    @Transactional
     public Page<MessageResponse> getMessagesWithUser(User currentUser, Long otherUserId, int page, int size) {
         User otherUser = userRepository.findById(otherUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + otherUserId));
 
         Conversation conversation = getOrCreateConversation(currentUser, otherUser);
 
-        // Mark unread messages sent to current user as read
-        messageRepository.markConversationMessagesAsRead(conversation, currentUser);
+        // Mark unread messages as read and notify sender immediately so chat shows "Seen"
+        markMessagesAsRead(currentUser, otherUserId);
 
         Pageable pageable = PageRequest.of(page, size);
-        Page<Message> messagePage = messageRepository.findByConversationOrderByCreatedAtDesc(conversation, pageable);
+        Page<Message> messagePage = messageRepository.findVisibleMessagesForUser(conversation, currentUser, pageable);
 
         return messagePage.map(m -> mapToMessageResponse(m, currentUser));
     }
@@ -131,6 +166,9 @@ public class ChatService {
                 .content(request.getContent().trim())
                 .mediaUrl(request.getMediaUrl())
                 .isRead(false)
+                .deletedForEveryone(false)
+                .deletedBySender(false)
+                .deletedByRecipient(false)
                 .build();
 
         Message savedMessage = messageRepository.save(message);
@@ -203,6 +241,15 @@ public class ChatService {
 
     public MessageResponse mapToMessageResponse(Message msg, User viewer) {
         boolean isMe = msg.getSender().getId().equals(viewer.getId());
+        boolean isDeletedForEveryone = Boolean.TRUE.equals(msg.getDeletedForEveryone());
+
+        String displayContent = msg.getContent();
+        String displayMedia = msg.getMediaUrl();
+
+        if (isDeletedForEveryone) {
+            displayContent = isMe ? "You deleted a message" : "This message was deleted";
+            displayMedia = null;
+        }
 
         return MessageResponse.builder()
                 .id(msg.getId())
@@ -213,11 +260,132 @@ public class ChatService {
                 .senderAvatarUrl(msg.getSender().getAvatarUrl())
                 .recipientId(msg.getRecipient().getId())
                 .recipientUsername(msg.getRecipient().getUsername())
-                .content(msg.getContent())
-                .mediaUrl(msg.getMediaUrl())
+                .content(displayContent)
+                .mediaUrl(displayMedia)
                 .isRead(msg.getIsRead())
                 .isMe(isMe)
+                .deleted(isDeletedForEveryone)
+                .deletedForEveryone(isDeletedForEveryone)
                 .createdAt(msg.getCreatedAt())
                 .build();
+    }
+
+    @Transactional
+    public void deleteConversation(User currentUser, Long otherUserId) {
+        User otherUser = userRepository.findById(otherUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + otherUserId));
+        Optional<Conversation> convOpt = conversationRepository.findBetweenUsers(currentUser, otherUser);
+        if (convOpt.isPresent()) {
+            Conversation conv = convOpt.get();
+            // DO NOT DELETE DATABASE! Only mark status for current user.
+            List<Message> messages = messageRepository.findByConversation(conv);
+            for (Message m : messages) {
+                if (m.getSender().getId().equals(currentUser.getId())) {
+                    m.setDeletedBySender(true);
+                }
+                if (m.getRecipient().getId().equals(currentUser.getId())) {
+                    m.setDeletedByRecipient(true);
+                }
+            }
+            messageRepository.saveAll(messages);
+        }
+    }
+
+    @Transactional
+    public void deleteMessageForMe(User currentUser, Long messageId) {
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found with id: " + messageId));
+
+        boolean isSender = message.getSender().getId().equals(currentUser.getId());
+        boolean isRecipient = message.getRecipient().getId().equals(currentUser.getId());
+
+        if (!isSender && !isRecipient) {
+            throw new BadRequestException("You are not authorized to remove this message");
+        }
+
+        // DO NOT DELETE DATABASE! Soft status update only
+        if (isSender) {
+            message.setDeletedBySender(true);
+        }
+        if (isRecipient) {
+            message.setDeletedByRecipient(true);
+        }
+        messageRepository.save(message);
+
+        updateConversationLastMessage(message.getConversation());
+    }
+
+    @Transactional
+    public MessageResponse deleteMessageForEveryone(User currentUser, Long messageId) {
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found with id: " + messageId));
+
+        if (!message.getSender().getId().equals(currentUser.getId())) {
+            throw new BadRequestException("Only the sender can remove a message for everyone");
+        }
+
+        Conversation conv = message.getConversation();
+
+        // DO NOT DELETE DATABASE! Change status to deletedForEveryone
+        message.setContent("This message was deleted");
+        message.setMediaUrl(null);
+        message.setDeletedForEveryone(true);
+        Message saved = messageRepository.save(message);
+
+        updateConversationLastMessage(conv);
+
+        MessageResponse senderResponse = mapToMessageResponse(saved, message.getSender());
+        MessageResponse recipientResponse = mapToMessageResponse(saved, message.getRecipient());
+
+        // Broadcast to both users in real-time so both screens update to deleted status
+        try {
+            messagingTemplate.convertAndSendToUser(
+                    message.getRecipient().getUsername(),
+                    "/queue/messages",
+                    recipientResponse
+            );
+            messagingTemplate.convertAndSendToUser(
+                    message.getSender().getUsername(),
+                    "/queue/messages",
+                    senderResponse
+            );
+            messagingTemplate.convertAndSend(
+                    "/topic/conversations/" + conv.getId(),
+                    senderResponse
+            );
+        } catch (Exception ex) {
+            log.warn("Failed to push delete for everyone real-time update: {}", ex.getMessage());
+        }
+
+        return senderResponse;
+    }
+
+    @Transactional
+    public void deleteMessage(User currentUser, Long messageId) {
+        deleteMessage(currentUser, messageId, false);
+    }
+
+    @Transactional
+    public void deleteMessage(User currentUser, Long messageId, boolean forEveryone) {
+        if (forEveryone) {
+            deleteMessageForEveryone(currentUser, messageId);
+        } else {
+            deleteMessageForMe(currentUser, messageId);
+        }
+    }
+
+    private void updateConversationLastMessage(Conversation conv) {
+        Optional<Message> latest = messageRepository.findTopByConversationOrderByCreatedAtDesc(conv);
+        if (latest.isPresent()) {
+            Message lm = latest.get();
+            conv.setLastMessageContent(lm.getContent());
+            conv.setLastMessageSenderId(lm.getSender().getId());
+            conv.setLastMessageTime(lm.getCreatedAt());
+        } else {
+            conv.setLastMessageContent("");
+            conv.setLastMessageSenderId(null);
+            conv.setLastMessageTime(null);
+        }
+        conversationRepository.save(conv);
     }
 }

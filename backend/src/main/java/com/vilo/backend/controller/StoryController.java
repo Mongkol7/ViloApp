@@ -6,7 +6,10 @@ import com.vilo.backend.dto.StoryResponse;
 import com.vilo.backend.dto.StoryViewerResponse;
 import com.vilo.backend.entity.User;
 import com.vilo.backend.service.StoryService;
+import com.vilo.backend.service.FileStorageService;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -19,9 +22,11 @@ import java.util.Map;
 public class StoryController {
 
     private final StoryService storyService;
+    private final FileStorageService fileStorageService;
 
-    public StoryController(StoryService storyService) {
+    public StoryController(StoryService storyService, FileStorageService fileStorageService) {
         this.storyService = storyService;
+        this.fileStorageService = fileStorageService;
     }
 
     @GetMapping({"", "/active"})
@@ -39,6 +44,29 @@ public class StoryController {
     ) {
         StoryResponse story = storyService.createStory(currentUser, request);
         return ResponseEntity.ok(ApiResponse.ok("Story posted successfully", story));
+    }
+
+    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<StoryResponse>> uploadStoryMedia(
+            @AuthenticationPrincipal User currentUser,
+            @RequestPart("file") MultipartFile file,
+            @RequestParam(defaultValue = "") String message,
+            @RequestParam(defaultValue = "VIDEO") String mediaType,
+            @RequestParam(defaultValue = "PUBLIC") String privacy,
+            @RequestParam(defaultValue = "sunset") String backgroundGradient,
+            @RequestParam(defaultValue = "24") int expiresInHours
+    ) {
+        final String folder = "IMAGE".equalsIgnoreCase(mediaType) ? "photos" : "videos";
+        final String mediaUrl = fileStorageService.storeFile(file, folder);
+        final CreateStoryRequest request = new CreateStoryRequest();
+        request.setMessage(message);
+        request.setMediaUrl(mediaUrl);
+        request.setMediaType(mediaType);
+        request.setPrivacy(privacy);
+        request.setBackgroundGradient(backgroundGradient);
+        request.setExpiresInHours(expiresInHours);
+        StoryResponse story = storyService.createStory(currentUser, request);
+        return ResponseEntity.ok(ApiResponse.ok("Story uploaded successfully", story));
     }
 
     @PostMapping("/{id}/view")

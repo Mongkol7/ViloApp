@@ -11,6 +11,8 @@ class ViloFloatingBottomBar extends StatefulWidget {
   final VoidCallback onAddPressed;
   final bool isAddActive;
   final bool isCompact;
+  final int? chatBadgeCount;
+  final bool chatHasDot;
 
   const ViloFloatingBottomBar({
     super.key,
@@ -19,6 +21,8 @@ class ViloFloatingBottomBar extends StatefulWidget {
     required this.onAddPressed,
     this.isAddActive = false,
     this.isCompact = false,
+    this.chatBadgeCount,
+    this.chatHasDot = false,
   });
 
   @override
@@ -29,23 +33,27 @@ class _TabItemData {
   final String label;
   final IconData filledIcon;
   final IconData outlinedIcon;
+  final int? badgeCount;
+  final bool hasDot;
 
   const _TabItemData({
     required this.label,
     required this.filledIcon,
     required this.outlinedIcon,
+    this.badgeCount,
+    this.hasDot = false,
   });
 }
 
 class _ViloFloatingBottomBarState extends State<ViloFloatingBottomBar>
     with SingleTickerProviderStateMixin {
-  static const List<_TabItemData> _tabs = [
-    _TabItemData(
+  List<_TabItemData> get _tabs => [
+    const _TabItemData(
       label: 'Home',
       filledIcon: Icons.home_rounded,
       outlinedIcon: Icons.home_outlined,
     ),
-    _TabItemData(
+    const _TabItemData(
       label: 'People',
       filledIcon: Icons.people_alt_rounded,
       outlinedIcon: Icons.people_alt_outlined,
@@ -54,8 +62,10 @@ class _ViloFloatingBottomBarState extends State<ViloFloatingBottomBar>
       label: 'Chat',
       filledIcon: Icons.chat_bubble_rounded,
       outlinedIcon: Icons.chat_bubble_outline_rounded,
+      badgeCount: widget.chatBadgeCount,
+      hasDot: widget.chatHasDot,
     ),
-    _TabItemData(
+    const _TabItemData(
       label: 'Profile',
       filledIcon: Icons.person_rounded,
       outlinedIcon: Icons.person_outline_rounded,
@@ -482,21 +492,65 @@ class _LiquidNavItem extends StatelessWidget {
           child: Center(
             child: Padding(
               padding: EdgeInsets.only(bottom: isCompact ? 4.0 : 6.0),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 180),
-                transitionBuilder: (child, anim) => FadeTransition(
-                  opacity: anim,
-                  child: ScaleTransition(
-                    scale: Tween<double>(begin: 0.92, end: 1.0).animate(anim),
-                    child: child,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    transitionBuilder: (child, anim) => FadeTransition(
+                      opacity: anim,
+                      child: ScaleTransition(
+                        scale: Tween<double>(begin: 0.92, end: 1.0).animate(anim),
+                        child: child,
+                      ),
+                    ),
+                    child: Icon(
+                      isSelected ? tabData.filledIcon : tabData.outlinedIcon,
+                      key: ValueKey('${tabData.label}_${isSelected}_$isCompact'),
+                      size: iconBaseSize,
+                      color: isSelected ? activeColor : inactiveColor,
+                    ),
                   ),
-                ),
-                child: Icon(
-                  isSelected ? tabData.filledIcon : tabData.outlinedIcon,
-                  key: ValueKey('${tabData.label}_${isSelected}_$isCompact'),
-                  size: iconBaseSize,
-                  color: isSelected ? activeColor : inactiveColor,
-                ),
+                  if (tabData.badgeCount != null && tabData.badgeCount! > 0)
+                    Positioned(
+                      top: -4,
+                      right: -10,
+                      child: Container(
+                        constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFE2C55),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.black, width: 1.5),
+                        ),
+                        child: Text(
+                          tabData.badgeCount! > 99 ? '99+' : tabData.badgeCount.toString(),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    )
+                  else if (tabData.hasDot)
+                    Positioned(
+                      top: -2,
+                      right: -3,
+                      child: Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFE2C55),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.black, width: 1.5),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),

@@ -13,6 +13,8 @@ class StoryItem {
   final int viewCount;
   final bool isMyStory;
   final String? authorUsername;
+  final int? authorId;
+  final String? createdAt;
 
   const StoryItem({
     required this.id,
@@ -29,13 +31,18 @@ class StoryItem {
     this.viewCount = 0,
     this.isMyStory = false,
     this.authorUsername,
+    this.authorId,
+    this.createdAt,
   });
 
   bool get isVideo {
     if (mediaType.toUpperCase() == 'VIDEO') return true;
     if (mediaUrl != null && mediaUrl!.isNotEmpty) {
       final lower = mediaUrl!.toLowerCase();
-      if (lower.contains('.mp4') || lower.contains('.mov') || lower.contains('.avi') || lower.contains('.mkv')) {
+      if (lower.contains('.mp4') ||
+          lower.contains('.mov') ||
+          lower.contains('.avi') ||
+          lower.contains('.mkv')) {
         return true;
       }
     }
@@ -53,10 +60,12 @@ class NotificationItem {
   final String id;
   final String title;
   final String subtitle;
-  final String iconType; // 'followers', 'activity', 'system', 'message', 'story_view'
+  final String
+  iconType; // 'followers', 'activity', 'system', 'message', 'story_view'
   final int? badgeCount;
   final bool hasDot;
-  final String type; // 'MESSAGE', 'STORY_VIEW', 'FOLLOW', 'LIKE', 'COMMENT', 'SYSTEM'
+  final String
+  type; // 'MESSAGE', 'STORY_VIEW', 'FOLLOW', 'LIKE', 'COMMENT', 'SYSTEM'
   final String? entityId;
   final String? entityType;
   final int? actorId;
@@ -94,6 +103,7 @@ class DirectMessageThread {
   final String followersCount;
   final bool isFollowing;
   final bool followsYou;
+  final int unreadCount;
   final List<ChatMessage> messages;
 
   const DirectMessageThread({
@@ -107,6 +117,7 @@ class DirectMessageThread {
     this.followersCount = '',
     this.isFollowing = false,
     this.followsYou = false,
+    this.unreadCount = 0,
     this.messages = const [],
   });
 
@@ -123,6 +134,7 @@ class DirectMessageThread {
     String? followersCount,
     bool? isFollowing,
     bool? followsYou,
+    int? unreadCount,
     List<ChatMessage>? messages,
   }) {
     return DirectMessageThread(
@@ -136,6 +148,7 @@ class DirectMessageThread {
       followersCount: followersCount ?? this.followersCount,
       isFollowing: isFollowing ?? this.isFollowing,
       followsYou: followsYou ?? this.followsYou,
+      unreadCount: unreadCount ?? this.unreadCount,
       messages: messages ?? this.messages,
     );
   }
@@ -147,6 +160,9 @@ class ChatMessage {
   final bool isMe;
   final String timestamp;
   final String? status;
+  final String? mediaUrl;
+  final bool isDeletedForEveryone;
+  final DateTime? sentAt;
 
   const ChatMessage({
     required this.id,
@@ -154,5 +170,30 @@ class ChatMessage {
     required this.isMe,
     required this.timestamp,
     this.status = 'Sent',
+    this.mediaUrl,
+    this.isDeletedForEveryone = false,
+    this.sentAt,
   });
+
+  ChatMessage copyWith({
+    String? id,
+    String? text,
+    bool? isMe,
+    String? timestamp,
+    String? status,
+    String? mediaUrl,
+    bool? isDeletedForEveryone,
+    DateTime? sentAt,
+  }) {
+    return ChatMessage(
+      id: id ?? this.id,
+      text: text ?? this.text,
+      isMe: isMe ?? this.isMe,
+      timestamp: timestamp ?? this.timestamp,
+      status: status ?? this.status,
+      mediaUrl: mediaUrl ?? this.mediaUrl,
+      isDeletedForEveryone: isDeletedForEveryone ?? this.isDeletedForEveryone,
+      sentAt: sentAt ?? this.sentAt,
+    );
+  }
 }

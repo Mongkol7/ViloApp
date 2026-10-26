@@ -3,6 +3,8 @@ import 'package:flutter/rendering.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../feed/presentation/pages/home_feed_page.dart';
 import '../../../feed/presentation/widgets/create_action_sheet.dart';
+import '../../../inbox_activity/data/datasources/chat_manager.dart';
+import '../../../inbox_activity/domain/entities/inbox_item.dart';
 import '../../../inbox_activity/presentation/pages/inbox_screen.dart';
 import '../../../profile/presentation/pages/people_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
@@ -30,7 +32,10 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   double _accumulatedDelta = 0.0;
 
   List<Widget> get _pages => [
-    HomeFeedPage(key: const PageStorageKey('main_nav_home'), isActive: _currentIndex == 0),
+    HomeFeedPage(
+      key: const PageStorageKey('main_nav_home'),
+      isActive: _currentIndex == 0,
+    ),
     const PeopleScreen(key: PageStorageKey('main_nav_people')),
     const InboxScreen(key: PageStorageKey('main_nav_inbox')),
     const ProfileScreen(key: PageStorageKey('main_nav_profile')),
@@ -139,10 +144,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           children: [
             // Current Page Content with IndexedStack
             Positioned.fill(
-              child: IndexedStack(
-                index: _currentIndex,
-                children: _pages,
-              ),
+              child: IndexedStack(index: _currentIndex, children: _pages),
             ),
 
             // Dynamic Scroll-Aware Floating Bottom Navigation Bar Dock
@@ -152,12 +154,33 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
               left: 0,
               right: 0,
               bottom: bottomMargin,
-              child: ViloFloatingBottomBar(
-                currentIndex: _currentIndex,
-                isAddActive: _isAddActive,
-                isCompact: _isCompact,
-                onTabSelected: _onTabSelected,
-                onAddPressed: _onAddPressed,
+              child: ValueListenableBuilder<List<DirectMessageThread>>(
+                valueListenable: ChatManager.instance.threadsNotifier,
+                builder: (context, threads, _) {
+                  final unreadChatCount = threads.fold<int>(
+                    0,
+                    (sum, t) => sum + t.unreadCount,
+                  );
+                  return ValueListenableBuilder<int>(
+                    valueListenable:
+                        ChatManager.instance.notificationBadgeNotifier,
+                    builder: (context, notificationCount, _) {
+                      final totalBadgeCount =
+                          unreadChatCount + notificationCount;
+                      return ViloFloatingBottomBar(
+                        currentIndex: _currentIndex,
+                        isAddActive: _isAddActive,
+                        isCompact: _isCompact,
+                        chatBadgeCount: totalBadgeCount > 0
+                            ? totalBadgeCount
+                            : null,
+                        chatHasDot: totalBadgeCount > 0,
+                        onTabSelected: _onTabSelected,
+                        onAddPressed: _onAddPressed,
+                      );
+                    },
+                  );
+                },
               ),
             ),
           ],

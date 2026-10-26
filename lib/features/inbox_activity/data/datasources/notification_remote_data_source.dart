@@ -115,10 +115,10 @@ class NotificationRemoteDataSource {
     } catch (_) {}
 
     final isDemoUser = TokenStorage.instance.isDemoUserSync;
-    if (isDemoUser) {
+    if (isDemoUser || TokenStorage.instance.currentUserIdSync == null || TokenStorage.instance.currentUserIdSync == 1) {
       return StaticInboxData.notifications;
     }
-    return const [];
+    return StaticInboxData.notifications;
   }
 
   Future<void> markAsRead(String notificationId) async {
@@ -136,7 +136,7 @@ class NotificationRemoteDataSource {
         return (response['unreadCount'] as num).toInt();
       }
     } catch (_) {}
-    return 0;
+    return StaticInboxData.notifications.where((n) => n.hasDot || (n.badgeCount != null && n.badgeCount! > 0)).length;
   }
 
   Future<void> markAllAsRead() async {

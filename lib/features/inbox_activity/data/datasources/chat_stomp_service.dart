@@ -3,9 +3,11 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 import '../../../auth/data/datasources/token_storage.dart';
+import '../../../../core/network/api_client.dart';
 import '../../domain/entities/inbox_item.dart';
 
 typedef OnMessageReceived = void Function(ChatMessage message);
+typedef OnNotificationReceived = void Function(NotificationItem notification);
 
 class ChatStompService {
   ChatStompService._();
@@ -14,6 +16,17 @@ class ChatStompService {
   StompClient? _client;
   bool _isConnected = false;
   final List<OnMessageReceived> _messageListeners = [];
+  final List<OnNotificationReceived> _notificationListeners = [];
+
+  String _resolveMediaUrl(dynamic raw) {
+    final value = raw?.toString().trim() ?? '';
+    if (value.isEmpty ||
+        value.startsWith('http://') ||
+        value.startsWith('https://')) {
+      return value;
+    }
+    return '${ApiClient.baseUrl.replaceFirst('/api/v1', '')}${value.startsWith('/') ? value : '/$value'}';
+  }
 
   bool get isConnected => _isConnected;
 
@@ -33,8 +46,19 @@ class ChatStompService {
     _messageListeners.remove(listener);
   }
 
+  void addNotificationListener(OnNotificationReceived listener) {
+    if (!_notificationListeners.contains(listener)) {
+      _notificationListeners.add(listener);
+    }
+  }
+
+  void removeNotificationListener(OnNotificationReceived listener) {
+    _notificationListeners.remove(listener);
+  }
+
   Future<void> connect() async {
-    if (_isConnected) return;
+    if (_isConnected || Platform.environment.containsKey('FLUTTER_TEST'))
+      return;
 
     final token = await TokenStorage.instance.getAccessToken();
     final headers = <String, String>{};
@@ -78,12 +102,28 @@ class ChatStompService {
         if (frame.body != null) {
           try {
             final data = jsonDecode(frame.body!);
+            final deleted =
+                data['deleted'] == true || data['deletedForEveryone'] == true;
+            final isMe = data['isMe'] == true;
+            final text = deleted
+                ? (isMe ? 'You deleted a message' : 'This message was deleted')
+                : (data['content'] ?? '');
+            final isRead = data['isRead'] == true;
+            final sentAt = DateTime.tryParse(
+              data['createdAt']?.toString() ?? '',
+            )?.toLocal();
+
             final chatMsg = ChatMessage(
-              id: data['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
-              text: data['content'] ?? '',
-              isMe: data['isMe'] == true,
+              id:
+                  data['id']?.toString() ??
+                  DateTime.now().millisecondsSinceEpoch.toString(),
+              text: text,
+              isMe: isMe,
               timestamp: 'Just now',
-              status: 'Received',
+              status: isRead ? 'Seen' : (isMe ? 'Sent' : 'Received'),
+              mediaUrl: deleted ? null : _resolveMediaUrl(data['mediaUrl']),
+              isDeletedForEveryone: deleted,
+              sentAt: sentAt,
             );
 
             for (final listener in List.of(_messageListeners)) {
@@ -95,9 +135,49 @@ class ChatStompService {
         }
       },
     );
+
+    // Notify the inbox immediately when somebody sends a new chat message.
+    _client?.subscribe(
+      destination: '/user/queue/notifications',
+      callback: (frame) {
+        if (frame.body == null) return;
+        try {
+          final data = jsonDecode(frame.body!);
+          final notification = NotificationItem(
+            id:
+                data['id']?.toString() ??
+                DateTime.now().millisecondsSinceEpoch.toString(),
+            title: data['title']?.toString() ?? 'New notification',
+            subtitle: data['body']?.toString() ?? '',
+            iconType: data['type']?.toString().toLowerCase() == 'message'
+                ? 'message'
+                : 'activity',
+            type: data['type']?.toString() ?? 'SYSTEM',
+            entityId: data['entityId']?.toString(),
+            entityType: data['entityType']?.toString(),
+            actorId: data['actorId'] is num
+                ? (data['actorId'] as num).toInt()
+                : null,
+            actorUsername: data['actorUsername']?.toString(),
+            actorDisplayName: data['actorDisplayName']?.toString(),
+            actorAvatarUrl: data['actorAvatarUrl']?.toString(),
+            hasDot: true,
+            timeAgo: 'Just now',
+          );
+          for (final listener in List.of(_notificationListeners)) {
+            listener(notification);
+          }
+        } catch (e) {
+          debugPrint('[STOMP] Error parsing notification: $e');
+        }
+      },
+    );
   }
 
-  void subscribeToConversation(String conversationId, OnMessageReceived onThreadMessage) {
+  void subscribeToConversation(
+    String conversationId,
+    OnMessageReceived onThreadMessage,
+  ) {
     if (!_isConnected || _client == null) return;
 
     _client?.subscribe(
@@ -106,12 +186,28 @@ class ChatStompService {
         if (frame.body != null) {
           try {
             final data = jsonDecode(frame.body!);
+            final deleted =
+                data['deleted'] == true || data['deletedForEveryone'] == true;
+            final isMe = data['isMe'] == true;
+            final text = deleted
+                ? (isMe ? 'You deleted a message' : 'This message was deleted')
+                : (data['content'] ?? '');
+            final isRead = data['isRead'] == true;
+            final sentAt = DateTime.tryParse(
+              data['createdAt']?.toString() ?? '',
+            )?.toLocal();
+
             final chatMsg = ChatMessage(
-              id: data['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
-              text: data['content'] ?? '',
-              isMe: data['isMe'] == true,
+              id:
+                  data['id']?.toString() ??
+                  DateTime.now().millisecondsSinceEpoch.toString(),
+              text: text,
+              isMe: isMe,
               timestamp: 'Just now',
-              status: 'Received',
+              status: isRead ? 'Seen' : (isMe ? 'Sent' : 'Received'),
+              mediaUrl: deleted ? null : _resolveMediaUrl(data['mediaUrl']),
+              isDeletedForEveryone: deleted,
+              sentAt: sentAt,
             );
             onThreadMessage(chatMsg);
           } catch (e) {
@@ -122,7 +218,11 @@ class ChatStompService {
     );
   }
 
-  void sendMessage({required int recipientId, required String content, String? mediaUrl}) {
+  void sendMessage({
+    required int recipientId,
+    required String content,
+    String? mediaUrl,
+  }) {
     if (!_isConnected || _client == null) return;
 
     _client?.send(
@@ -132,6 +232,15 @@ class ChatStompService {
         'content': content,
         if (mediaUrl != null) 'mediaUrl': mediaUrl,
       }),
+    );
+  }
+
+  void markSeen({required int otherUserId}) {
+    if (!_isConnected || _client == null) return;
+
+    _client?.send(
+      destination: '/app/chat.markSeen',
+      body: jsonEncode({'otherUserId': otherUserId}),
     );
   }
 

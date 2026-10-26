@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../auth/data/datasources/token_storage.dart';
 import '../../../profile/presentation/pages/people_screen.dart';
@@ -42,7 +43,10 @@ class _InboxScreenState extends State<InboxScreen> {
   @override
   void initState() {
     super.initState();
-    final isDemo = TokenStorage.instance.isDemoUserSync;
+    final isDemo =
+        TokenStorage.instance.isDemoUserSync ||
+        TokenStorage.instance.currentUserIdSync == null ||
+        TokenStorage.instance.currentUserIdSync == 1;
     _stories = isDemo
         ? List.from(StaticInboxData.stories)
         : const [
@@ -53,27 +57,83 @@ class _InboxScreenState extends State<InboxScreen> {
               isCreate: true,
             ),
           ];
-    _notifications = isDemo ? List.from(StaticInboxData.notifications) : const [];
-    _threads = isDemo ? List.from(StaticInboxData.threads) : List.from(ChatManager.instance.threads);
+    _notifications = List.from(StaticInboxData.notifications);
+    _threads = isDemo
+        ? List.from(StaticInboxData.threads)
+        : List.from(ChatManager.instance.threads);
     _loadAllData();
     ChatStompService.instance.connect();
+    ChatStompService.instance.addNotificationListener(
+      _handleNotificationReceived,
+    );
+  }
+
+  void _handleNotificationReceived(NotificationItem notification) {
+    if (!mounted) return;
+    setState(() {
+      _notifications = [
+        notification,
+        ..._notifications.where((item) => item.id != notification.id),
+      ];
+      if (notification.type.toUpperCase() == 'MESSAGE') {
+        final index = _threads.indexWhere(
+          (thread) =>
+              (notification.actorId != null &&
+                  thread.userId == notification.actorId) ||
+              (notification.actorUsername != null &&
+                  thread.username.toLowerCase() ==
+                      notification.actorUsername!.toLowerCase()),
+        );
+        if (index != -1) {
+          final thread = _threads[index];
+          _threads[index] = thread.copyWith(
+            unreadCount: thread.unreadCount + 1,
+            lastMessage: notification.subtitle,
+            timeAgo: 'Just now',
+          );
+          ChatManager.instance.init(_threads);
+        }
+      }
+      ChatManager.instance.incrementNotificationBadge();
+    });
+  }
+
+  @override
+  void dispose() {
+    ChatStompService.instance.removeNotificationListener(
+      _handleNotificationReceived,
+    );
+    super.dispose();
   }
 
   Future<void> _loadAllData() async {
     try {
       final stories = await StoryRemoteDataSource.instance.getActiveStories();
-      final notifications = await NotificationRemoteDataSource.instance.getNotifications();
+      final notifications = await NotificationRemoteDataSource.instance
+          .getNotifications();
       final threads = await ChatRemoteDataSource.instance.getConversations();
 
       if (mounted) {
         setState(() {
-          _stories = List.from(stories);
-          _notifications = List.from(notifications);
-          _threads = List.from(threads);
+          if (stories.isNotEmpty) _stories = List.from(stories);
+          if (notifications.isNotEmpty)
+            _notifications = List.from(notifications);
+          if (threads.isNotEmpty) _threads = List.from(threads);
         });
         ChatManager.instance.init(threads);
+        _updateNotificationBadge();
       }
     } catch (_) {}
+  }
+
+  void _updateNotificationBadge() {
+    final count = _notifications
+        .where(
+          (item) =>
+              item.hasDot || (item.badgeCount != null && item.badgeCount! > 0),
+        )
+        .length;
+    ChatManager.instance.setNotificationBadgeCount(count);
   }
 
   List<StoryViewerItem> _buildStoryViewerList() {
@@ -81,7 +141,14 @@ class _InboxScreenState extends State<InboxScreen> {
 
     // Collect ALL of current user's stories from _stories
     final myStories = _stories
-        .where((s) => !s.isCreate && (s.isMyStory || ProfileSyncService.instance.isCurrentUser(username: s.authorUsername)))
+        .where(
+          (s) =>
+              !s.isCreate &&
+              (s.isMyStory ||
+                  ProfileSyncService.instance.isCurrentUser(
+                    username: s.authorUsername,
+                  )),
+        )
         .toList();
 
     if (myStories.isNotEmpty) {
@@ -89,10 +156,12 @@ class _InboxScreenState extends State<InboxScreen> {
         final mediaT = (s.mediaType.isNotEmpty && s.mediaType != 'TEXT')
             ? s.mediaType
             : ((s.mediaUrl != null &&
-                    (s.mediaUrl!.toLowerCase().endsWith('.mp4') ||
-                        s.mediaUrl!.toLowerCase().endsWith('.mov')))
-                ? 'VIDEO'
-                : (s.mediaUrl != null && s.mediaUrl!.isNotEmpty ? 'IMAGE' : 'TEXT'));
+                      (s.mediaUrl!.toLowerCase().endsWith('.mp4') ||
+                          s.mediaUrl!.toLowerCase().endsWith('.mov')))
+                  ? 'VIDEO'
+                  : (s.mediaUrl != null && s.mediaUrl!.isNotEmpty
+                        ? 'IMAGE'
+                        : 'TEXT'));
 
         items.add(
           StoryViewerItem(
@@ -132,21 +201,28 @@ class _InboxScreenState extends State<InboxScreen> {
             story: myStory,
             isOwner: true,
             authorName: 'Your Story',
-            authorAvatarUrl: myStory.authorAvatarUrl ?? ProfileSyncService.instance.currentUserAvatar,
+            authorAvatarUrl:
+                myStory.authorAvatarUrl ??
+                ProfileSyncService.instance.currentUserAvatar,
           ),
         );
       }
     }
 
     for (final s in _stories) {
-      if (s.isCreate || s.isMyStory || ProfileSyncService.instance.isCurrentUser(username: s.authorUsername)) continue;
+      if (s.isCreate ||
+          s.isMyStory ||
+          ProfileSyncService.instance.isCurrentUser(username: s.authorUsername))
+        continue;
       final mediaT = (s.mediaType.isNotEmpty && s.mediaType != 'TEXT')
           ? s.mediaType
           : ((s.mediaUrl != null &&
-                  (s.mediaUrl!.toLowerCase().endsWith('.mp4') ||
-                      s.mediaUrl!.toLowerCase().endsWith('.mov')))
-              ? 'VIDEO'
-              : (s.mediaUrl != null && s.mediaUrl!.isNotEmpty ? 'IMAGE' : 'TEXT'));
+                    (s.mediaUrl!.toLowerCase().endsWith('.mp4') ||
+                        s.mediaUrl!.toLowerCase().endsWith('.mov')))
+                ? 'VIDEO'
+                : (s.mediaUrl != null && s.mediaUrl!.isNotEmpty
+                      ? 'IMAGE'
+                      : 'TEXT'));
 
       items.add(
         StoryViewerItem(
@@ -190,10 +266,14 @@ class _InboxScreenState extends State<InboxScreen> {
         tray.add(s);
         continue;
       }
-      if (s.isMyStory || ProfileSyncService.instance.isCurrentUser(username: s.authorUsername)) {
+      if (s.isMyStory ||
+          ProfileSyncService.instance.isCurrentUser(
+            username: s.authorUsername,
+          )) {
         continue;
       }
-      final authorKey = (s.authorUsername != null && s.authorUsername!.isNotEmpty)
+      final authorKey =
+          (s.authorUsername != null && s.authorUsername!.isNotEmpty)
           ? s.authorUsername!.toLowerCase().trim()
           : s.title.toLowerCase().trim();
 
@@ -216,28 +296,63 @@ class _InboxScreenState extends State<InboxScreen> {
 
       // In the main Inbox screen, direct messages are already prominently shown
       // right below in the MESSAGES section. Exclude redundant message notifications here.
-      final isMessage = typeUpper == 'MESSAGE' ||
+      final isMessage =
+          typeUpper == 'MESSAGE' ||
           item.iconType == 'message' ||
           titleLower.contains('message') ||
           subLower.contains('hi sak') ||
           subLower.contains('me liza');
       if (isMessage) continue;
 
-      final actorKey = (item.actorUsername != null && item.actorUsername!.isNotEmpty)
-          ? item.actorUsername!.toLowerCase().trim()
-          : (item.actorId != null ? item.actorId.toString() : item.title.toLowerCase().trim());
-      final key = '${item.type}_$actorKey';
+      final key = item.title.trim().toLowerCase();
 
       if (!seenKeys.contains(key)) {
         seenKeys.add(key);
-        list.add(item);
+
+        // Calculate unread count for this notification hub category
+        final matchingItems = _notifications.where(
+          (n) =>
+              n.title.trim().toLowerCase() == key ||
+              (n.iconType.isNotEmpty && n.iconType == item.iconType),
+        );
+        final unreadCount = matchingItems
+            .where(
+              (n) => n.hasDot || (n.badgeCount != null && n.badgeCount! > 0),
+            )
+            .length;
+
+        final int? effectiveBadgeCount =
+            (item.badgeCount != null && item.badgeCount! > 0)
+            ? item.badgeCount
+            : (unreadCount > 1 ? unreadCount : null);
+        final bool hasDot = item.hasDot || unreadCount > 0;
+
+        list.add(
+          NotificationItem(
+            id: item.id,
+            title: item.title,
+            subtitle: item.subtitle,
+            iconType: item.iconType,
+            badgeCount: effectiveBadgeCount,
+            hasDot: hasDot,
+            type: item.type,
+            entityId: item.entityId,
+            entityType: item.entityType,
+            actorId: item.actorId,
+            actorUsername: item.actorUsername,
+            actorDisplayName: item.actorDisplayName,
+            actorAvatarUrl: item.actorAvatarUrl,
+            timeAgo: item.timeAgo,
+          ),
+        );
       }
     }
     return list;
   }
 
   void _openOtherUserStory(StoryItem story) {
-    final authorKey = (story.authorUsername != null && story.authorUsername!.isNotEmpty)
+    final authorKey =
+        (story.authorUsername != null && story.authorUsername!.isNotEmpty)
         ? story.authorUsername!.toLowerCase().trim()
         : story.title.toLowerCase().trim();
 
@@ -254,54 +369,62 @@ class _InboxScreenState extends State<InboxScreen> {
       authorStories.add(story);
     }
 
-    final items = authorStories.map((s) => StoryViewerItem(
-      story: SharedThoughtStory(
-        id: s.id,
-        message: s.message ?? "Living the moment ✨",
-        mediaUrl: s.mediaUrl,
-        mediaType: (s.mediaType.isNotEmpty && s.mediaType != 'TEXT')
-            ? s.mediaType
-            : ((s.mediaUrl != null &&
-                    (s.mediaUrl!.toLowerCase().endsWith('.mp4') ||
-                        s.mediaUrl!.toLowerCase().endsWith('.mov')))
-                ? 'VIDEO'
-                : (s.mediaUrl != null && s.mediaUrl!.isNotEmpty ? 'IMAGE' : 'TEXT')),
-        privacy: s.privacy,
-        musicTrack: s.musicTitle != null
-            ? MusicTrack(
-                id: 'm_${s.id}',
-                title: s.musicTitle!,
-                artist: s.musicArtist ?? 'Unknown Artist',
-                albumArtUrl: s.imageUrl,
-                duration: '0:30',
-              )
-            : null,
-        timestamp: s.timestamp ?? 'Recently',
-        viewCount: s.viewCount,
-        backgroundColor: const Color(0xFF141416),
-        authorUsername: s.authorUsername,
-        authorName: s.title,
-      ),
-      isOwner: false,
-      authorName: s.title,
-      authorAvatarUrl: s.imageUrl,
-    )).toList();
+    final items = authorStories
+        .map(
+          (s) => StoryViewerItem(
+            story: SharedThoughtStory(
+              id: s.id,
+              message: s.message ?? "Living the moment ✨",
+              mediaUrl: s.mediaUrl,
+              mediaType: (s.mediaType.isNotEmpty && s.mediaType != 'TEXT')
+                  ? s.mediaType
+                  : ((s.mediaUrl != null &&
+                            (s.mediaUrl!.toLowerCase().endsWith('.mp4') ||
+                                s.mediaUrl!.toLowerCase().endsWith('.mov')))
+                        ? 'VIDEO'
+                        : (s.mediaUrl != null && s.mediaUrl!.isNotEmpty
+                              ? 'IMAGE'
+                              : 'TEXT')),
+              privacy: s.privacy,
+              musicTrack: s.musicTitle != null
+                  ? MusicTrack(
+                      id: 'm_${s.id}',
+                      title: s.musicTitle!,
+                      artist: s.musicArtist ?? 'Unknown Artist',
+                      albumArtUrl: s.imageUrl,
+                      duration: '0:30',
+                    )
+                  : null,
+              timestamp: s.timestamp ?? 'Recently',
+              viewCount: s.viewCount,
+              backgroundColor: const Color(0xFF141416),
+              authorUsername: s.authorUsername,
+              authorName: s.title,
+            ),
+            isOwner: false,
+            authorName: s.title,
+            authorAvatarUrl: s.imageUrl,
+          ),
+        )
+        .toList();
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => StoryViewerScreen(
-          stories: items,
-          initialIndex: 0,
-        ),
+        builder: (_) => StoryViewerScreen(stories: items, initialIndex: 0),
       ),
     );
   }
 
-  List<DirectMessageThread> _deduplicateThreads(List<DirectMessageThread> threads) {
+  List<DirectMessageThread> _deduplicateThreads(
+    List<DirectMessageThread> threads,
+  ) {
     final List<DirectMessageThread> result = [];
     for (final t in threads) {
       final existingIdx = result.indexWhere((it) {
-        if (it.userId != null && t.userId != null && it.userId! > 0 && t.userId! > 0) {
+        if (it.userId != null &&
+            t.userId != null &&
+            it.userId! > 0 &&
+            t.userId! > 0) {
           if (it.userId == t.userId) return true;
         }
         if (it.id.isNotEmpty && t.id.isNotEmpty && it.id == t.id) return true;
@@ -316,13 +439,21 @@ class _InboxScreenState extends State<InboxScreen> {
         final existing = result[existingIdx];
         final combined = List<ChatMessage>.from(existing.messages);
         for (final m in t.messages) {
-          if (!combined.any((cm) => cm.id == m.id || (cm.text == m.text && cm.timestamp == m.timestamp))) {
+          if (!combined.any(
+            (cm) =>
+                cm.id == m.id ||
+                (cm.text == m.text && cm.timestamp == m.timestamp),
+          )) {
             combined.add(m);
           }
         }
         result[existingIdx] = existing.copyWith(
-          lastMessage: t.lastMessage.isNotEmpty ? t.lastMessage : existing.lastMessage,
-          timeAgo: (t.timeAgo.isNotEmpty && t.timeAgo != 'Just now') ? t.timeAgo : existing.timeAgo,
+          lastMessage: t.lastMessage.isNotEmpty
+              ? t.lastMessage
+              : existing.lastMessage,
+          timeAgo: (t.timeAgo.isNotEmpty && t.timeAgo != 'Just now')
+              ? t.timeAgo
+              : existing.timeAgo,
           messages: combined,
         );
       }
@@ -332,35 +463,41 @@ class _InboxScreenState extends State<InboxScreen> {
 
   Future<void> _openNotificationHub(NotificationItem item) async {
     setState(() {
-      final idx = _notifications.indexWhere((n) => n.id == item.id);
-      if (idx != -1) {
-        _notifications[idx] = NotificationItem(
-          id: item.id,
-          title: item.title,
-          subtitle: item.subtitle,
-          iconType: item.iconType,
-          type: item.type,
-          entityId: item.entityId,
-          entityType: item.entityType,
-          actorId: item.actorId,
-          actorUsername: item.actorUsername,
-          actorDisplayName: item.actorDisplayName,
-          actorAvatarUrl: item.actorAvatarUrl,
-          timeAgo: item.timeAgo,
-          badgeCount: null,
-          hasDot: false,
-        );
+      for (int i = 0; i < _notifications.length; i++) {
+        final n = _notifications[i];
+        if (n.id == item.id ||
+            n.title == item.title ||
+            (n.iconType.isNotEmpty && n.iconType == item.iconType)) {
+          _notifications[i] = NotificationItem(
+            id: n.id,
+            title: n.title,
+            subtitle: n.subtitle,
+            iconType: n.iconType,
+            type: n.type,
+            entityId: n.entityId,
+            entityType: n.entityType,
+            actorId: n.actorId,
+            actorUsername: n.actorUsername,
+            actorDisplayName: n.actorDisplayName,
+            actorAvatarUrl: n.actorAvatarUrl,
+            timeAgo: n.timeAgo,
+            badgeCount: null,
+            hasDot: false,
+          );
+        }
       }
     });
 
     NotificationRemoteDataSource.instance.markAsRead(item.id);
+    _updateNotificationBadge();
 
     final titleLower = item.title.toLowerCase();
     final subLower = item.subtitle.toLowerCase();
     final typeUpper = item.type.toUpperCase();
 
     // 1. Direct Message notification -> Open chat with sender
-    final isMessage = typeUpper == 'MESSAGE' ||
+    final isMessage =
+        typeUpper == 'MESSAGE' ||
         item.iconType == 'message' ||
         titleLower.contains('message') ||
         subLower.contains('hi sak') ||
@@ -380,26 +517,32 @@ class _InboxScreenState extends State<InboxScreen> {
         }
       }
 
-      final targetUid = item.actorId ?? (targetUsername.toLowerCase() == 'liza' ? 2 : (targetUsername.toLowerCase() == 'sak' ? 1 : 0));
+      final targetUid =
+          item.actorId ??
+          (targetUsername.toLowerCase() == 'liza'
+              ? 2
+              : (targetUsername.toLowerCase() == 'sak' ? 1 : 0));
       final thread = ChatManager.instance.getOrCreateThread(
         userId: targetUid,
         username: targetUsername,
-        avatarUrl: item.actorAvatarUrl ?? (targetUsername.toLowerCase() == 'liza'
-            ? 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80'
-            : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80'),
+        avatarUrl:
+            item.actorAvatarUrl ??
+            (targetUsername.toLowerCase() == 'liza'
+                ? 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80'
+                : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80'),
       );
 
       await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ChatDetailScreen(thread: thread),
-        ),
+        MaterialPageRoute(builder: (_) => ChatDetailScreen(thread: thread)),
       );
+      ChatManager.instance.markThreadRead(thread.id);
       if (mounted) setState(() {});
       return;
     }
 
     // 2. Story View notification -> Open Story Viewer with viewers sheet or StoryViewersBottomSheet
-    final isStoryView = typeUpper == 'STORY_VIEW' ||
+    final isStoryView =
+        typeUpper == 'STORY_VIEW' ||
         item.iconType == 'story_view' ||
         titleLower.contains('story view') ||
         subLower.contains('viewed your') ||
@@ -431,7 +574,8 @@ class _InboxScreenState extends State<InboxScreen> {
     }
 
     // 3. Follow notification -> Open PublicProfileScreen for specific follower, or NewFollowersScreen if general hub
-    final isFollow = typeUpper == 'FOLLOW' ||
+    final isFollow =
+        typeUpper == 'FOLLOW' ||
         item.iconType == 'followers' ||
         titleLower.contains('follower') ||
         subLower.contains('started following');
@@ -443,7 +587,11 @@ class _InboxScreenState extends State<InboxScreen> {
       }
 
       if (targetUsername.isNotEmpty && !targetUsername.contains('others')) {
-        final targetUid = item.actorId ?? (targetUsername.toLowerCase() == 'liza' ? 2 : (targetUsername.toLowerCase() == 'sak' ? 1 : null));
+        final targetUid =
+            item.actorId ??
+            (targetUsername.toLowerCase() == 'liza'
+                ? 2
+                : (targetUsername.toLowerCase() == 'sak' ? 1 : null));
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => PublicProfileScreen(
@@ -456,15 +604,18 @@ class _InboxScreenState extends State<InboxScreen> {
         return;
       }
 
-      await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const NewFollowersScreen()),
-      );
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const NewFollowersScreen()));
       if (mounted) setState(() {});
       return;
     }
 
     // 4. Video Like, Comment, Mention -> VideoFeedPage
-    if (typeUpper == 'COMMENT' || typeUpper == 'MENTION' || titleLower.contains('comment') || titleLower.contains('mention')) {
+    if (typeUpper == 'COMMENT' ||
+        typeUpper == 'MENTION' ||
+        titleLower.contains('comment') ||
+        titleLower.contains('mention')) {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => VideoFeedPage(
@@ -483,9 +634,9 @@ class _InboxScreenState extends State<InboxScreen> {
 
     // 5. Activity hub screen
     if (item.iconType == 'activity' || titleLower == 'activity') {
-      await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const ActivityScreen()),
-      );
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const ActivityScreen()));
       if (mounted) setState(() {});
       return;
     }
@@ -499,9 +650,7 @@ class _InboxScreenState extends State<InboxScreen> {
 
   Future<void> _openUploadStory() async {
     final result = await Navigator.of(context).push<SharedThoughtStory>(
-      MaterialPageRoute(
-        builder: (_) => const UploadStoryScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const UploadStoryScreen()),
     );
 
     if (result != null && mounted) {
@@ -514,9 +663,7 @@ class _InboxScreenState extends State<InboxScreen> {
 
   Future<void> _openNoteStory() async {
     final result = await Navigator.of(context).push<SharedThoughtStory>(
-      MaterialPageRoute(
-        builder: (_) => const ShareThoughtScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const ShareThoughtScreen()),
     );
 
     if (result != null && mounted) {
@@ -548,6 +695,77 @@ class _InboxScreenState extends State<InboxScreen> {
     }
   }
 
+  void _confirmDeleteThread(DirectMessageThread thread) {
+    HapticFeedback.lightImpact();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E22),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text(
+          'Delete Chat with ${thread.username}?',
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to delete this chat with ${thread.username}? All messages in this conversation will be permanently removed.',
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            color: Color(0xFF8E8E93),
+            fontSize: 14,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Color(0xFF8E8E93)),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFE2C55),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              setState(() {
+                _threads.removeWhere(
+                  (t) =>
+                      t.id == thread.id ||
+                      (t.userId != null &&
+                          thread.userId != null &&
+                          t.userId == thread.userId),
+                );
+              });
+              ChatManager.instance.deleteThread(thread.id);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Chat with ${thread.username} deleted'),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+            child: const Text(
+              'Delete',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -562,9 +780,9 @@ class _InboxScreenState extends State<InboxScreen> {
             size: 24,
           ),
           onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const PeopleScreen()),
-            );
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const PeopleScreen()));
           },
         ),
         centerTitle: true,
@@ -586,11 +804,9 @@ class _InboxScreenState extends State<InboxScreen> {
               size: 26,
             ),
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const SearchScreen(),
-                ),
-              );
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const SearchScreen()));
             },
           ),
           const SizedBox(width: 6),
@@ -601,7 +817,9 @@ class _InboxScreenState extends State<InboxScreen> {
         color: const Color(0xFF2F80ED),
         backgroundColor: const Color(0xFF161618),
         child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
           padding: const EdgeInsets.only(bottom: 110),
           children: [
             // 1. Stories / Memories Horizontal Row
@@ -611,11 +829,15 @@ class _InboxScreenState extends State<InboxScreen> {
                 builder: (context) {
                   final trayStories = _uniqueTrayStories;
                   return ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
                     scrollDirection: Axis.horizontal,
                     physics: const BouncingScrollPhysics(),
                     itemCount: trayStories.length,
-                    separatorBuilder: (context, index) => const SizedBox(width: 14),
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 14),
                     itemBuilder: (context, index) {
                       final story = trayStories[index];
                       return _buildStoryCircle(context, story);
@@ -657,7 +879,10 @@ class _InboxScreenState extends State<InboxScreen> {
                     borderRadius: BorderRadius.circular(12),
                     onTap: () => setState(() => _messageFilter = 'all'),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: _messageFilter == 'all'
                             ? const Color(0xFF2F80ED)
@@ -669,8 +894,12 @@ class _InboxScreenState extends State<InboxScreen> {
                         style: TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 11,
-                          fontWeight: _messageFilter == 'all' ? FontWeight.w700 : FontWeight.w500,
-                          color: _messageFilter == 'all' ? Colors.white : const Color(0xFF8E8E93),
+                          fontWeight: _messageFilter == 'all'
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: _messageFilter == 'all'
+                              ? Colors.white
+                              : const Color(0xFF8E8E93),
                         ),
                       ),
                     ),
@@ -681,7 +910,10 @@ class _InboxScreenState extends State<InboxScreen> {
                     borderRadius: BorderRadius.circular(12),
                     onTap: () => setState(() => _messageFilter = 'friends'),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: _messageFilter == 'friends'
                             ? const Color(0xFF2F80ED)
@@ -691,15 +923,23 @@ class _InboxScreenState extends State<InboxScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.people_alt_rounded, size: 12, color: Colors.white),
+                          const Icon(
+                            Icons.people_alt_rounded,
+                            size: 12,
+                            color: Colors.white,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             'Friends',
                             style: TextStyle(
                               fontFamily: 'Inter',
                               fontSize: 11,
-                              fontWeight: _messageFilter == 'friends' ? FontWeight.w700 : FontWeight.w500,
-                              color: _messageFilter == 'friends' ? Colors.white : const Color(0xFF8E8E93),
+                              fontWeight: _messageFilter == 'friends'
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: _messageFilter == 'friends'
+                                  ? Colors.white
+                                  : const Color(0xFF8E8E93),
                             ),
                           ),
                         ],
@@ -717,7 +957,11 @@ class _InboxScreenState extends State<InboxScreen> {
                 final isDemo = TokenStorage.instance.isDemoUserSync;
                 final sourceThreads = activeThreads.isNotEmpty
                     ? activeThreads
-                    : (_threads.isNotEmpty ? _threads : (isDemo ? StaticInboxData.threads : const <DirectMessageThread>[]));
+                    : (_threads.isNotEmpty
+                          ? _threads
+                          : (isDemo
+                                ? StaticInboxData.threads
+                                : const <DirectMessageThread>[]));
                 final filteredThreads = _messageFilter == 'friends'
                     ? sourceThreads.where((t) => t.isFriend).toList()
                     : sourceThreads;
@@ -725,7 +969,10 @@ class _InboxScreenState extends State<InboxScreen> {
 
                 if (displayThreads.isEmpty) {
                   return Container(
-                    padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 40,
+                      horizontal: 24,
+                    ),
                     alignment: Alignment.center,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -790,7 +1037,9 @@ class _InboxScreenState extends State<InboxScreen> {
         valueListenable: ThoughtStoryManager.instance.storyNotifier,
         builder: (context, myStory, _) {
           final isStoryActive = myStory != null;
-          final messageText = isStoryActive ? myStory.message : 'Share a thought...';
+          final messageText = isStoryActive
+              ? myStory.message
+              : 'Share a thought...';
           final hasMusic = isStoryActive && myStory.musicTrack != null;
 
           // Separate handlers: Note box opens note story; + badge opens photo/video upload; avatar views active story
@@ -802,10 +1051,15 @@ class _InboxScreenState extends State<InboxScreen> {
                 behavior: HitTestBehavior.opaque,
                 onTap: _openNoteStory,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   constraints: const BoxConstraints(maxWidth: 105),
                   decoration: BoxDecoration(
-                    color: isStoryActive ? const Color(0xFF222228) : Colors.white,
+                    color: isStoryActive
+                        ? const Color(0xFF222228)
+                        : Colors.white,
                     borderRadius: BorderRadius.circular(10),
                     border: isStoryActive
                         ? Border.all(color: const Color(0xFF383842), width: 1.0)
@@ -830,7 +1084,9 @@ class _InboxScreenState extends State<InboxScreen> {
                             fontFamily: 'Inter',
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
-                            color: isStoryActive ? Colors.white : const Color(0xFF141416),
+                            color: isStoryActive
+                                ? Colors.white
+                                : const Color(0xFF141416),
                           ),
                         ),
                       ),
@@ -856,11 +1112,15 @@ class _InboxScreenState extends State<InboxScreen> {
                       alignment: Alignment.center,
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: isStoryActive ? _handleCreateOrViewStory : _openUploadStory,
+                        onTap: isStoryActive
+                            ? _handleCreateOrViewStory
+                            : _openUploadStory,
                         child: Container(
                           width: 56,
                           height: 56,
-                          padding: isStoryActive ? const EdgeInsets.all(2.5) : EdgeInsets.zero,
+                          padding: isStoryActive
+                              ? const EdgeInsets.all(2.5)
+                              : EdgeInsets.zero,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: isStoryActive
@@ -877,7 +1137,10 @@ class _InboxScreenState extends State<InboxScreen> {
                                 : const LinearGradient(
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
-                                    colors: [Color(0xFF56CCF2), Color(0xFF2F80ED)],
+                                    colors: [
+                                      Color(0xFF56CCF2),
+                                      Color(0xFF2F80ED),
+                                    ],
                                   ),
                             border: isStoryActive
                                 ? null
@@ -894,19 +1157,30 @@ class _InboxScreenState extends State<InboxScreen> {
                             padding: const EdgeInsets.all(2.0),
                             child: ClipOval(
                               child: Image.network(
-                                (myStory?.authorAvatarUrl != null && myStory!.authorAvatarUrl!.isNotEmpty)
+                                (myStory?.authorAvatarUrl != null &&
+                                        myStory!.authorAvatarUrl!.isNotEmpty)
                                     ? myStory.authorAvatarUrl!
-                                    : ProfileSyncService.instance.currentUserAvatar,
+                                    : ProfileSyncService
+                                          .instance
+                                          .currentUserAvatar,
                                 fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => Container(
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: LinearGradient(
-                                      colors: [Color(0xFF56CCF2), Color(0xFF2F80ED)],
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Container(
+                                      decoration: const BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            Color(0xFF56CCF2),
+                                            Color(0xFF2F80ED),
+                                          ],
+                                        ),
+                                      ),
+                                      child: const Icon(
+                                        Icons.person,
+                                        color: Colors.white,
+                                        size: 24,
+                                      ),
                                     ),
-                                  ),
-                                  child: const Icon(Icons.person, color: Colors.white, size: 24),
-                                ),
                               ),
                             ),
                           ),
@@ -934,7 +1208,10 @@ class _InboxScreenState extends State<InboxScreen> {
                             decoration: BoxDecoration(
                               color: const Color(0xFF2F80ED),
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.black, width: 2.0),
+                              border: Border.all(
+                                color: Colors.black,
+                                width: 2.0,
+                              ),
                             ),
                             child: const Icon(
                               Icons.add,
@@ -951,7 +1228,9 @@ class _InboxScreenState extends State<InboxScreen> {
               const SizedBox(height: 5),
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: isStoryActive ? _handleCreateOrViewStory : _openUploadStory,
+                onTap: isStoryActive
+                    ? _handleCreateOrViewStory
+                    : _openUploadStory,
                 child: Text(
                   isStoryActive ? 'Your story' : story.title,
                   style: const TextStyle(
@@ -984,7 +1263,11 @@ class _InboxScreenState extends State<InboxScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF56CCF2), Color(0xFF2F80ED), Color(0xFF9B51E0)],
+                colors: [
+                  Color(0xFF56CCF2),
+                  Color(0xFF2F80ED),
+                  Color(0xFF9B51E0),
+                ],
               ),
             ),
             child: Container(
@@ -1025,49 +1308,83 @@ class _InboxScreenState extends State<InboxScreen> {
     final subLower = item.subtitle.toLowerCase();
     final typeUpper = item.type.toUpperCase();
 
-    final isMessage = typeUpper == 'MESSAGE' ||
+    final isMessage =
+        typeUpper == 'MESSAGE' ||
         item.iconType == 'message' ||
         titleLower.contains('message') ||
         subLower.contains('hi sak') ||
         subLower.contains('me liza');
 
-    final isStoryView = typeUpper == 'STORY_VIEW' ||
+    final isStoryView =
+        typeUpper == 'STORY_VIEW' ||
         item.iconType == 'story_view' ||
         titleLower.contains('story view') ||
         subLower.contains('viewed your') ||
         subLower.contains('24h thought');
 
-    final isFollow = typeUpper == 'FOLLOW' ||
+    final isFollow =
+        typeUpper == 'FOLLOW' ||
         item.iconType == 'followers' ||
         titleLower.contains('follower') ||
         subLower.contains('started following');
 
-    final isComment = typeUpper == 'COMMENT' || titleLower.contains('comment') || subLower.contains('comment');
-    final isLike = typeUpper == 'LIKE' || (!isMessage && !isStoryView && !isFollow && !isComment && (item.iconType == 'activity' || titleLower.contains('liked')));
+    final isComment =
+        typeUpper == 'COMMENT' ||
+        titleLower.contains('comment') ||
+        subLower.contains('comment');
+    final isLike =
+        typeUpper == 'LIKE' ||
+        (!isMessage &&
+            !isStoryView &&
+            !isFollow &&
+            !isComment &&
+            (item.iconType == 'activity' || titleLower.contains('liked')));
 
     Widget leadingIcon;
-    if (item.actorAvatarUrl != null && item.actorAvatarUrl!.isNotEmpty && (isMessage || isStoryView || isFollow)) {
+    if (item.actorAvatarUrl != null &&
+        item.actorAvatarUrl!.isNotEmpty &&
+        (isMessage || isStoryView || isFollow)) {
       Widget miniBadge;
       if (isMessage) {
         miniBadge = Container(
           padding: const EdgeInsets.all(3),
-          decoration: const BoxDecoration(color: Color(0xFF2F80ED), shape: BoxShape.circle),
-          child: const Icon(Icons.chat_bubble_rounded, color: Colors.white, size: 10),
+          decoration: const BoxDecoration(
+            color: Color(0xFF2F80ED),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.chat_bubble_rounded,
+            color: Colors.white,
+            size: 10,
+          ),
         );
       } else if (isStoryView) {
         miniBadge = Container(
           padding: const EdgeInsets.all(3),
           decoration: const BoxDecoration(
-            gradient: LinearGradient(colors: [Color(0xFFFE2C55), Color(0xFF2F80ED)]),
+            gradient: LinearGradient(
+              colors: [Color(0xFFFE2C55), Color(0xFF2F80ED)],
+            ),
             shape: BoxShape.circle,
           ),
-          child: const Icon(Icons.visibility_rounded, color: Colors.white, size: 10),
+          child: const Icon(
+            Icons.visibility_rounded,
+            color: Colors.white,
+            size: 10,
+          ),
         );
       } else {
         miniBadge = Container(
           padding: const EdgeInsets.all(3),
-          decoration: const BoxDecoration(color: Color(0xFFFE2C55), shape: BoxShape.circle),
-          child: const Icon(Icons.person_add_rounded, color: Colors.white, size: 10),
+          decoration: const BoxDecoration(
+            color: Color(0xFFFE2C55),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.person_add_rounded,
+            color: Colors.white,
+            size: 10,
+          ),
         );
       }
 
@@ -1083,15 +1400,12 @@ class _InboxScreenState extends State<InboxScreen> {
                 width: 52,
                 height: 52,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => const Icon(Icons.person, color: Colors.white38, size: 26),
+                errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.person, color: Colors.white38, size: 26),
               ),
             ),
           ),
-          Positioned(
-            right: 0,
-            bottom: 0,
-            child: miniBadge,
-          ),
+          Positioned(right: 0, bottom: 0, child: miniBadge),
         ],
       );
     } else if (isMessage) {
@@ -1169,11 +1483,7 @@ class _InboxScreenState extends State<InboxScreen> {
           color: Color(0xFF2F80ED),
           shape: BoxShape.circle,
         ),
-        child: const Icon(
-          Icons.comment_rounded,
-          color: Colors.white,
-          size: 24,
-        ),
+        child: const Icon(Icons.comment_rounded, color: Colors.white, size: 24),
       );
     } else {
       leadingIcon = Container(
@@ -1232,17 +1542,25 @@ class _InboxScreenState extends State<InboxScreen> {
                   ],
                 ),
               ),
-              if (item.badgeCount != null)
+              if (item.badgeCount != null && item.badgeCount! > 0)
                 Container(
-                  width: 22,
-                  height: 22,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF2F80ED),
-                    shape: BoxShape.circle,
+                  constraints: const BoxConstraints(
+                    minWidth: 22,
+                    minHeight: 22,
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFE2C55),
+                    borderRadius: BorderRadius.circular(11),
                   ),
                   child: Center(
                     child: Text(
-                      item.badgeCount.toString(),
+                      item.badgeCount! > 99
+                          ? '99+'
+                          : item.badgeCount.toString(),
                       style: const TextStyle(
                         fontFamily: 'Inter',
                         fontSize: 12,
@@ -1254,17 +1572,24 @@ class _InboxScreenState extends State<InboxScreen> {
                 )
               else if (item.hasDot)
                 Container(
-                  width: 8,
-                  height: 8,
+                  width: 9,
+                  height: 9,
                   decoration: const BoxDecoration(
-                    color: Color(0xFF2F80ED),
+                    color: Color(0xFFFE2C55),
                     shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0x66FE2C55),
+                        blurRadius: 4,
+                        spreadRadius: 1,
+                      ),
+                    ],
                   ),
                 )
               else
                 const Icon(
                   Icons.chevron_right_rounded,
-                  color: Color(0xFF2F80ED),
+                  color: Color(0xFF8E8E93),
                   size: 24,
                 ),
             ],
@@ -1274,15 +1599,17 @@ class _InboxScreenState extends State<InboxScreen> {
     );
   }
 
-  Widget _buildMessageThreadTile(BuildContext context, DirectMessageThread thread) {
+  Widget _buildMessageThreadTile(
+    BuildContext context,
+    DirectMessageThread thread,
+  ) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
+          ChatManager.instance.markThreadRead(thread.id);
           Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ChatDetailScreen(thread: thread),
-            ),
+            MaterialPageRoute(builder: (_) => ChatDetailScreen(thread: thread)),
           );
         },
         splashColor: Colors.white.withValues(alpha: 0.05),
@@ -1346,16 +1673,25 @@ class _InboxScreenState extends State<InboxScreen> {
                         if (thread.isFriend) ...[
                           const SizedBox(width: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0x262F80ED),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0x4D2F80ED)),
+                              border: Border.all(
+                                color: const Color(0x4D2F80ED),
+                              ),
                             ),
                             child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.people_alt_rounded, size: 10, color: Color(0xFF38BDF8)),
+                                Icon(
+                                  Icons.people_alt_rounded,
+                                  size: 10,
+                                  color: Color(0xFF38BDF8),
+                                ),
                                 SizedBox(width: 3),
                                 Text(
                                   'Friends',
@@ -1372,7 +1708,10 @@ class _InboxScreenState extends State<InboxScreen> {
                         ] else if (thread.isFollowing) ...[
                           const SizedBox(width: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0x1AFFFFFF),
                               borderRadius: BorderRadius.circular(6),
@@ -1390,7 +1729,10 @@ class _InboxScreenState extends State<InboxScreen> {
                         ] else if (thread.followsYou) ...[
                           const SizedBox(width: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0x263B82F6),
                               borderRadius: BorderRadius.circular(6),
@@ -1409,31 +1751,93 @@ class _InboxScreenState extends State<InboxScreen> {
                       ],
                     ),
                     const SizedBox(height: 3),
-                    Text(
-                      thread.timeAgo.isNotEmpty
-                          ? '${thread.lastMessage} • ${thread.timeAgo}'
-                          : thread.lastMessage,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w400,
-                        color: Color(0xFF8E8E93),
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            thread.timeAgo.isNotEmpty
+                                ? '${thread.lastMessage} • ${thread.timeAgo}'
+                                : thread.lastMessage,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 13,
+                              fontWeight: thread.unreadCount > 0
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                              color: thread.unreadCount > 0
+                                  ? Colors.white
+                                  : const Color(0xFF8E8E93),
+                            ),
+                          ),
+                        ),
+                        if (thread.unreadCount > 1) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            constraints: const BoxConstraints(
+                              minWidth: 18,
+                              minHeight: 18,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFE2C55),
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            child: Text(
+                              '${thread.unreadCount}',
+                              style: const TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ] else if (thread.unreadCount == 1) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFFE2C55),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
               ),
 
-              // Right Camera Action Icon
-              IconButton(
-                icon: const Icon(
-                  Icons.camera_alt_outlined,
-                  color: Colors.white,
-                  size: 22,
-                ),
-                onPressed: () {},
+              // Actions: Camera & Delete Chat (near camera)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.camera_alt_outlined,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                    onPressed: () {},
+                  ),
+                  IconButton(
+                    key: Key('delete_chat_${thread.id}'),
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Color(0xFF8E8E93),
+                      size: 22,
+                    ),
+                    splashRadius: 20,
+                    tooltip: 'Delete chat',
+                    onPressed: () => _confirmDeleteThread(thread),
+                  ),
+                ],
               ),
             ],
           ),

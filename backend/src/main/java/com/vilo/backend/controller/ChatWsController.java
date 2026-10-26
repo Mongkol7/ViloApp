@@ -14,6 +14,7 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
+import java.util.Map;
 
 @Controller
 public class ChatWsController {
@@ -45,5 +46,23 @@ public class ChatWsController {
                 .build();
 
         return chatService.sendMessage(sender, payload.getRecipientId(), request);
+    }
+
+    @MessageMapping("/chat.markSeen")
+    public void handleMarkSeen(Principal principal, @Payload Map<String, Object> payload) {
+        if (principal == null || payload == null) return;
+        try {
+            String username = principal.getName();
+            User currentUser = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
+
+            Object otherIdObj = payload.get("otherUserId");
+            if (otherIdObj != null) {
+                Long otherUserId = Long.valueOf(otherIdObj.toString());
+                chatService.markMessagesAsRead(currentUser, otherUserId);
+            }
+        } catch (Exception ex) {
+            log.warn("Error marking messages as seen via STOMP: {}", ex.getMessage());
+        }
     }
 }

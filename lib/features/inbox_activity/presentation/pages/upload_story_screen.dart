@@ -31,10 +31,7 @@ class GalleryMediaItem {
 class UploadStoryScreen extends StatefulWidget {
   final String initialPrivacy;
 
-  const UploadStoryScreen({
-    super.key,
-    this.initialPrivacy = 'PUBLIC',
-  });
+  const UploadStoryScreen({super.key, this.initialPrivacy = 'PUBLIC'});
 
   @override
   State<UploadStoryScreen> createState() => _UploadStoryScreenState();
@@ -57,21 +54,24 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
       id: 'm1',
       title: 'Espresso',
       artist: 'Sabrina Carpenter',
-      albumArtUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=150',
+      albumArtUrl:
+          'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=150',
       duration: '0:30',
     ),
     MusicTrack(
       id: 'm2',
       title: 'Starboy',
       artist: 'The Weeknd ft. Daft Punk',
-      albumArtUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=150',
+      albumArtUrl:
+          'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=150',
       duration: '0:30',
     ),
     MusicTrack(
       id: 'm3',
       title: 'Cruel Summer',
       artist: 'Taylor Swift',
-      albumArtUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=150',
+      albumArtUrl:
+          'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=150',
       duration: '0:30',
     ),
   ];
@@ -90,8 +90,10 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
         id: 'item_1',
         title: 'Neon Street in Rain',
         duration: '0:15',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=600&auto=format&fit=crop&q=80',
-        mediaUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+        thumbnailUrl:
+            'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=600&auto=format&fit=crop&q=80',
+        mediaUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
         mediaType: 'VIDEO',
       ),
       // 2. Abstract Red Curves (0:08)
@@ -99,8 +101,10 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
         id: 'item_2',
         title: 'Red Abstract Fluid',
         duration: '0:08',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=600&auto=format&fit=crop&q=80',
-        mediaUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+        thumbnailUrl:
+            'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=600&auto=format&fit=crop&q=80',
+        mediaUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
         mediaType: 'VIDEO',
       ),
       // 3. Brutalist Architecture (0:24)
@@ -108,8 +112,10 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
         id: 'item_3',
         title: 'Brutalist Concrete',
         duration: '0:24',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=600&auto=format&fit=crop&q=80',
-        mediaUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
+        thumbnailUrl:
+            'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=600&auto=format&fit=crop&q=80',
+        mediaUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
         mediaType: 'VIDEO',
       ),
       // 4. Dark High Fashion Model (0:12)
@@ -117,8 +123,10 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
         id: 'item_4',
         title: 'High Fashion Walk',
         duration: '0:12',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=600&auto=format&fit=crop&q=80',
-        mediaUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4',
+        thumbnailUrl:
+            'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=600&auto=format&fit=crop&q=80',
+        mediaUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4',
         mediaType: 'VIDEO',
       ),
       // 5. Red Neural Fiber Grid (0:59)
@@ -126,8 +134,10 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
         id: 'item_5',
         title: 'Neural Network Fibers',
         duration: '0:59',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1507499739999-097706ad8914?w=600&auto=format&fit=crop&q=80',
-        mediaUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4',
+        thumbnailUrl:
+            'https://images.unsplash.com/photo-1507499739999-097706ad8914?w=600&auto=format&fit=crop&q=80',
+        mediaUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4',
         mediaType: 'VIDEO',
       ),
       // 6. Red Water Droplet Splash (0:05)
@@ -135,8 +145,10 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
         id: 'item_6',
         title: 'Crimson Droplet Splash',
         duration: '0:05',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=600&auto=format&fit=crop&q=80',
-        mediaUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+        thumbnailUrl:
+            'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=600&auto=format&fit=crop&q=80',
+        mediaUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
         mediaType: 'VIDEO',
       ),
       // 7. City Skyline Sunset (0:10)
@@ -144,8 +156,10 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
         id: 'item_7',
         title: 'Tokyo Twilight Skyline',
         duration: '0:10',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=600&auto=format&fit=crop&q=80',
-        mediaUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackSeeTheWorld.mp4',
+        thumbnailUrl:
+            'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=600&auto=format&fit=crop&q=80',
+        mediaUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackSeeTheWorld.mp4',
         mediaType: 'VIDEO',
       ),
       // 8. Cyberpunk UPLOAD GALLERY Sign (0:18)
@@ -153,8 +167,10 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
         id: 'item_8',
         title: 'Upload Gallery Screen',
         duration: '0:18',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&auto=format&fit=crop&q=80',
-        mediaUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+        thumbnailUrl:
+            'https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&auto=format&fit=crop&q=80',
+        mediaUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
         mediaType: 'VIDEO',
       ),
       // 9. Bare Feet Spotlight Dance (0:31)
@@ -162,8 +178,10 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
         id: 'item_9',
         title: 'Bare Feet Stage Dance',
         duration: '0:31',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600&auto=format&fit=crop&q=80',
-        mediaUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',
+        thumbnailUrl:
+            'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600&auto=format&fit=crop&q=80',
+        mediaUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',
         mediaType: 'VIDEO',
       ),
       // 10. Palm Shadow Wall (0:14)
@@ -171,8 +189,10 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
         id: 'item_10',
         title: 'Palm Silhouette Shadow',
         duration: '0:14',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?w=600&auto=format&fit=crop&q=80',
-        mediaUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4',
+        thumbnailUrl:
+            'https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?w=600&auto=format&fit=crop&q=80',
+        mediaUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4',
         mediaType: 'VIDEO',
       ),
       // 11. Studio Monitors Session (0:09)
@@ -180,8 +200,10 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
         id: 'item_11',
         title: 'Studio Creative Session',
         duration: '0:09',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&auto=format&fit=crop&q=80',
-        mediaUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+        thumbnailUrl:
+            'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&auto=format&fit=crop&q=80',
+        mediaUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
         mediaType: 'VIDEO',
       ),
       // 12. Desert Starry Sky (0:45)
@@ -189,8 +211,10 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
         id: 'item_12',
         title: 'Milky Way Desert Sky',
         duration: '0:45',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=600&auto=format&fit=crop&q=80',
-        mediaUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+        thumbnailUrl:
+            'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=600&auto=format&fit=crop&q=80',
+        mediaUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
         mediaType: 'VIDEO',
       ),
     ];
@@ -218,9 +242,7 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
   Future<void> _openPersonalMusicFlow() async {
     _closeDropdown();
     final result = await Navigator.of(context).push<SharedThoughtStory>(
-      MaterialPageRoute(
-        builder: (_) => const ShareThoughtScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const ShareThoughtScreen()),
     );
 
     if (result != null && mounted) {
@@ -233,7 +255,16 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
     try {
       final res = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['mp4', 'mov', 'avi', 'mkv', 'jpg', 'jpeg', 'png', 'webp'],
+        allowedExtensions: [
+          'mp4',
+          'mov',
+          'avi',
+          'mkv',
+          'jpg',
+          'jpeg',
+          'png',
+          'webp',
+        ],
         allowMultiple: false,
       );
 
@@ -292,7 +323,9 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
     _closeDropdown();
     if (_selectedIndex == null || _selectedIndex! >= _mediaItems.length) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a photo or video to continue')),
+        const SnackBar(
+          content: Text('Please select a photo or video to continue'),
+        ),
       );
       return;
     }
@@ -351,16 +384,28 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                         ),
                         const Spacer(),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF2F80ED).withValues(alpha: 0.15),
+                            color: const Color(
+                              0xFF2F80ED,
+                            ).withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFF2F80ED), width: 1),
+                            border: Border.all(
+                              color: const Color(0xFF2F80ED),
+                              width: 1,
+                            ),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.play_circle_fill_rounded, color: Color(0xFF2F80ED), size: 14),
+                              const Icon(
+                                Icons.play_circle_fill_rounded,
+                                color: Color(0xFF2F80ED),
+                                size: 14,
+                              ),
                               const SizedBox(width: 4),
                               Text(
                                 item.duration,
@@ -391,18 +436,28 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                                 ? Image.file(
                                     File(item.thumbnailUrl),
                                     fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) => Container(
-                                      color: const Color(0xFF222228),
-                                      child: const Icon(Icons.videocam_rounded, color: Colors.white70),
-                                    ),
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            Container(
+                                              color: const Color(0xFF222228),
+                                              child: const Icon(
+                                                Icons.videocam_rounded,
+                                                color: Colors.white70,
+                                              ),
+                                            ),
                                   )
                                 : Image.network(
                                     item.thumbnailUrl,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) => Container(
-                                      color: const Color(0xFF222228),
-                                      child: const Icon(Icons.videocam_rounded, color: Colors.white70),
-                                    ),
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            Container(
+                                              color: const Color(0xFF222228),
+                                              child: const Icon(
+                                                Icons.videocam_rounded,
+                                                color: Colors.white70,
+                                              ),
+                                            ),
                                   ),
                           ),
                         ),
@@ -411,10 +466,19 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                           child: TextField(
                             controller: _captionController,
                             maxLines: 4,
-                            style: const TextStyle(fontFamily: 'Inter', color: Colors.white, fontSize: 14),
+                            style: const TextStyle(
+                              fontFamily: 'Inter',
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
                             decoration: InputDecoration(
-                              hintText: 'Add a thought or caption to your story...',
-                              hintStyle: const TextStyle(fontFamily: 'Inter', color: Color(0xFF8E8E93), fontSize: 13),
+                              hintText:
+                                  'Add a thought or caption to your story...',
+                              hintStyle: const TextStyle(
+                                fontFamily: 'Inter',
+                                color: Color(0xFF8E8E93),
+                                fontSize: 13,
+                              ),
                               filled: true,
                               fillColor: const Color(0xFF222228),
                               border: OutlineInputBorder(
@@ -440,12 +504,17 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                               _showMusicSelector(setModalState);
                             },
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF222228),
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: _selectedMusic != null ? const Color(0xFF2F80ED) : const Color(0xFF333338),
+                                  color: _selectedMusic != null
+                                      ? const Color(0xFF2F80ED)
+                                      : const Color(0xFF333338),
                                   width: 1,
                                 ),
                               ),
@@ -454,7 +523,9 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                                   Icon(
                                     Icons.music_note_rounded,
                                     size: 18,
-                                    color: _selectedMusic != null ? const Color(0xFF2F80ED) : const Color(0xFF8E8E93),
+                                    color: _selectedMusic != null
+                                        ? const Color(0xFF2F80ED)
+                                        : const Color(0xFF8E8E93),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
@@ -466,7 +537,9 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                                         fontFamily: 'Inter',
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
-                                        color: _selectedMusic != null ? Colors.white : const Color(0xFF8E8E93),
+                                        color: _selectedMusic != null
+                                            ? Colors.white
+                                            : const Color(0xFF8E8E93),
                                       ),
                                     ),
                                   ),
@@ -485,11 +558,17 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                               _showPrivacySelector(setModalState);
                             },
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF222228),
                                 borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: const Color(0xFF333338), width: 1),
+                                border: Border.all(
+                                  color: const Color(0xFF333338),
+                                  width: 1,
+                                ),
                               ),
                               child: Row(
                                 children: [
@@ -497,8 +576,8 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                                     _privacy == 'PUBLIC'
                                         ? Icons.public_rounded
                                         : (_privacy == 'FRIENDS'
-                                            ? Icons.favorite_rounded
-                                            : Icons.people_outline_rounded),
+                                              ? Icons.favorite_rounded
+                                              : Icons.people_outline_rounded),
                                     size: 18,
                                     color: const Color(0xFF2F80ED),
                                   ),
@@ -507,7 +586,9 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                                     child: Text(
                                       _privacy == 'PUBLIC'
                                           ? 'Public'
-                                          : (_privacy == 'FRIENDS' ? 'Friends only' : 'Followers'),
+                                          : (_privacy == 'FRIENDS'
+                                                ? 'Friends only'
+                                                : 'Followers'),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
@@ -538,7 +619,9 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                               final story = await _publishStory(item);
                               if (mounted && story != null) {
                                 sheetNav.pop(); // Close sheet
-                                rootNav.pop(story); // Return to caller with story
+                                rootNav.pop(
+                                  story,
+                                ); // Return to caller with story
                               } else {
                                 setModalState(() => _isPosting = false);
                               }
@@ -552,7 +635,9 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF2F80ED).withValues(alpha: 0.35),
+                              color: const Color(
+                                0xFF2F80ED,
+                              ).withValues(alpha: 0.35),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),
@@ -641,15 +726,28 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                     ),
                     title: Text(
                       track.title,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
                     subtitle: Text(
                       track.artist,
-                      style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 12),
+                      style: const TextStyle(
+                        color: Color(0xFF8E8E93),
+                        fontSize: 12,
+                      ),
                     ),
                     trailing: isSelected
-                        ? const Icon(Icons.check_circle, color: Color(0xFF2F80ED))
-                        : const Icon(Icons.play_circle_outline_rounded, color: Colors.white70),
+                        ? const Icon(
+                            Icons.check_circle,
+                            color: Color(0xFF2F80ED),
+                          )
+                        : const Icon(
+                            Icons.play_circle_outline_rounded,
+                            color: Colors.white70,
+                          ),
                     onTap: () {
                       parentSetState(() {
                         _selectedMusic = isSelected ? null : track;
@@ -760,7 +858,9 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? color.withValues(alpha: 0.12) : const Color(0xFF26262B),
+          color: isSelected
+              ? color.withValues(alpha: 0.12)
+              : const Color(0xFF26262B),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isSelected ? color : const Color(0xFF333338),
@@ -789,7 +889,9 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                       fontFamily: 'Inter',
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: isSelected ? Colors.white : const Color(0xFFE5E5EA),
+                      color: isSelected
+                          ? Colors.white
+                          : const Color(0xFFE5E5EA),
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -815,13 +917,25 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
   Future<SharedThoughtStory?> _publishStory(GalleryMediaItem item) async {
     HapticFeedback.mediumImpact();
     try {
-      final story = await StoryRemoteDataSource.instance.createStory(
-        message: _captionController.text.trim().isNotEmpty ? _captionController.text.trim() : item.title,
-        mediaUrl: item.mediaUrl,
-        mediaType: item.mediaType,
-        privacy: _privacy,
-        musicTrack: _selectedMusic,
-      );
+      final story = item.isLocal
+          ? await StoryRemoteDataSource.instance.uploadMediaStory(
+              filePath: item.mediaUrl,
+              message: _captionController.text.trim().isNotEmpty
+                  ? _captionController.text.trim()
+                  : item.title,
+              mediaType: item.mediaType,
+              privacy: _privacy,
+              musicTrack: _selectedMusic,
+            )
+          : await StoryRemoteDataSource.instance.createStory(
+              message: _captionController.text.trim().isNotEmpty
+                  ? _captionController.text.trim()
+                  : item.title,
+              mediaUrl: item.mediaUrl,
+              mediaType: item.mediaType,
+              privacy: _privacy,
+              musicTrack: _selectedMusic,
+            );
 
       if (story != null) {
         ThoughtStoryManager.instance.setStory(story);
@@ -946,7 +1060,9 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                               fontFamily: 'Inter',
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
-                              color: hasSelection ? Colors.white : const Color(0xFF636366),
+                              color: hasSelection
+                                  ? Colors.white
+                                  : const Color(0xFF636366),
                             ),
                           ),
                         ),
@@ -961,13 +1077,17 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                     behavior: HitTestBehavior.opaque,
                     onTap: _closeDropdown,
                     child: GridView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 2,
-                        mainAxisSpacing: 2,
-                        childAspectRatio: 1.0,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 1,
+                        vertical: 2,
                       ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 2,
+                            mainAxisSpacing: 2,
+                            childAspectRatio: 1.0,
+                          ),
                       itemCount: _mediaItems.length,
                       itemBuilder: (context, index) {
                         final item = _mediaItems[index];
@@ -983,23 +1103,36 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                                 decoration: BoxDecoration(
                                   color: const Color(0xFF1E1E24),
                                   border: isSelected
-                                      ? Border.all(color: const Color(0xFF2F80ED), width: 2.5)
+                                      ? Border.all(
+                                          color: const Color(0xFF2F80ED),
+                                          width: 2.5,
+                                        )
                                       : null,
                                 ),
                                 child: item.isLocal
                                     ? Image.file(
                                         File(item.thumbnailUrl),
                                         fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) => const Center(
-                                          child: Icon(Icons.broken_image, color: Colors.white38),
-                                        ),
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                const Center(
+                                                  child: Icon(
+                                                    Icons.broken_image,
+                                                    color: Colors.white38,
+                                                  ),
+                                                ),
                                       )
                                     : Image.network(
                                         item.thumbnailUrl,
                                         fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) => const Center(
-                                          child: Icon(Icons.broken_image, color: Colors.white38),
-                                        ),
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                const Center(
+                                                  child: Icon(
+                                                    Icons.broken_image,
+                                                    color: Colors.white38,
+                                                  ),
+                                                ),
                                       ),
                               ),
 
@@ -1014,7 +1147,10 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                                     gradient: LinearGradient(
                                       begin: Alignment.bottomCenter,
                                       end: Alignment.topCenter,
-                                      colors: [Colors.black87, Colors.transparent],
+                                      colors: [
+                                        Colors.black87,
+                                        Colors.transparent,
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -1041,7 +1177,10 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                                         fontWeight: FontWeight.w600,
                                         color: Colors.white,
                                         shadows: [
-                                          Shadow(color: Colors.black, blurRadius: 4),
+                                          Shadow(
+                                            color: Colors.black,
+                                            blurRadius: 4,
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -1059,9 +1198,13 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                                   height: 20,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: isSelected ? const Color(0xFF2F80ED) : Colors.black.withValues(alpha: 0.35),
+                                    color: isSelected
+                                        ? const Color(0xFF2F80ED)
+                                        : Colors.black.withValues(alpha: 0.35),
                                     border: Border.all(
-                                      color: isSelected ? const Color(0xFF2F80ED) : Colors.white.withValues(alpha: 0.8),
+                                      color: isSelected
+                                          ? const Color(0xFF2F80ED)
+                                          : Colors.white.withValues(alpha: 0.8),
                                       width: isSelected ? 2.0 : 1.5,
                                     ),
                                   ),
@@ -1087,20 +1230,36 @@ class _UploadStoryScreenState extends State<UploadStoryScreen> {
                 // 3. Bottom Device Gallery Quick Action Bar
                 Container(
                   color: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   child: Row(
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: _pickFromDeviceStorage,
-                          icon: const Icon(Icons.add_photo_alternate_outlined, color: Colors.white, size: 18),
+                          icon: const Icon(
+                            Icons.add_photo_alternate_outlined,
+                            color: Colors.white,
+                            size: 18,
+                          ),
                           label: const Text(
                             'Choose from Device Files',
-                            style: TextStyle(fontFamily: 'Inter', color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                           style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.2),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
                         ),

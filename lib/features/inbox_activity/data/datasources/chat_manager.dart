@@ -21,8 +21,10 @@ class ChatManager {
 
   final ValueNotifier<List<DirectMessageThread>> _threadsNotifier =
       ValueNotifier<List<DirectMessageThread>>([]);
+  final ValueNotifier<int> notificationBadgeNotifier = ValueNotifier<int>(0);
 
-  ValueListenable<List<DirectMessageThread>> get threadsNotifier => _threadsNotifier;
+  ValueListenable<List<DirectMessageThread>> get threadsNotifier =>
+      _threadsNotifier;
   List<DirectMessageThread> get threads => _threadsNotifier.value;
 
   File? _getLocalFile() {
@@ -45,11 +47,15 @@ class ChatManager {
   }
 
   void switchUser(int newUserId) {
+    notificationBadgeNotifier.value = 0;
     _loadFromLocalDisk();
   }
 
   bool _isSamePerson(DirectMessageThread a, DirectMessageThread b) {
-    if (a.userId != null && b.userId != null && a.userId! > 0 && b.userId! > 0) {
+    if (a.userId != null &&
+        b.userId != null &&
+        a.userId! > 0 &&
+        b.userId! > 0) {
       if (a.userId == b.userId) return true;
     }
     if (a.id.isNotEmpty && b.id.isNotEmpty && a.id == b.id) return true;
@@ -59,7 +65,9 @@ class ChatManager {
     return false;
   }
 
-  List<DirectMessageThread> _consolidateThreads(List<DirectMessageThread> list) {
+  List<DirectMessageThread> _consolidateThreads(
+    List<DirectMessageThread> list,
+  ) {
     final List<DirectMessageThread> result = [];
     for (final thread in list) {
       final existingIndex = result.indexWhere((t) => _isSamePerson(t, thread));
@@ -69,18 +77,31 @@ class ChatManager {
         final existing = result[existingIndex];
         final combinedMessages = List<ChatMessage>.from(existing.messages);
         for (final m in thread.messages) {
-          if (!combinedMessages.any((cm) => cm.id == m.id || (cm.text == m.text && cm.timestamp == m.timestamp))) {
+          if (!combinedMessages.any(
+            (cm) =>
+                cm.id == m.id ||
+                (cm.text == m.text && cm.timestamp == m.timestamp),
+          )) {
             combinedMessages.add(m);
           }
         }
         result[existingIndex] = existing.copyWith(
           userId: existing.userId ?? thread.userId,
-          avatarUrl: existing.avatarUrl.isNotEmpty ? existing.avatarUrl : thread.avatarUrl,
-          lastMessage: thread.lastMessage.isNotEmpty ? thread.lastMessage : existing.lastMessage,
-          timeAgo: (thread.timeAgo.isNotEmpty && thread.timeAgo != 'Just now') ? thread.timeAgo : existing.timeAgo,
+          avatarUrl: existing.avatarUrl.isNotEmpty
+              ? existing.avatarUrl
+              : thread.avatarUrl,
+          lastMessage: thread.lastMessage.isNotEmpty
+              ? thread.lastMessage
+              : existing.lastMessage,
+          timeAgo: (thread.timeAgo.isNotEmpty && thread.timeAgo != 'Just now')
+              ? thread.timeAgo
+              : existing.timeAgo,
           isFollowing: existing.isFollowing || thread.isFollowing,
           followsYou: existing.followsYou || thread.followsYou,
           isVerified: existing.isVerified || thread.isVerified,
+          unreadCount: existing.unreadCount > thread.unreadCount
+              ? existing.unreadCount
+              : thread.unreadCount,
           messages: combinedMessages,
         );
       }
@@ -90,6 +111,27 @@ class ChatManager {
 
   void clear() {
     _threadsNotifier.value = [];
+    notificationBadgeNotifier.value = 0;
+  }
+
+  void setNotificationBadgeCount(int count) {
+    notificationBadgeNotifier.value = count < 0 ? 0 : count;
+  }
+
+  void incrementNotificationBadge() {
+    notificationBadgeNotifier.value++;
+  }
+
+  void markThreadRead(String threadId) {
+    final clean = threadId.toLowerCase().trim();
+    final list = List<DirectMessageThread>.from(_threadsNotifier.value);
+    final index = list.indexWhere(
+      (t) =>
+          t.id.toLowerCase().trim() == clean || t.userId?.toString() == clean,
+    );
+    if (index == -1 || list[index].unreadCount == 0) return;
+    list[index] = list[index].copyWith(unreadCount: 0);
+    _threadsNotifier.value = list;
   }
 
   void _loadFromLocalDisk() {
@@ -99,23 +141,33 @@ class ChatManager {
         final jsonStr = file.readAsStringSync();
         final rawList = jsonDecode(jsonStr) as List<dynamic>;
         final loaded = rawList.map<DirectMessageThread>((item) {
-          final msgs = (item['messages'] as List<dynamic>? ?? []).map<ChatMessage>((m) {
-            return ChatMessage(
-              id: m['id']?.toString() ?? '',
-              text: m['text'] ?? '',
-              isMe: m['isMe'] == true,
-              timestamp: m['timestamp'] ?? 'Just now',
-              status: m['status'],
-            );
-          }).toList();
+          final msgs = (item['messages'] as List<dynamic>? ?? [])
+              .map<ChatMessage>((m) {
+                return ChatMessage(
+                  id: m['id']?.toString() ?? '',
+                  text: m['text'] ?? '',
+                  isMe: m['isMe'] == true,
+                  timestamp: m['timestamp'] ?? 'Just now',
+                  status: m['status'],
+                  mediaUrl: m['mediaUrl']?.toString(),
+                  isDeletedForEveryone: m['isDeletedForEveryone'] == true,
+                  sentAt: DateTime.tryParse(m['sentAt']?.toString() ?? ''),
+                );
+              })
+              .toList();
 
           final idStr = item['id']?.toString() ?? '';
-          final uid = item['userId'] is int ? item['userId'] as int : int.tryParse(idStr);
+          final uid = item['userId'] is int
+              ? item['userId'] as int
+              : int.tryParse(idStr);
 
           DirectMessageThread? staticMatch;
           try {
             staticMatch = StaticInboxData.threads.firstWhere(
-              (t) => t.id == idStr || (uid != null && t.userId == uid) || t.username == item['username'],
+              (t) =>
+                  t.id == idStr ||
+                  (uid != null && t.userId == uid) ||
+                  t.username == item['username'],
             );
           } catch (_) {}
 
@@ -134,10 +186,15 @@ class ChatManager {
             avatarUrl: item['avatarUrl'] ?? staticMatch?.avatarUrl ?? '',
             lastMessage: item['lastMessage'] ?? staticMatch?.lastMessage ?? '',
             timeAgo: item['timeAgo'] ?? staticMatch?.timeAgo ?? '',
-            isVerified: item['isVerified'] == true || (staticMatch?.isVerified == true),
-            followersCount: item['followersCount'] ?? staticMatch?.followersCount ?? '',
+            isVerified:
+                item['isVerified'] == true || (staticMatch?.isVerified == true),
+            followersCount:
+                item['followersCount'] ?? staticMatch?.followersCount ?? '',
             isFollowing: isFollowing,
             followsYou: followsYou,
+            unreadCount: item['unreadCount'] is num
+                ? (item['unreadCount'] as num).toInt()
+                : (staticMatch?.unreadCount ?? 0),
             messages: msgs,
           );
         }).toList();
@@ -156,7 +213,9 @@ class ChatManager {
       _threadsNotifier.value = [];
       return;
     }
-    _threadsNotifier.value = _consolidateThreads(List.from(StaticInboxData.threads));
+    _threadsNotifier.value = _consolidateThreads(
+      List.from(StaticInboxData.threads),
+    );
   }
 
   void _persistToLocalDisk() {
@@ -175,13 +234,21 @@ class ChatManager {
           'followersCount': t.followersCount,
           'isFollowing': t.isFollowing,
           'followsYou': t.followsYou,
-          'messages': t.messages.map((m) => {
-            'id': m.id,
-            'text': m.text,
-            'isMe': m.isMe,
-            'timestamp': m.timestamp,
-            'status': m.status,
-          }).toList(),
+          'unreadCount': t.unreadCount,
+          'messages': t.messages
+              .map(
+                (m) => {
+                  'id': m.id,
+                  'text': m.text,
+                  'isMe': m.isMe,
+                  'timestamp': m.timestamp,
+                  'status': m.status,
+                  'mediaUrl': m.mediaUrl,
+                  'isDeletedForEveryone': m.isDeletedForEveryone,
+                  'sentAt': m.sentAt?.toIso8601String(),
+                },
+              )
+              .toList(),
         };
       }).toList();
       file.writeAsStringSync(jsonEncode(data));
@@ -207,7 +274,11 @@ class ChatManager {
         if (existing != null) {
           final combinedMsgs = List<ChatMessage>.from(existing.messages);
           for (final m in remote.messages) {
-            if (!combinedMsgs.any((cm) => cm.id == m.id || (cm.text == m.text && cm.timestamp == m.timestamp))) {
+            if (!combinedMsgs.any(
+              (cm) =>
+                  cm.id == m.id ||
+                  (cm.text == m.text && cm.timestamp == m.timestamp),
+            )) {
               combinedMsgs.add(m);
             }
           }
@@ -216,13 +287,24 @@ class ChatManager {
               id: remote.id,
               userId: remote.userId ?? existing.userId,
               username: remote.username,
-              avatarUrl: remote.avatarUrl.isNotEmpty ? remote.avatarUrl : existing.avatarUrl,
-              lastMessage: existing.lastMessage.isNotEmpty ? existing.lastMessage : remote.lastMessage,
-              timeAgo: existing.timeAgo.isNotEmpty ? existing.timeAgo : remote.timeAgo,
+              avatarUrl: remote.avatarUrl.isNotEmpty
+                  ? remote.avatarUrl
+                  : existing.avatarUrl,
+              lastMessage: existing.lastMessage.isNotEmpty
+                  ? existing.lastMessage
+                  : remote.lastMessage,
+              timeAgo: existing.timeAgo.isNotEmpty
+                  ? existing.timeAgo
+                  : remote.timeAgo,
               isVerified: remote.isVerified || existing.isVerified,
-              followersCount: remote.followersCount.isNotEmpty ? remote.followersCount : existing.followersCount,
+              followersCount: remote.followersCount.isNotEmpty
+                  ? remote.followersCount
+                  : existing.followersCount,
               isFollowing: remote.isFollowing || existing.isFollowing,
               followsYou: remote.followsYou || existing.followsYou,
+              unreadCount: remote.unreadCount > existing.unreadCount
+                  ? remote.unreadCount
+                  : existing.unreadCount,
               messages: combinedMsgs,
             ),
           );
@@ -267,7 +349,9 @@ class ChatManager {
       final existing = list[idx];
       final updated = existing.copyWith(
         userId: userId,
-        avatarUrl: existing.avatarUrl.isNotEmpty ? existing.avatarUrl : avatarUrl,
+        avatarUrl: existing.avatarUrl.isNotEmpty
+            ? existing.avatarUrl
+            : avatarUrl,
         isFollowing: isFollowing || existing.isFollowing,
         followsYou: followsYou || existing.followsYou,
       );
@@ -313,23 +397,30 @@ class ChatManager {
 
   DirectMessageThread getThread(String threadId) {
     return _threadsNotifier.value.cast<DirectMessageThread?>().firstWhere(
-      (t) => t?.id == threadId || (t?.userId != null && t!.userId.toString() == threadId),
-      orElse: () => null,
-    ) ?? DirectMessageThread(
-      id: threadId,
-      username: 'User',
-      avatarUrl: '',
-      lastMessage: '',
-      timeAgo: 'Just now',
-      messages: const [],
-    );
+          (t) =>
+              t?.id == threadId ||
+              (t?.userId != null && t!.userId.toString() == threadId),
+          orElse: () => null,
+        ) ??
+        DirectMessageThread(
+          id: threadId,
+          username: 'User',
+          avatarUrl: '',
+          lastMessage: '',
+          timeAgo: 'Just now',
+          messages: const [],
+        );
   }
 
   List<ChatMessage> getMessages(String threadId) {
-    final thread = _threadsNotifier.value.cast<DirectMessageThread?>().firstWhere(
-      (t) => t?.id == threadId || (t?.userId != null && t!.userId.toString() == threadId),
-      orElse: () => null,
-    );
+    final thread = _threadsNotifier.value
+        .cast<DirectMessageThread?>()
+        .firstWhere(
+          (t) =>
+              t?.id == threadId ||
+              (t?.userId != null && t!.userId.toString() == threadId),
+          orElse: () => null,
+        );
     if (thread != null) {
       return List.from(thread.messages);
     }
@@ -344,10 +435,14 @@ class ChatManager {
   static bool immediateRepliesForTesting = false;
 
   int? _resolveUserId(String threadId, String username) {
-    final thread = _threadsNotifier.value.cast<DirectMessageThread?>().firstWhere(
-      (t) => t?.id == threadId || (t?.userId != null && t!.userId.toString() == threadId),
-      orElse: () => null,
-    );
+    final thread = _threadsNotifier.value
+        .cast<DirectMessageThread?>()
+        .firstWhere(
+          (t) =>
+              t?.id == threadId ||
+              (t?.userId != null && t!.userId.toString() == threadId),
+          orElse: () => null,
+        );
     if (thread?.userId != null) return thread!.userId;
 
     int? id = int.tryParse(threadId);
@@ -385,6 +480,7 @@ class ChatManager {
   void sendMessage({
     required String threadId,
     required String text,
+    String? mediaUrl,
     // Kept optional for backwards-compatibility; never invoked
     Function(ChatMessage incomingReply)? onAutoReply,
   }) {
@@ -398,6 +494,9 @@ class ChatManager {
       isMe: true,
       timestamp: 'Just now',
       status: 'Sent',
+      sentAt: DateTime.now(),
+      mediaUrl: mediaUrl,
+      isDeletedForEveryone: false,
     );
 
     final currentList = List<DirectMessageThread>.from(_threadsNotifier.value);
@@ -414,7 +513,9 @@ class ChatManager {
     if (index == -1) {
       final resolvedUid = _resolveUserId(threadId, 'User');
       if (resolvedUid != null) {
-        index = currentList.indexWhere((t) => t.userId == resolvedUid || t.id == resolvedUid.toString());
+        index = currentList.indexWhere(
+          (t) => t.userId == resolvedUid || t.id == resolvedUid.toString(),
+        );
       }
     }
 
@@ -422,7 +523,8 @@ class ChatManager {
     if (index != -1) {
       final thread = currentList[index];
       recipientName = thread.username;
-      final updatedMessages = List<ChatMessage>.from(thread.messages)..add(newMsg);
+      final updatedMessages = List<ChatMessage>.from(thread.messages)
+        ..add(newMsg);
 
       final updatedThread = thread.copyWith(
         lastMessage: trimmed,
@@ -430,8 +532,7 @@ class ChatManager {
         messages: updatedMessages,
       );
 
-      currentList.removeAt(index);
-      currentList.insert(0, updatedThread);
+      currentList[index] = updatedThread;
       _threadsNotifier.value = _consolidateThreads(currentList);
       _persistToLocalDisk();
     } else {
@@ -452,14 +553,28 @@ class ChatManager {
     // Save message to database (REST + WebSocket STOMP)
     final userId = _resolveUserId(threadId, recipientName);
     if (userId != null) {
-      debugPrint('[ChatManager] Saving message to database for recipientId=$userId: "$trimmed"');
-      ChatStompService.instance.sendMessage(recipientId: userId, content: trimmed);
-      ChatRemoteDataSource.instance.sendMessage(userId, trimmed).then((savedMsg) {
-        debugPrint('[ChatManager] Message successfully persisted in DB with id=${savedMsg.id}');
-        _updateMessageWithDbId(threadId, tempId, savedMsg.id);
-      }).catchError((err) {
-        debugPrint('[ChatManager] Backend DB save note: $err');
-      });
+      debugPrint(
+        '[ChatManager] Saving message to database for recipientId=$userId: "$trimmed"',
+      );
+      if (ChatStompService.instance.isConnected) {
+        ChatStompService.instance.sendMessage(
+          recipientId: userId,
+          content: trimmed,
+          mediaUrl: mediaUrl,
+        );
+      } else {
+        ChatRemoteDataSource.instance
+            .sendMessage(userId, trimmed, mediaUrl: mediaUrl)
+            .then((savedMsg) {
+              debugPrint(
+                '[ChatManager] Message persisted through REST with id=${savedMsg.id}',
+              );
+              _updateMessageWithDbId(threadId, tempId, savedMsg.id);
+            })
+            .catchError((err) {
+              debugPrint('[ChatManager] Backend DB save note: $err');
+            });
+      }
       _mirrorMessageToRecipientLocalCache(userId, trimmed);
     }
 
@@ -470,8 +585,10 @@ class ChatManager {
   void _mirrorMessageToRecipientLocalCache(int recipientId, String text) {
     try {
       final senderUid = TokenStorage.instance.currentUserIdSync;
-      final senderUsername = TokenStorage.instance.currentDisplayNameSync ??
-          TokenStorage.instance.currentUsernameSync ?? 'User';
+      final senderUsername =
+          TokenStorage.instance.currentDisplayNameSync ??
+          TokenStorage.instance.currentUsernameSync ??
+          'User';
       final senderAvatar = ProfileSyncService.instance.currentUserAvatar;
 
       final recipientFile = _getLocalFileForUser(recipientId);
@@ -480,7 +597,8 @@ class ChatManager {
       List<dynamic> rawList = [];
       if (recipientFile.existsSync()) {
         try {
-          rawList = jsonDecode(recipientFile.readAsStringSync()) as List<dynamic>;
+          rawList =
+              jsonDecode(recipientFile.readAsStringSync()) as List<dynamic>;
         } catch (_) {}
       }
 
@@ -490,17 +608,22 @@ class ChatManager {
         'isMe': false,
         'timestamp': 'Just now',
         'status': 'Delivered',
+        'isDeletedForEveryone': false,
       };
 
       final senderIdStr = senderUid != null ? senderUid.toString() : '21';
-      int idx = rawList.indexWhere((item) =>
-          item['id']?.toString() == senderIdStr ||
-          (senderUid != null && item['userId'] == senderUid) ||
-          item['username']?.toString().toLowerCase() == senderUsername.toLowerCase());
+      int idx = rawList.indexWhere(
+        (item) =>
+            item['id']?.toString() == senderIdStr ||
+            (senderUid != null && item['userId'] == senderUid) ||
+            item['username']?.toString().toLowerCase() ==
+                senderUsername.toLowerCase(),
+      );
 
       if (idx != -1) {
         final existing = Map<String, dynamic>.from(rawList[idx] as Map);
-        final msgs = List<dynamic>.from(existing['messages'] as List? ?? [])..add(incomingMsg);
+        final msgs = List<dynamic>.from(existing['messages'] as List? ?? [])
+          ..add(incomingMsg);
         existing['lastMessage'] = text;
         existing['timeAgo'] = 'Just now';
         existing['messages'] = msgs;
@@ -531,7 +654,9 @@ class ChatManager {
   void _updateMessageWithDbId(String threadId, String oldId, String newId) {
     final list = List<DirectMessageThread>.from(_threadsNotifier.value);
     final idx = list.indexWhere(
-      (t) => t.id == threadId || (t.userId != null && t.userId.toString() == threadId),
+      (t) =>
+          t.id == threadId ||
+          (t.userId != null && t.userId.toString() == threadId),
     );
     if (idx != -1) {
       final thread = list[idx];
@@ -542,7 +667,9 @@ class ChatManager {
             text: m.text,
             isMe: m.isMe,
             timestamp: m.timestamp,
-            status: 'Sent',
+            status: m.status ?? 'Sent',
+            mediaUrl: m.mediaUrl,
+            isDeletedForEveryone: m.isDeletedForEveryone,
           );
         }
         return m;
@@ -552,5 +679,123 @@ class ChatManager {
       _threadsNotifier.value = list;
       _persistToLocalDisk();
     }
+  }
+
+  /// Removes an entire chat conversation from local view.
+  void removeThreadLocally(String threadId) {
+    final clean = threadId.toLowerCase().trim();
+    final list = List<DirectMessageThread>.from(_threadsNotifier.value)
+      ..removeWhere(
+        (t) =>
+            t.id.toLowerCase().trim() == clean || t.userId?.toString() == clean,
+      );
+    _threadsNotifier.value = list;
+    _persistToLocalDisk();
+  }
+
+  void deleteThread(String threadId) {
+    final list = List<DirectMessageThread>.from(_threadsNotifier.value);
+    final cleanThreadId = threadId.toLowerCase().trim();
+    final parsedUid = int.tryParse(threadId);
+
+    int? targetUserId;
+    list.removeWhere((t) {
+      final matches =
+          t.id.toLowerCase().trim() == cleanThreadId ||
+          (parsedUid != null && t.userId == parsedUid) ||
+          (t.userId != null && t.userId.toString() == cleanThreadId);
+      if (matches) {
+        targetUserId = t.userId ?? parsedUid;
+      }
+      return matches;
+    });
+
+    _threadsNotifier.value = list;
+    _persistToLocalDisk();
+
+    if (targetUserId != null) {
+      ChatRemoteDataSource.instance.deleteConversation(targetUserId);
+    } else {
+      ChatRemoteDataSource.instance.deleteConversation(threadId);
+    }
+  }
+
+  /// Removes a message for the current user only ("Remove for you").
+  /// Does NOT delete anything from the database; sends soft-delete request to backend.
+  void removeMessageLocally(String threadId, String messageId) {
+    final clean = threadId.toLowerCase().trim();
+    final list = List<DirectMessageThread>.from(_threadsNotifier.value);
+    final idx = list.indexWhere(
+      (t) =>
+          t.id.toLowerCase().trim() == clean || t.userId?.toString() == clean,
+    );
+    if (idx == -1) return;
+    final thread = list[idx];
+    final messages = List<ChatMessage>.from(thread.messages)
+      ..removeWhere((m) => m.id == messageId);
+    list[idx] = thread.copyWith(
+      messages: messages,
+      lastMessage: messages.isEmpty ? '' : messages.last.text,
+    );
+    _threadsNotifier.value = list;
+    _persistToLocalDisk();
+
+    // Soft delete on backend for current user only - DOES NOT DELETE DATABASE
+    ChatRemoteDataSource.instance.deleteMessage(messageId, forEveryone: false);
+  }
+
+  /// Removes a message for everyone ("Remove for everyone").
+  /// Replaces content with "You deleted a message" and does NOT delete from database.
+  void deleteMessage(
+    String threadId,
+    String messageId, {
+    bool forEveryone = false,
+  }) {
+    if (!forEveryone) {
+      removeMessageLocally(threadId, messageId);
+      return;
+    }
+
+    final list = List<DirectMessageThread>.from(_threadsNotifier.value);
+    final cleanThreadId = threadId.toLowerCase().trim();
+    final parsedUid = int.tryParse(threadId);
+
+    final idx = list.indexWhere(
+      (t) =>
+          t.id.toLowerCase().trim() == cleanThreadId ||
+          (parsedUid != null && t.userId == parsedUid) ||
+          (t.userId != null && t.userId.toString() == cleanThreadId),
+    );
+
+    if (idx != -1) {
+      final thread = list[idx];
+      final updatedMsgs = thread.messages.map((m) {
+        if (m.id == messageId) {
+          return m.copyWith(
+            text: 'You deleted a message',
+            mediaUrl: null,
+            isDeletedForEveryone: true,
+          );
+        }
+        return m;
+      }).toList();
+
+      String newLastMsg = '';
+      String newTimeAgo = 'Recently';
+      if (updatedMsgs.isNotEmpty) {
+        newLastMsg = updatedMsgs.last.text;
+        newTimeAgo = updatedMsgs.last.timestamp;
+      }
+
+      list[idx] = thread.copyWith(
+        messages: updatedMsgs,
+        lastMessage: newLastMsg,
+        timeAgo: newTimeAgo,
+      );
+      _threadsNotifier.value = list;
+      _persistToLocalDisk();
+    }
+
+    ChatRemoteDataSource.instance.deleteMessage(messageId, forEveryone: true);
   }
 }
