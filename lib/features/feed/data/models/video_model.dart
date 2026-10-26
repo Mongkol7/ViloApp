@@ -81,9 +81,10 @@ class VideoModel {
 
   static bool isImageUrl(String? url) {
     if (url == null || url.trim().isEmpty) return false;
-    final lower = url.trim().toLowerCase();
-    return lower.contains('/uploads/photos/') ||
-        RegExp(r'\.(jpg|jpeg|png|webp|gif)($|\?)', caseSensitive: false).hasMatch(lower);
+    final clean = url.trim().split('?')[0].toLowerCase();
+    return clean.contains('/uploads/photos/') ||
+        clean.contains('/uploads/images/') ||
+        RegExp(r'\.(jpg|jpeg|png|webp|gif|bmp)($|\?)', caseSensitive: false).hasMatch(clean);
   }
 
   /// Returns true if the media represents an image post rather than a video.
@@ -91,6 +92,11 @@ class VideoModel {
     final lowerVideo = videoUrl.trim().toLowerCase();
     final lowerResolved = resolvedVideoUrl.trim().toLowerCase();
     final hasVideoExt = isVideoUrl(lowerVideo) || isVideoUrl(lowerResolved);
+
+    // If mediaUrls or imageUrls has multiple items and none is video, it is definitely a multi-image post
+    if (mediaUrls.length > 1 && mediaUrls.every((u) => !isVideoUrl(u))) return true;
+    if (imageUrls.length > 1 && imageUrls.every((u) => !isVideoUrl(u))) return true;
+    if (videoUrl.contains(',') && !hasVideoExt) return true;
 
     // Filter genuine photos from imageUrls
     final validImages = imageUrls.where((u) => isImageUrl(u)).toSet().toList();
@@ -114,14 +120,23 @@ class VideoModel {
   List<String> get resolvedMediaUrls {
     if (isImagePost) {
       if (imageUrls.isNotEmpty) {
-        final imgs = imageUrls.where((u) => isImageUrl(u)).map((u) => resolveMediaUrl(u)).toList();
+        final imgs = imageUrls.where((u) => !isVideoUrl(u)).map((u) => resolveMediaUrl(u)).toList();
         if (imgs.isNotEmpty) return imgs;
       }
       if (mediaUrls.isNotEmpty) {
-        final imgs = mediaUrls.where((u) => isImageUrl(u)).map((u) => resolveMediaUrl(u)).toList();
+        final imgs = mediaUrls.where((u) => !isVideoUrl(u)).map((u) => resolveMediaUrl(u)).toList();
         if (imgs.isNotEmpty) return imgs;
       }
-      if (isImageUrl(videoUrl)) {
+      if (videoUrl.contains(',')) {
+        final parts = videoUrl
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty && !isVideoUrl(s))
+            .map((u) => resolveMediaUrl(u))
+            .toList();
+        if (parts.isNotEmpty) return parts;
+      }
+      if (isImageUrl(videoUrl) || !isVideoUrl(videoUrl)) {
         return [resolveMediaUrl(videoUrl)];
       }
     }

@@ -5,6 +5,7 @@ import com.vilo.backend.dto.SearchHistoryResponse;
 import com.vilo.backend.dto.SearchSummaryResponse;
 import com.vilo.backend.dto.SoundResponse;
 import com.vilo.backend.dto.UserResponse;
+import com.vilo.backend.dto.VideoResponse;
 import com.vilo.backend.entity.Hashtag;
 import com.vilo.backend.entity.SearchHistory;
 import com.vilo.backend.entity.Sound;
@@ -163,10 +164,15 @@ public class SearchService {
                 }
             }
 
-            videoDtos.sort((left, right) -> Long.compare(
-                    getViewCount(right),
-                    getViewCount(left)
-            ));
+            final String qLower = videoQuery.toLowerCase(Locale.ROOT);
+            videoDtos.sort((left, right) -> {
+                int scoreRight = computeVideoRelevanceScore(right, qLower);
+                int scoreLeft = computeVideoRelevanceScore(left, qLower);
+                if (scoreRight != scoreLeft) {
+                    return Integer.compare(scoreRight, scoreLeft);
+                }
+                return Long.compare(getViewCount(right), getViewCount(left));
+            });
             response.setTrendingVideos(videoDtos);
         }
 
@@ -227,7 +233,31 @@ public class SearchService {
         map.put("commentsCount", commentCount != null ? commentCount : 0L);
         map.put("saveCount", saveCount != null ? saveCount : 0L);
         map.put("savesCount", saveCount != null ? saveCount : 0L);
+        map.put("soundId", v.getSoundId());
         map.put("musicTitle", v.getMusicTitle() != null ? v.getMusicTitle() : "Original Sound");
+        map.put("musicArtist", v.getMusicArtist() != null ? v.getMusicArtist() : "");
+        map.put("audioUrl", v.getAudioUrl() != null ? v.getAudioUrl() : "");
+
+        List<String> images = new ArrayList<>();
+        if (v.getImageUrls() != null && !v.getImageUrls().isBlank()) {
+            String[] parts = v.getImageUrls().split(",");
+            for (String p : parts) {
+                if (p != null && !p.trim().isEmpty() && VideoResponse.isImageFile(p.trim())) {
+                    images.add(p.trim());
+                }
+            }
+        } else if (v.getVideoUrl() != null && !v.getVideoUrl().isBlank()) {
+            if (v.getVideoUrl().contains(",") || VideoResponse.isImageFile(v.getVideoUrl())) {
+                String[] parts = v.getVideoUrl().split(",");
+                for (String p : parts) {
+                    if (p != null && !p.trim().isEmpty() && VideoResponse.isImageFile(p.trim())) {
+                        images.add(p.trim());
+                    }
+                }
+            }
+        }
+        map.put("imageUrls", images);
+        map.put("mediaUrls", images);
 
         if (v.getCreator() != null) {
             String u = v.getCreator().getUsername();
@@ -253,6 +283,69 @@ public class SearchService {
         map.put("tags", tagList);
 
         return map;
+    }
+
+    private int computeVideoRelevanceScore(Map<String, Object> video, String qLower) {
+        if (qLower == null || qLower.isEmpty()) return 0;
+        int score = 0;
+        String title = String.valueOf(video.getOrDefault("title", "")).toLowerCase(Locale.ROOT).trim();
+        String caption = String.valueOf(video.getOrDefault("caption", "")).toLowerCase(Locale.ROOT).trim();
+        String authorUsername = String.valueOf(video.getOrDefault("authorUsername", "")).toLowerCase(Locale.ROOT).replace("@", "").trim();
+        String authorName = String.valueOf(video.getOrDefault("authorName", "")).toLowerCase(Locale.ROOT).trim();
+
+        // 1. Exact match on title (Highest priority)
+        if (title.equals(qLower)) {
+            score += 1000;
+        } else if (title.startsWith(qLower)) {
+            score += 800;
+        } else if (title.contains(qLower)) {
+            score += 600;
+        }
+
+        // 2. Caption matches
+        if (caption.equals(qLower)) {
+            score += 500;
+        } else if (caption.startsWith(qLower)) {
+            score += 400;
+        } else if (caption.contains(qLower)) {
+            score += 300;
+        }
+
+        // 3. Exact author match
+        if (authorUsername.equals(qLower) || authorName.equals(qLower)) {
+            score += 250;
+        } else if (authorUsername.contains(qLower) || authorName.contains(qLower)) {
+            score += 150;
+        }
+
+        // 4. Tags match
+        Object rawTags = video.get("tags");
+        if (rawTags instanceof List<?> tags) {
+            for (Object t : tags) {
+                if (t != null) {
+                    String tag = t.toString().toLowerCase(Locale.ROOT).replace("#", "").trim();
+                    if (tag.equals(qLower)) {
+                        score += 200;
+                        break;
+                    } else if (tag.contains(qLower)) {
+                        score += 100;
+                    }
+                }
+            }
+        }
+
+        // 5. Token match
+        String[] tokens = qLower.split("[\\s_.-]+");
+        if (tokens.length > 1) {
+            for (String tok : tokens) {
+                if (tok.length() >= 2) {
+                    if (title.contains(tok)) score += 50;
+                    if (caption.contains(tok)) score += 30;
+                }
+            }
+        }
+
+        return score;
     }
 
     private String formatCount(Long count) {

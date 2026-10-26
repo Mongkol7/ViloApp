@@ -101,7 +101,7 @@ class _SearchScreenState extends State<SearchScreen> {
       setState(() {
         _accounts = result['accounts'] ?? [];
         _sounds = result['sounds'] ?? [];
-        _trendingVideos = _sortVideosByViews(result['trendingVideos'] ?? []);
+        _trendingVideos = _sortVideosByRelevance(result['trendingVideos'] ?? [], query);
         _hashtags = result['hashtags'] ?? [];
         final term = query.trim();
         _recentSearches.remove(term);
@@ -119,6 +119,76 @@ class _SearchScreenState extends State<SearchScreen> {
     final sorted = List<TrendingVideo>.from(videos);
     sorted.sort((a, b) => b.viewCount.compareTo(a.viewCount));
     return sorted;
+  }
+
+  List<TrendingVideo> _sortVideosByRelevance(Iterable<TrendingVideo> videos, String query) {
+    final cleanQ = query.trim().toLowerCase();
+    if (cleanQ.isEmpty) {
+      return _sortVideosByViews(videos);
+    }
+    final sorted = List<TrendingVideo>.from(videos);
+    sorted.sort((a, b) {
+      final scoreB = _computeVideoScore(b, cleanQ);
+      final scoreA = _computeVideoScore(a, cleanQ);
+      if (scoreB != scoreA) {
+        return scoreB.compareTo(scoreA);
+      }
+      return b.viewCount.compareTo(a.viewCount);
+    });
+    return sorted;
+  }
+
+  int _computeVideoScore(TrendingVideo v, String q) {
+    int score = 0;
+    final title = v.title.toLowerCase().trim();
+    final caption = v.caption.toLowerCase().trim();
+    final author = v.authorUsername.toLowerCase().replaceAll('@', '').trim();
+    final authorName = v.authorName.toLowerCase().trim();
+
+    // 1. Exact match on title (Strongest signal)
+    if (title == q) {
+      score += 1000;
+    } else if (title.startsWith(q)) {
+      score += 800;
+    } else if (title.contains(q)) {
+      score += 600;
+    }
+
+    // 2. Caption matches
+    if (caption == q) {
+      score += 500;
+    } else if (caption.startsWith(q)) {
+      score += 400;
+    } else if (caption.contains(q)) {
+      score += 300;
+    }
+
+    // 3. Exact author match
+    if (author == q || authorName == q) {
+      score += 250;
+    } else if (author.contains(q) || authorName.contains(q)) {
+      score += 150;
+    }
+
+    // 4. Tag match
+    for (final tag in v.tags) {
+      final t = tag.toLowerCase().replaceAll('#', '').trim();
+      if (t == q) {
+        score += 200;
+        break;
+      } else if (t.contains(q)) {
+        score += 100;
+      }
+    }
+
+    // 5. Token match
+    final tokens = q.split(RegExp(r'[\s_.\-]+')).where((tok) => tok.length >= 2);
+    for (final tok in tokens) {
+      if (title.contains(tok)) score += 50;
+      if (caption.contains(tok)) score += 30;
+    }
+
+    return score;
   }
 
   void _toggleFollow(int index) {

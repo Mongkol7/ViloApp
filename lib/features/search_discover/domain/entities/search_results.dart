@@ -17,6 +17,11 @@ class TrendingVideo {
   final int commentCount;
   final int saveCount;
   final String musicTitle;
+  final List<String> mediaUrls;
+  final List<String> imageUrls;
+  final String? audioUrl;
+  final int? soundId;
+  final String? musicArtist;
 
   const TrendingVideo({
     required this.id,
@@ -35,6 +40,11 @@ class TrendingVideo {
     this.commentCount = 0,
     this.saveCount = 0,
     this.musicTitle = 'Original Sound',
+    this.mediaUrls = const [],
+    this.imageUrls = const [],
+    this.audioUrl,
+    this.soundId,
+    this.musicArtist,
   });
 
   /// Converts this search result video into a full VideoModel ready for playback in VideoFeedPage
@@ -44,6 +54,30 @@ class TrendingVideo {
     final String cleanUsername = authorUsername.replaceAll('@', '');
     final String cleanDisplayName = authorName.isNotEmpty ? authorName : cleanUsername;
 
+    // Resolve images if videoUrl contains multiple comma-separated URLs or mediaUrls/imageUrls are supplied
+    List<String> effectiveMediaUrls = List<String>.from(mediaUrls);
+    if (effectiveMediaUrls.isEmpty && imageUrls.isNotEmpty) {
+      effectiveMediaUrls = List<String>.from(imageUrls);
+    }
+    if (effectiveMediaUrls.isEmpty && videoUrl.contains(',')) {
+      effectiveMediaUrls = videoUrl
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+
+    final String primaryVideoUrl;
+    if (effectiveMediaUrls.isNotEmpty && (videoUrl.isEmpty || videoUrl.contains(','))) {
+      primaryVideoUrl = effectiveMediaUrls.first;
+    } else if (videoUrl.isNotEmpty) {
+      primaryVideoUrl = videoUrl;
+    } else if (thumbnailUrl.endsWith('.mp4')) {
+      primaryVideoUrl = thumbnailUrl;
+    } else {
+      primaryVideoUrl = 'assets/videos/vid1.mp4';
+    }
+
     return VideoModel(
       id: vidId,
       creatorId: authorId,
@@ -51,9 +85,16 @@ class TrendingVideo {
       displayName: cleanDisplayName,
       avatarUrl: avatarUrl,
       caption: caption.isNotEmpty ? caption : title,
-      videoUrl: videoUrl.isNotEmpty ? videoUrl : (thumbnailUrl.endsWith('.mp4') ? thumbnailUrl : 'assets/videos/vid1.mp4'),
-      thumbnailUrl: thumbnailUrl,
+      videoUrl: primaryVideoUrl,
+      thumbnailUrl: thumbnailUrl.isNotEmpty
+          ? thumbnailUrl
+          : (effectiveMediaUrls.isNotEmpty ? effectiveMediaUrls.first : null),
       musicTitle: musicTitle,
+      musicArtist: musicArtist,
+      audioUrl: audioUrl,
+      soundId: soundId,
+      mediaUrls: effectiveMediaUrls,
+      imageUrls: effectiveMediaUrls,
       viewCount: viewCount > 0 ? viewCount : 1200,
       likeCount: likeCount,
       commentCount: commentCount,

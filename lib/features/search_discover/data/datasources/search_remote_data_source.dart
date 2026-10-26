@@ -298,6 +298,35 @@ class SearchRemoteDataSource {
         final title = v['title']?.toString() ?? '';
         final caption = v['caption']?.toString() ?? title;
 
+        final List<String> mediaList = [];
+        if (v['mediaUrls'] is List) {
+          for (final item in v['mediaUrls']) {
+            if (item != null && item.toString().trim().isNotEmpty) {
+              mediaList.add(item.toString().trim());
+            }
+          }
+        } else if (v['imageUrls'] is List) {
+          for (final item in v['imageUrls']) {
+            if (item != null && item.toString().trim().isNotEmpty) {
+              mediaList.add(item.toString().trim());
+            }
+          }
+        } else if (v['imageUrls'] is String && (v['imageUrls'] as String).contains(',')) {
+          for (final item in (v['imageUrls'] as String).split(',')) {
+            if (item.trim().isNotEmpty) mediaList.add(item.trim());
+          }
+        } else if (rawVideo.contains(',')) {
+          for (final item in rawVideo.split(',')) {
+            if (item.trim().isNotEmpty) mediaList.add(item.trim());
+          }
+        }
+
+        final audioUrl = v['audioUrl']?.toString() ?? v['audio_url']?.toString();
+        final soundId = (v['soundId'] is num)
+            ? (v['soundId'] as num).toInt()
+            : ((v['sound_id'] is num) ? (v['sound_id'] as num).toInt() : null);
+        final musicArtist = v['musicArtist']?.toString() ?? v['music_artist']?.toString();
+
         videos.add(TrendingVideo(
           id: v['id']?.toString() ?? '',
           title: title,
@@ -306,6 +335,11 @@ class SearchRemoteDataSource {
           authorName: v['authorName']?.toString() ?? '',
           thumbnailUrl: resolvedThumb.isNotEmpty ? resolvedThumb : rawThumb,
           videoUrl: resolvedVideo.isNotEmpty ? resolvedVideo : rawVideo,
+          mediaUrls: mediaList,
+          imageUrls: mediaList,
+          audioUrl: audioUrl,
+          soundId: soundId,
+          musicArtist: musicArtist,
           views: v['views']?.toString() ?? (v['viewCount'] != null ? '${v['viewCount']}' : '0'),
           viewCount: (v['viewCount'] is num) ? (v['viewCount'] as num).toInt() : 0,
           likeCount: (v['likeCount'] is num) ? (v['likeCount'] as num).toInt() : ((v['likesCount'] is num) ? (v['likesCount'] as num).toInt() : 0),
@@ -433,6 +467,11 @@ class SearchRemoteDataSource {
         authorName: cv.displayName,
         thumbnailUrl: cv.thumbnailUrl ?? cv.videoUrl,
         videoUrl: cv.videoUrl,
+        mediaUrls: cv.mediaUrls.isNotEmpty ? cv.mediaUrls : cv.imageUrls,
+        imageUrls: cv.imageUrls.isNotEmpty ? cv.imageUrls : cv.mediaUrls,
+        audioUrl: cv.audioUrl,
+        soundId: cv.soundId,
+        musicArtist: cv.musicArtist,
         views: '${cv.viewCount}',
         viewCount: cv.viewCount,
         likeCount: cv.likeCount,

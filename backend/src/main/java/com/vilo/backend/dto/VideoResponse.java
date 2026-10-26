@@ -173,10 +173,10 @@ public class VideoResponse {
 
     public static boolean isImageFile(String path) {
         if (path == null) return false;
-        String lower = path.toLowerCase().trim();
-        return lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")
-                || lower.endsWith(".webp") || lower.endsWith(".gif") || lower.endsWith(".bmp")
-                || lower.contains("/uploads/photos/");
+        String clean = path.split("\\?")[0].toLowerCase().trim();
+        return clean.endsWith(".jpg") || clean.endsWith(".jpeg") || clean.endsWith(".png")
+                || clean.endsWith(".webp") || clean.endsWith(".gif") || clean.endsWith(".bmp")
+                || clean.contains("/uploads/photos/") || clean.contains("/uploads/images/");
     }
 
     public static Builder builder() {
