@@ -47,14 +47,27 @@ class _ProfileScreenState extends State<ProfileScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this, initialIndex: 1);
-    // Initialize with local default for immediate render / testing
-    final cachedProfile = ProfileSyncService.instance.cachedMyProfile;
+    // Initialize with real authenticated user for immediate render
+    final userFromStorage = TokenStorage.instance.getUserModel();
+    final cachedProfile = ProfileSyncService.instance.cachedMyProfile ?? userFromStorage;
     final currentUid = TokenStorage.instance.currentUserIdSync;
-    final isDemo = TokenStorage.instance.isDemoUserSync;
+    final storedUsername = TokenStorage.instance.currentUsernameSync;
+    final storedDisplayName = TokenStorage.instance.currentDisplayNameSync;
 
     _user = cachedProfile ??
-        (isDemo
+        (storedUsername != null && storedUsername.isNotEmpty
             ? UserModel(
+                id: currentUid ?? 0,
+                username: storedUsername,
+                email: '',
+                displayName: storedDisplayName ?? storedUsername,
+                bio: '',
+                avatarUrl: _getDefaultAvatarForUser(storedUsername),
+                isVerified: false,
+                followersCount: ProfileSyncService.instance.mockFollowersCount,
+                followingCount: ProfileSyncService.instance.mockFollowingCount,
+              )
+            : UserModel(
                 id: 1,
                 username: ProfileMockData.username,
                 email: 'mongkol@vilo.app',
@@ -64,17 +77,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                 isVerified: true,
                 followersCount: ProfileSyncService.instance.mockFollowersCount,
                 followingCount: ProfileSyncService.instance.mockFollowingCount,
-              )
-            : UserModel(
-                id: currentUid ?? 0,
-                username: TokenStorage.instance.currentUsernameSync ?? 'user',
-                email: '',
-                displayName: TokenStorage.instance.currentDisplayNameSync ?? TokenStorage.instance.currentUsernameSync ?? 'User',
-                bio: '',
-                avatarUrl: '',
-                isVerified: false,
-                followersCount: 0,
-                followingCount: 0,
               ));
     ProfileSyncService.instance.followEvents.addListener(_onFollowEvent);
     ProfileSyncService.instance.videoUploadedEvents.addListener(_onVideoUploaded);
@@ -98,10 +100,31 @@ class _ProfileScreenState extends State<ProfileScreen>
     _loadProfile();
   }
 
+  String _getDefaultAvatarForUser(String username) {
+    final lower = username.toLowerCase().trim().replaceAll('@', '');
+    if (lower == 'setkimliza' || lower == 'liza' || lower == 'kimliza') {
+      return 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80';
+    }
+    if (lower == 'mongkol' || lower == 'sereymongkol') {
+      return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80';
+    }
+    if (lower == 'bunheng' || lower == 'heng') {
+      return 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80';
+    }
+    if (lower == 'rithysak' || lower == 'sak') {
+      return 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80';
+    }
+    if (lower == 'admin') {
+      return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80';
+    }
+    return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500';
+  }
+
   void _onProfileUpdated() {
     final updated = ProfileSyncService.instance.profileUpdatedEvents.value;
     if (updated != null && mounted) {
       setState(() => _user = updated);
+      _loadProfile(forceRefresh: true);
     }
   }
 
@@ -267,6 +290,10 @@ void _onVideoUploaded() {
       }
     } catch (e) {
       debugPrint('[ProfileScreen] getMyProfile notice: $e');
+      final stored = TokenStorage.instance.getUserModel();
+      if (stored != null && mounted) {
+        setState(() => _user = stored);
+      }
     }
 
     // 1. Load user's uploaded sounds
@@ -606,21 +633,19 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final currentUsername =
-        (_user?.username != null && _user!.username.trim().isNotEmpty)
-        ? _user!.username.trim()
-        : ProfileMockData.username;
-    final currentDisplayName =
-        (_user?.displayName != null && _user!.displayName.trim().isNotEmpty)
-        ? _user!.displayName.trim()
-        : currentUsername;
+    final rawUsername =
+        _user?.username.trim() ?? TokenStorage.instance.currentUsernameSync?.trim() ?? '';
+    final currentUsername = rawUsername.isNotEmpty ? rawUsername : ProfileMockData.username;
+    final rawDisplayName =
+        _user?.displayName.trim() ?? TokenStorage.instance.currentDisplayNameSync?.trim() ?? '';
+    final currentDisplayName = rawDisplayName.isNotEmpty ? rawDisplayName : currentUsername;
     final currentAvatarUrl =
         (_user?.avatarUrl != null && _user!.avatarUrl!.trim().isNotEmpty)
         ? _user!.avatarUrl!.trim()
-        : ProfileMockData.avatarUrl;
-    final currentBio = _user?.bio != null
-        ? (_user!.bio!.trim().isNotEmpty ? _user!.bio!.trim() : 'No bio yet.')
-        : ProfileMockData.bio;
+        : _getDefaultAvatarForUser(currentUsername);
+    final currentBio = (_user?.bio != null && _user!.bio!.trim().isNotEmpty)
+        ? _user!.bio!.trim()
+        : 'No bio yet.';
     final followersDisplay = _formatCount(_user?.followersCount ?? 0);
     final followingDisplay = _formatCount(_user?.followingCount ?? 0);
     final totalLikes = _myVideos.fold<int>(0, (sum, v) => sum + v.likeCount);

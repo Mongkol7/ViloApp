@@ -421,7 +421,7 @@ class _SettingsAndPrivacyScreenState extends State<SettingsAndPrivacyScreen> {
         Navigator.of(context, rootNavigator: true).pop();
         Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
           MaterialPageRoute(
-            builder: (_) => const MainNavigationShell(initialIndex: 4),
+            builder: (_) => const MainNavigationShell(initialIndex: 3),
           ),
           (route) => false,
         );

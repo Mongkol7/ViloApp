@@ -99,9 +99,9 @@ class TokenStorage {
     _userId = id;
     _username = username;
     _displayName = displayName;
-    if (avatarUrl != null) _avatarUrl = avatarUrl;
-    if (email != null) _email = email;
-    if (bio != null) _bio = bio;
+    _avatarUrl = avatarUrl;
+    _email = email;
+    _bio = bio;
     _persist();
   }
 

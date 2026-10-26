@@ -434,7 +434,7 @@ class ChatManager {
 
   static bool immediateRepliesForTesting = false;
 
-  int? _resolveUserId(String threadId, String username) {
+  int? resolveUserId(String threadId, String username) {
     final thread = _threadsNotifier.value
         .cast<DirectMessageThread?>()
         .firstWhere(
@@ -511,7 +511,7 @@ class ChatManager {
     });
 
     if (index == -1) {
-      final resolvedUid = _resolveUserId(threadId, 'User');
+      final resolvedUid = resolveUserId(threadId, 'User');
       if (resolvedUid != null) {
         index = currentList.indexWhere(
           (t) => t.userId == resolvedUid || t.id == resolvedUid.toString(),
@@ -551,7 +551,7 @@ class ChatManager {
     }
 
     // Save message to database (REST + WebSocket STOMP)
-    final userId = _resolveUserId(threadId, recipientName);
+    final userId = resolveUserId(threadId, recipientName);
     if (userId != null) {
       debugPrint(
         '[ChatManager] Saving message to database for recipientId=$userId: "$trimmed"',
@@ -575,14 +575,24 @@ class ChatManager {
               debugPrint('[ChatManager] Backend DB save note: $err');
             });
       }
-      _mirrorMessageToRecipientLocalCache(userId, trimmed);
+      _mirrorMessageToRecipientLocalCache(
+        userId,
+        trimmed,
+        mediaUrl: mediaUrl,
+        sentAt: newMsg.sentAt,
+      );
     }
 
     // CRITICAL: NO AUTO-REPLY IS EXECUTED HERE.
     // The message is pure peer-to-peer real chat and saved to DB.
   }
 
-  void _mirrorMessageToRecipientLocalCache(int recipientId, String text) {
+  void _mirrorMessageToRecipientLocalCache(
+    int recipientId,
+    String text, {
+    String? mediaUrl,
+    DateTime? sentAt,
+  }) {
     try {
       final senderUid = TokenStorage.instance.currentUserIdSync;
       final senderUsername =
@@ -602,13 +612,20 @@ class ChatManager {
         } catch (_) {}
       }
 
+      final now = sentAt ?? DateTime.now();
+      final hour = now.hour % 12 == 0 ? 12 : now.hour % 12;
+      final minute = now.minute.toString().padLeft(2, '0');
+      final timeStr = '$hour:$minute ${now.hour >= 12 ? 'PM' : 'AM'}';
+
       final incomingMsg = {
-        'id': DateTime.now().millisecondsSinceEpoch.toString(),
+        'id': now.millisecondsSinceEpoch.toString(),
         'text': text,
         'isMe': false,
-        'timestamp': 'Just now',
+        'timestamp': timeStr,
         'status': 'Delivered',
         'isDeletedForEveryone': false,
+        if (mediaUrl != null && mediaUrl.isNotEmpty) 'mediaUrl': mediaUrl,
+        'sentAt': now.toIso8601String(),
       };
 
       final senderIdStr = senderUid != null ? senderUid.toString() : '21';
@@ -620,11 +637,16 @@ class ChatManager {
                 senderUsername.toLowerCase(),
       );
 
+      final displayLast =
+          (mediaUrl != null && mediaUrl.isNotEmpty && (text.isEmpty || text == 'Photo'))
+              ? '📷 Photo'
+              : text;
+
       if (idx != -1) {
         final existing = Map<String, dynamic>.from(rawList[idx] as Map);
         final msgs = List<dynamic>.from(existing['messages'] as List? ?? [])
           ..add(incomingMsg);
-        existing['lastMessage'] = text;
+        existing['lastMessage'] = displayLast;
         existing['timeAgo'] = 'Just now';
         existing['messages'] = msgs;
         rawList.removeAt(idx);
@@ -635,7 +657,7 @@ class ChatManager {
           'userId': senderUid,
           'username': senderUsername,
           'avatarUrl': senderAvatar,
-          'lastMessage': text,
+          'lastMessage': displayLast,
           'timeAgo': 'Just now',
           'isVerified': true,
           'followersCount': '520K followers',

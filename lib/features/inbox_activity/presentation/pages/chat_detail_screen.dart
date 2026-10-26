@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/network/api_client.dart';
+import '../../../auth/data/datasources/token_storage.dart';
 import '../../../profile/data/datasources/profile_remote_data_source.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../../profile/presentation/screens/public_profile_screen.dart';
@@ -28,7 +30,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   bool _isUploadingImages = false;
   bool get _canSend =>
       _messageController.text.trim().isNotEmpty || _pendingImagePaths.isNotEmpty;
-  String? _expandedTimestampId;
+  final Set<String> _expandedTimestampIds = {};
   late bool _isFollowing;
   late bool _followsYou;
 
@@ -163,13 +165,18 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
+    final now = DateTime.now();
+    final hour = now.hour % 12 == 0 ? 12 : now.hour % 12;
+    final minute = now.minute.toString().padLeft(2, '0');
+    final timeStr = '$hour:$minute ${now.hour >= 12 ? 'PM' : 'AM'}';
+
     final optimisticMsg = ChatMessage(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: now.millisecondsSinceEpoch.toString(),
       text: text,
       isMe: true,
-      timestamp: 'Just now',
+      timestamp: timeStr,
       status: 'Sent',
-      sentAt: DateTime.now(),
+      sentAt: now,
     );
 
     setState(() {
@@ -265,7 +272,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   Future<void> _sendSelectedImages() async {
-    final userId = _resolvedUserId;
     if (_pendingImagePaths.isEmpty || !mounted) return;
     final paths = List<String>.from(_pendingImagePaths);
     setState(() {
@@ -273,37 +279,39 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       _isUploadingImages = true;
     });
 
+    final targetUserId = _resolvedUserId ?? TokenStorage.instance.currentUserIdSync ?? 1;
+
     try {
       for (final path in paths) {
         String? mediaUrl;
-        if (userId != null) {
-          try {
-            mediaUrl = await ChatRemoteDataSource.instance.uploadChatImage(
-              userId,
-              path,
-            );
-          } catch (e) {
-            debugPrint('[Chat] uploadChatImage error, using local path: $e');
-            mediaUrl = path;
-          }
-        } else {
+        try {
+          mediaUrl = await ChatRemoteDataSource.instance.uploadChatImage(
+            targetUserId,
+            path,
+          );
+        } catch (e) {
+          debugPrint('[Chat] uploadChatImage error, using local path: $e');
           mediaUrl = path;
         }
 
         const text = 'Photo';
         final now = DateTime.now();
+        final hour = now.hour % 12 == 0 ? 12 : now.hour % 12;
+        final minute = now.minute.toString().padLeft(2, '0');
+        final timeStr = '$hour:$minute ${now.hour >= 12 ? 'PM' : 'AM'}';
+
+        final newMsg = ChatMessage(
+          id: now.millisecondsSinceEpoch.toString(),
+          text: text,
+          isMe: true,
+          timestamp: timeStr,
+          status: 'Sent',
+          mediaUrl: mediaUrl,
+          sentAt: now,
+        );
+
         setState(() {
-          _messages.add(
-            ChatMessage(
-              id: now.millisecondsSinceEpoch.toString(),
-              text: text,
-              isMe: true,
-              timestamp: 'Just now',
-              status: 'Sent',
-              mediaUrl: mediaUrl,
-              sentAt: now,
-            ),
-          );
+          _messages.add(newMsg);
         });
         ChatManager.instance.sendMessage(
           threadId: widget.thread.id,
@@ -336,7 +344,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   int? get _resolvedUserId =>
-      widget.thread.userId ?? int.tryParse(widget.thread.id);
+      widget.thread.userId ??
+      int.tryParse(widget.thread.id) ??
+      ChatManager.instance.resolveUserId(widget.thread.id, widget.thread.username);
 
   String? _displayMessageStatus(ChatMessage message) {
     if (!message.isMe) return null;
@@ -346,26 +356,30 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   bool _shouldShowTimestamp(ChatMessage message) {
-    if (_expandedTimestampId == message.id) return true;
-    final index = _messages.indexOf(message);
-    if (index <= 0 || message.sentAt == null) return true;
-    final previous = _messages[index - 1].sentAt;
-    if (previous == null) return true;
-    return message.sentAt!.difference(previous).inMinutes.abs() >= 15;
+    return _expandedTimestampIds.contains(message.id);
   }
 
   String _messageTime(ChatMessage message) {
-    if (message.sentAt == null) return message.timestamp;
-    final time = message.sentAt!;
-    final hour = time.hour % 12 == 0 ? 12 : time.hour % 12;
-    return '$hour:${time.minute.toString().padLeft(2, '0')} ${time.hour >= 12 ? 'PM' : 'AM'}';
+    final time = message.sentAt;
+    if (time != null) {
+      final hour = time.hour % 12 == 0 ? 12 : time.hour % 12;
+      return '$hour:${time.minute.toString().padLeft(2, '0')} ${time.hour >= 12 ? 'PM' : 'AM'}';
+    }
+    if (message.timestamp.isNotEmpty && message.timestamp != 'Just now') {
+      return message.timestamp;
+    }
+    final now = DateTime.now();
+    final hour = now.hour % 12 == 0 ? 12 : now.hour % 12;
+    return '$hour:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}';
   }
 
   void _toggleTimestamp(ChatMessage message) {
     setState(() {
-      _expandedTimestampId = _expandedTimestampId == message.id
-          ? null
-          : message.id;
+      if (_expandedTimestampIds.contains(message.id)) {
+        _expandedTimestampIds.remove(message.id);
+      } else {
+        _expandedTimestampIds.add(message.id);
+      }
     });
   }
 
@@ -1438,6 +1452,18 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
+  String _resolveChatMediaUrl(String rawUrl) {
+    final trimmed = rawUrl.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('/uploads/') || trimmed.startsWith('uploads/')) {
+      final base = ApiClient.baseUrl.replaceFirst('/api/v1', '');
+      return '$base${trimmed.startsWith('/') ? trimmed : '/$trimmed'}';
+    }
+    return trimmed;
+  }
+
   Widget _buildMessageContent(ChatMessage message) {
     if (message.isDeletedForEveryone) {
       return Row(
@@ -1463,7 +1489,75 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         ],
       );
     }
-    if (message.mediaUrl != null && message.mediaUrl!.isNotEmpty) {
+    if (message.mediaUrl != null && message.mediaUrl!.trim().isNotEmpty) {
+      final url = _resolveChatMediaUrl(message.mediaUrl!);
+      final isLocal = !url.startsWith('http://') && !url.startsWith('https://');
+
+      Widget imageWidget;
+      if (isLocal) {
+        final file = File(url);
+        if (file.existsSync()) {
+          imageWidget = Image.file(
+            file,
+            width: 220,
+            height: 220,
+            fit: BoxFit.cover,
+          );
+        } else {
+          imageWidget = Container(
+            width: 220,
+            height: 140,
+            color: const Color(0xFF2C2C2E),
+            child: const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.photo_outlined, color: Colors.white54, size: 36),
+                SizedBox(height: 6),
+                Text('Photo', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              ],
+            ),
+          );
+        }
+      } else {
+        imageWidget = Image.network(
+          url,
+          width: 220,
+          height: 220,
+          fit: BoxFit.cover,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Container(
+              width: 220,
+              height: 220,
+              color: const Color(0xFF1E1E22),
+              child: const Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFF2F80ED),
+                  ),
+                ),
+              ),
+            );
+          },
+          errorBuilder: (_, _, _) => Container(
+            width: 220,
+            height: 140,
+            color: const Color(0xFF2C2C2E),
+            child: const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.photo_outlined, color: Colors.white54, size: 36),
+                SizedBox(height: 6),
+                Text('Photo', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              ],
+            ),
+          ),
+        );
+      }
+
       return ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: GestureDetector(
@@ -1471,27 +1565,59 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             context: context,
             builder: (_) => Dialog(
               backgroundColor: Colors.black,
-              child: InteractiveViewer(
-                child: Image.network(message.mediaUrl!, fit: BoxFit.contain),
+              insetPadding: EdgeInsets.zero,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  InteractiveViewer(
+                    child: Center(
+                      child: isLocal
+                          ? (File(url).existsSync()
+                              ? Image.file(File(url), fit: BoxFit.contain)
+                              : const Icon(Icons.broken_image, color: Colors.white70, size: 48))
+                          : Image.network(url, fit: BoxFit.contain),
+                    ),
+                  ),
+                  Positioned(
+                    top: 40,
+                    right: 20,
+                    child: IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-          child: Image.network(
-            message.mediaUrl!,
-            width: 220,
-            height: 220,
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text(
-                'Image unavailable',
-                style: TextStyle(color: Colors.white70),
-              ),
-            ),
-          ),
+          child: imageWidget,
         ),
       );
     }
+
+    if (message.text == 'Photo' || message.text == '📷 Photo') {
+      return Container(
+        width: 140,
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.photo_outlined, color: Colors.white70, size: 20),
+            SizedBox(width: 8),
+            Text(
+              'Photo',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Text(
       message.text,
       style: const TextStyle(
