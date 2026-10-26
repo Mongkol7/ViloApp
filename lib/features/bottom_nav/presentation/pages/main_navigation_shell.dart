@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../feed/presentation/pages/home_feed_page.dart';
 import '../../../feed/presentation/widgets/create_action_sheet.dart';
+import '../../../inbox_activity/data/datasources/inbox_message_manager.dart';
 import '../../../inbox_activity/presentation/pages/inbox_screen.dart';
 import '../../../profile/presentation/pages/people_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
@@ -40,6 +41,21 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    _restoreInboxForCurrentUser();
+  }
+
+  Future<void> _restoreInboxForCurrentUser() async {
+    try {
+      await InboxMessageManager.instance.loadForCurrentUser();
+    } catch (error) {
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not restore messages: $error')),
+        );
+      });
+    }
   }
 
   void _onTabSelected(int index) {

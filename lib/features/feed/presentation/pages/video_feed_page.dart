@@ -42,6 +42,7 @@ class VideoFeedPage extends StatefulWidget {
 class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveClientMixin {
   static final Map<String, int> _savedPageIndices = {};
 
+
   final FeedRemoteDataSource _dataSource = FeedRemoteDataSource.instance;
   late int _currentPage;
   late PageController _pageController;
@@ -648,6 +649,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
         ),
       );
     }
+
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -1810,6 +1812,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+
               Row(
                 children: [
                   GestureDetector(
@@ -1897,6 +1900,7 @@ class _InteractionButton extends StatelessWidget {
   });
 
   @override
+
   Widget build(BuildContext context) {
     final color = (isActive && activeColor != null) ? activeColor! : Colors.white;
 

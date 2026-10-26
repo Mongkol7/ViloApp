@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../search_discover/presentation/pages/search_screen.dart';
+import '../../data/datasources/inbox_message_manager.dart';
 import '../../data/datasources/static_inbox_data.dart';
 import '../../data/datasources/thought_story_manager.dart';
 import '../../domain/entities/inbox_item.dart';
@@ -18,6 +19,23 @@ class InboxScreen extends StatefulWidget {
 }
 
 class _InboxScreenState extends State<InboxScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _loadMessages();
+  }
+
+  Future<void> _loadMessages() async {
+    try {
+      await InboxMessageManager.instance.loadForCurrentUser();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not restore messages: $error')),
+      );
+    }
+  }
+
   Future<void> _handleCreateOrViewStory() async {
     final currentStory = ThoughtStoryManager.instance.currentStory;
     if (currentStory != null) {
@@ -134,11 +152,19 @@ class _InboxScreenState extends State<InboxScreen> {
             ),
           ),
 
-          // 4. Direct Messages Thread List
-          ...List.generate(StaticInboxData.threads.length, (index) {
-            final thread = StaticInboxData.threads[index];
-            return _buildMessageThreadTile(context, thread);
-          }),
+          // 4. Direct Messages Thread List (Dynamically synced via InboxMessageManager)
+          ValueListenableBuilder<List<DirectMessageThread>>(
+            valueListenable: InboxMessageManager.instance.threadsNotifier,
+            builder: (context, threads, _) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final thread in threads)
+                    _buildMessageThreadTile(context, thread),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
@@ -494,14 +520,7 @@ class _InboxScreenState extends State<InboxScreen> {
                   ),
                 ),
                 child: ClipOval(
-                  child: Image.network(
-                    thread.avatarUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      color: AppColors.surface,
-                      child: const Icon(Icons.person, color: Colors.white),
-                    ),
-                  ),
+                  child: _buildAvatarImage(thread.avatarUrl),
                 ),
               ),
               const SizedBox(width: 14),
@@ -564,6 +583,33 @@ class _InboxScreenState extends State<InboxScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildAvatarImage(String url) {
+    if (url.startsWith('assets/')) {
+      return Image.asset(
+        url,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Container(
+          color: AppColors.surface,
+          child: const Icon(Icons.storefront_rounded, color: Colors.white),
+        ),
+      );
+    }
+    if (url.startsWith('http')) {
+      return Image.network(
+        url,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Container(
+          color: AppColors.surface,
+          child: const Icon(Icons.person, color: Colors.white),
+        ),
+      );
+    }
+    return Container(
+      color: const Color(0xFF2F80ED),
+      child: const Icon(Icons.storefront_rounded, color: Colors.white),
     );
   }
 }

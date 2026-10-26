@@ -1,5 +1,6 @@
 import '../../../../core/network/api_client.dart';
 import '../../../feed/data/datasources/feed_remote_data_source.dart';
+import '../../../inbox_activity/data/datasources/inbox_message_manager.dart';
 import '../../../profile/data/datasources/profile_remote_data_source.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../models/user_model.dart';
@@ -46,6 +47,8 @@ class AuthRemoteDataSource {
     // Sync globally so identity immediately reflects active user
     ProfileSyncService.instance.cachedMyProfile = user;
     ProfileRemoteDataSource.instance.cacheUser(user);
+    // Switch InboxMessageManager to this authenticated account and load its saved conversations
+    await InboxMessageManager.instance.loadForUser(user.id);
 
     return user;
   }
@@ -87,6 +90,8 @@ class AuthRemoteDataSource {
     // Sync globally so identity immediately reflects active user
     ProfileSyncService.instance.cachedMyProfile = user;
     ProfileRemoteDataSource.instance.cacheUser(user);
+    // Switch InboxMessageManager to this authenticated account and load its saved conversations
+    await InboxMessageManager.instance.loadForUser(user.id);
 
     return user;
   }
@@ -120,5 +125,7 @@ class AuthRemoteDataSource {
     ProfileSyncService.instance.clear();
     ProfileRemoteDataSource.instance.clearCache();
     FeedRemoteDataSource.instance.clearCache();
+    // Switch InboxMessageManager back to guest mode
+    await InboxMessageManager.instance.loadForCurrentUser();
   }
 }
