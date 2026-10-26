@@ -127,6 +127,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
           ),
         ),
       );
+      setState(() => _isSubmitting = false);
       Navigator.pop(context, publishedProduct);
     } catch (error) {
       if (!mounted) return;

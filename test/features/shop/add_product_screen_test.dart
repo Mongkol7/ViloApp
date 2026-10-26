@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:viloapp/features/bottom_nav/presentation/widgets/vilo_floating_bottom_bar.dart';
 import 'package:viloapp/features/shop/models/product.dart';
 import 'package:viloapp/features/shop/presentation/pages/add_product_screen.dart';
@@ -11,6 +12,7 @@ import 'package:viloapp/features/shop/services/shop_service.dart';
 
 void main() {
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     Product.clearUserAddedProducts();
   });
 

@@ -64,7 +64,6 @@ class InboxMessageManager {
     await loadForUser(userId);
   }
 
-  @visibleForTesting
   Future<void> loadForUser(int userId) async {
     _activeUserId = userId;
     _threads.clear();
