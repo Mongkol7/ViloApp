@@ -51,7 +51,7 @@ Future<void> showViloLogoutDialog(BuildContext context) async {
 
     if (context.mounted) {
       Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        MaterialPageRoute(builder: (_) => const LoginScreen(isSwitchingAccount: true)),
         (route) => false,
       );
       ScaffoldMessenger.of(context).showSnackBar(

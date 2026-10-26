@@ -20,6 +20,7 @@ class TokenStorage {
   String? _email;
   String? _bio;
   bool _initialized = false;
+  bool _isExplicitlyLoggedOut = false;
 
   File? _getFile() {
     try {
@@ -80,6 +81,7 @@ class TokenStorage {
     required String accessToken,
     required String refreshToken,
   }) async {
+    _isExplicitlyLoggedOut = false;
     _accessToken = accessToken;
     _refreshToken = refreshToken;
     _persist();
@@ -93,6 +95,7 @@ class TokenStorage {
     String? email,
     String? bio,
   }) async {
+    _isExplicitlyLoggedOut = false;
     _userId = id;
     _username = username;
     _displayName = displayName;
@@ -156,9 +159,7 @@ class TokenStorage {
 
   Future<String?> getAccessToken() async {
     _load();
-    if (_accessToken == null || _accessToken!.isEmpty) {
-      await autoLoginDefaultUser();
-    }
+    if (_isExplicitlyLoggedOut) return null;
     return _accessToken;
   }
 
@@ -235,11 +236,13 @@ class TokenStorage {
   }
 
   Future<bool> hasValidToken() async {
-    final token = await getAccessToken();
-    return token != null && token.isNotEmpty;
+    _load();
+    if (_isExplicitlyLoggedOut) return false;
+    return _accessToken != null && _accessToken!.isNotEmpty && _userId != null;
   }
 
   Future<void> clear() async {
+    _isExplicitlyLoggedOut = true;
     _accessToken = null;
     _refreshToken = null;
     _userId = null;

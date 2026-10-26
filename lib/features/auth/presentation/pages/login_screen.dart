@@ -25,7 +25,9 @@ import 'forgot_password_screen.dart';
 /// - OR CONTINUE WITH social section
 /// - Don't have an account? Sign up link
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final bool isSwitchingAccount;
+
+  const LoginScreen({super.key, this.isSwitchingAccount = false});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -55,7 +57,9 @@ class _LoginScreenState extends State<LoginScreen>
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _ctrl.forward();
-      _checkAutoLogin();
+      if (!widget.isSwitchingAccount) {
+        _checkAutoLogin();
+      }
     });
   }
 
@@ -167,9 +171,28 @@ class _LoginScreenState extends State<LoginScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (Navigator.of(context).canPop())
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ),
                     // ── Heading ──────────────────────────────────────
                     Text(
-                      'Welcome Back',
+                      widget.isSwitchingAccount ? 'Switch Account' : 'Welcome Back',
                       style: AppTypography.headlineLg.copyWith(
                         fontSize: 36,
                         height: 1.1,
@@ -263,6 +286,32 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
                       ],
                     ),
+                    const SizedBox(height: 28),
+
+                    // ── Quick Select Account Chips ────────────────────
+                    Center(
+                      child: Text(
+                        'Quick Sign-in as Team Member',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        _buildQuickAccountChip('Liza', 'setkimliza', 'password123'),
+                        _buildQuickAccountChip('Mongkol', 'mongkol', 'password123'),
+                        _buildQuickAccountChip('Bunheng', 'bunheng', 'password123'),
+                        _buildQuickAccountChip('Rithysak', 'rithysak', 'password123'),
+                        _buildQuickAccountChip('Admin', 'admin', 'admin123'),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -270,6 +319,23 @@ class _LoginScreenState extends State<LoginScreen>
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildQuickAccountChip(String label, String username, String password) {
+    return ActionChip(
+      backgroundColor: const Color(0xFF1C1C1E),
+      side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+      label: Text(
+        label,
+        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+      ),
+      avatar: const Icon(Icons.person_rounded, size: 16, color: Color(0xFF2F80ED)),
+      onPressed: () {
+        _emailCtrl.text = username;
+        _passwordCtrl.text = password;
+        _handleLogin();
+      },
     );
   }
 }
