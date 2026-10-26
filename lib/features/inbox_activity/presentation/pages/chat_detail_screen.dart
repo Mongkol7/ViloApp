@@ -92,6 +92,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       ChatRemoteDataSource.instance.markAsRead(userId);
       ChatStompService.instance.markSeen(otherUserId: userId);
 
+      final myUid = TokenStorage.instance.currentUserIdSync ??
+          (TokenStorage.instance.currentUsernameSync == 's1' ? 99 : 1);
+      ChatManager.instance.markConversationSeenByRecipient(
+        recipientId: myUid,
+        senderId: userId,
+      );
+
       final remoteMessages = await ChatRemoteDataSource.instance.getMessages(
         userId,
       );
@@ -110,6 +117,37 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
   void _handleIncomingMessage(ChatMessage msg) {
     if (!mounted) return;
+
+    if (msg.status == 'Seen') {
+      setState(() {
+        final exactIndex = _messages.indexWhere(
+          (existing) => existing.id == msg.id,
+        );
+        if (exactIndex != -1) {
+          _messages[exactIndex] = msg;
+        } else {
+          final optimisticIndex = _messages.indexWhere(
+            (existing) =>
+                existing.isMe &&
+                (existing.text == msg.text || existing.id == msg.id),
+          );
+          if (optimisticIndex != -1) {
+            _messages[optimisticIndex] = _messages[optimisticIndex].copyWith(
+              id: msg.id,
+              status: 'Seen',
+            );
+          }
+        }
+        for (int i = 0; i < _messages.length; i++) {
+          if (_messages[i].isMe && _messages[i].status != 'Seen') {
+            _messages[i] = _messages[i].copyWith(status: 'Seen');
+          }
+        }
+      });
+      ChatManager.instance.updateMessagesStatus(widget.thread.id, 'Seen');
+      return;
+    }
+
     setState(() {
       // The backend echoes a sent message through STOMP after the UI has
       // already inserted its optimistic copy. Replace that copy instead of
@@ -145,6 +183,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       if (userId != null) {
         ChatRemoteDataSource.instance.markAsRead(userId);
         ChatStompService.instance.markSeen(otherUserId: userId);
+        final myUid = TokenStorage.instance.currentUserIdSync ??
+            (TokenStorage.instance.currentUsernameSync == 's1' ? 99 : 1);
+        ChatManager.instance.markConversationSeenByRecipient(
+          recipientId: myUid,
+          senderId: userId,
+        );
       }
     }
   }
@@ -352,6 +396,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     if (!message.isMe) return null;
     if (message.isDeletedForEveryone) return null;
     if (message.status == 'Seen') return 'Seen';
+    final index = _messages.indexWhere((m) => m.id == message.id);
+    if (index != -1) {
+      final hasLaterSeen = _messages.skip(index + 1).any((m) => m.isMe && m.status == 'Seen');
+      if (hasLaterSeen) return 'Seen';
+    }
     return message.status ?? 'Sent';
   }
 
@@ -624,28 +673,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   ),
                 ),
               ),
-              if (!message.isDeletedForEveryone)
-                ListTile(
-                  leading: const Icon(
-                    Icons.copy_rounded,
-                    color: Colors.white,
-                    size: 22,
-                  ),
-                  title: const Text(
-                    'Copy text',
-                    style: TextStyle(color: Colors.white, fontSize: 15),
-                  ),
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: message.text));
-                    Navigator.of(ctx).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Message copied to clipboard'),
-                        duration: Duration(seconds: 1),
-                      ),
-                    );
-                  },
-                ),
+
               ListTile(
                 leading: const Icon(
                   Icons.delete_outline_rounded,

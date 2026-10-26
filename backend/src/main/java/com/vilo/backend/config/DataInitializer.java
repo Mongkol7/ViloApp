@@ -206,7 +206,16 @@ public class DataInitializer implements CommandLineRunner {
                 "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80",
                 false, Set.of(Role.ROLE_USER));
 
+        User s1 = getOrCreateUser("s1", "s1@vilo.app", "password123",
+                "s1", "Vilo Creator & Peer Tester",
+                "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80",
+                false, Set.of(Role.ROLE_USER));
+
         // Set up team follow graph
+        ensureFollow(s1, setkimliza);
+        ensureFollow(setkimliza, s1);
+        ensureFollow(s1, mongkol);
+        ensureFollow(mongkol, s1);
         ensureFollow(bunheng, mongkol);
         ensureFollow(rithysak, mongkol);
         ensureFollow(setkimliza, mongkol);

@@ -127,11 +127,14 @@ class ChatManager {
     final list = List<DirectMessageThread>.from(_threadsNotifier.value);
     final index = list.indexWhere(
       (t) =>
-          t.id.toLowerCase().trim() == clean || t.userId?.toString() == clean,
+          t.id.toLowerCase().trim() == clean ||
+          t.userId?.toString() == clean ||
+          t.username.toLowerCase().replaceAll('@', '').trim() == clean,
     );
     if (index == -1 || list[index].unreadCount == 0) return;
     list[index] = list[index].copyWith(unreadCount: 0);
     _threadsNotifier.value = list;
+    _persistToLocalDisk();
   }
 
   void _loadFromLocalDisk() {
@@ -649,6 +652,8 @@ class ChatManager {
         existing['lastMessage'] = displayLast;
         existing['timeAgo'] = 'Just now';
         existing['messages'] = msgs;
+        existing['unreadCount'] =
+            ((existing['unreadCount'] as num?)?.toInt() ?? 0) + 1;
         rawList.removeAt(idx);
         rawList.insert(0, existing);
       } else {
@@ -663,6 +668,7 @@ class ChatManager {
           'followersCount': '520K followers',
           'isFollowing': false,
           'followsYou': true,
+          'unreadCount': 1,
           'messages': [incomingMsg],
         });
       }
@@ -670,6 +676,102 @@ class ChatManager {
       recipientFile.writeAsStringSync(jsonEncode(rawList));
     } catch (e) {
       debugPrint('[ChatManager] Error mirroring message locally: $e');
+    }
+  }
+
+  /// When a recipient opens the conversation, mark all messages sent by senderId as 'Seen'
+  /// in the sender's local storage file as well as memory threads.
+  void markConversationSeenByRecipient({
+    required int recipientId,
+    required int senderId,
+  }) {
+    try {
+      // 1. If currently in memory for senderId, update memory threads
+      final currentUid = TokenStorage.instance.currentUserIdSync;
+      if (currentUid == senderId) {
+        final list = List<DirectMessageThread>.from(_threadsNotifier.value);
+        final idx = list.indexWhere(
+          (t) =>
+              t.userId == recipientId ||
+              t.id == recipientId.toString() ||
+              (recipientId == 99 && t.username.toLowerCase().contains('s1')),
+        );
+        if (idx != -1) {
+          final thread = list[idx];
+          final updatedMsgs = thread.messages.map((m) {
+            if (m.isMe) {
+              return m.copyWith(status: 'Seen');
+            }
+            return m;
+          }).toList();
+          list[idx] = thread.copyWith(messages: updatedMsgs);
+          _threadsNotifier.value = list;
+          _persistToLocalDisk();
+        }
+      }
+
+      // 2. Directly update sender's cache file on disk
+      final senderFile = _getLocalFileForUser(senderId);
+      if (senderFile != null && senderFile.existsSync()) {
+        final jsonStr = senderFile.readAsStringSync();
+        final rawList = jsonDecode(jsonStr) as List<dynamic>;
+        bool changed = false;
+        for (int i = 0; i < rawList.length; i++) {
+          final item = Map<String, dynamic>.from(rawList[i] as Map);
+          final uid = item['userId'] is int
+              ? item['userId'] as int
+              : int.tryParse(item['id']?.toString() ?? '');
+          final uName = item['username']?.toString().toLowerCase() ?? '';
+          if (uid == recipientId ||
+              item['id']?.toString() == recipientId.toString() ||
+              (recipientId == 99 && (uName == 's1' || uName == '@s1' || uName.contains('s1')))) {
+            final msgs = List<dynamic>.from(item['messages'] as List? ?? []);
+            for (int j = 0; j < msgs.length; j++) {
+              final m = Map<String, dynamic>.from(msgs[j] as Map);
+              if (m['isMe'] == true && m['status'] != 'Seen') {
+                m['status'] = 'Seen';
+                msgs[j] = m;
+                changed = true;
+              }
+            }
+            item['messages'] = msgs;
+            rawList[i] = item;
+          }
+        }
+        if (changed) {
+          senderFile.writeAsStringSync(jsonEncode(rawList));
+          debugPrint(
+            '[ChatManager] Marked messages as Seen in sender #$senderId cache file',
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint(
+        '[ChatManager] Error marking conversation seen by recipient: $e',
+      );
+    }
+  }
+
+  void updateMessagesStatus(String threadId, String newStatus) {
+    final clean = threadId.toLowerCase().trim();
+    final list = List<DirectMessageThread>.from(_threadsNotifier.value);
+    final idx = list.indexWhere(
+      (t) =>
+          t.id.toLowerCase().trim() == clean ||
+          t.userId?.toString() == clean ||
+          t.username.toLowerCase().replaceAll('@', '').trim() == clean,
+    );
+    if (idx != -1) {
+      final thread = list[idx];
+      final updatedMsgs = thread.messages.map((m) {
+        if (m.isMe) {
+          return m.copyWith(status: newStatus);
+        }
+        return m;
+      }).toList();
+      list[idx] = thread.copyWith(messages: updatedMsgs);
+      _threadsNotifier.value = list;
+      _persistToLocalDisk();
     }
   }
 

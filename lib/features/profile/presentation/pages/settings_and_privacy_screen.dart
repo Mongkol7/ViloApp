@@ -232,6 +232,14 @@ class _SettingsAndPrivacyScreenState extends State<SettingsAndPrivacyScreen> {
         'password': 'password123',
       },
       {
+        'username': 's1',
+        'displayName': 's1',
+        'role': 'Chat Tester & Vilo Creator',
+        'avatar':
+            'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80',
+        'password': 'password123',
+      },
+      {
         'username': 'admin',
         'displayName': 'Vilo System Admin',
         'role': 'System Administrator',

@@ -92,6 +92,23 @@ class _InboxScreenState extends State<InboxScreen> {
             timeAgo: 'Just now',
           );
           ChatManager.instance.init(_threads);
+        } else {
+          final newThread = DirectMessageThread(
+            id: (notification.actorId ??
+                    notification.actorUsername ??
+                    DateTime.now().millisecondsSinceEpoch)
+                .toString(),
+            userId: notification.actorId,
+            username: notification.actorUsername ??
+                notification.title.replaceAll('New message from ', ''),
+            avatarUrl: notification.actorAvatarUrl ?? '',
+            lastMessage: notification.subtitle,
+            timeAgo: 'Just now',
+            unreadCount: 1,
+            messages: const [],
+          );
+          _threads.insert(0, newThread);
+          ChatManager.instance.init(_threads);
         }
       }
       ChatManager.instance.incrementNotificationBadge();
@@ -1772,32 +1789,7 @@ class _InboxScreenState extends State<InboxScreen> {
                             ),
                           ),
                         ),
-                        if (thread.unreadCount > 1) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            constraints: const BoxConstraints(
-                              minWidth: 18,
-                              minHeight: 18,
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFE2C55),
-                              borderRadius: BorderRadius.circular(9),
-                            ),
-                            child: Text(
-                              '${thread.unreadCount}',
-                              style: const TextStyle(
-                                fontFamily: 'Inter',
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ] else if (thread.unreadCount == 1) ...[
+                        if (thread.unreadCount > 0) ...[
                           const SizedBox(width: 6),
                           Container(
                             width: 8,
@@ -1807,6 +1799,32 @@ class _InboxScreenState extends State<InboxScreen> {
                               shape: BoxShape.circle,
                             ),
                           ),
+                          if (thread.unreadCount > 1) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              constraints: const BoxConstraints(
+                                minWidth: 16,
+                                minHeight: 16,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFE2C55),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${thread.unreadCount}',
+                                style: const TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ],
                     ),
