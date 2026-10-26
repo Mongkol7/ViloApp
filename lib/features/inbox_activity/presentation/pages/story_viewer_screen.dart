@@ -247,8 +247,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           });
     } catch (e) {
       debugPrint('[StoryViewer] Error starting video controller: $e');
-      if (mounted)
+      if (mounted) {
         setState(() => _videoError = 'This video could not be played.');
+      }
     }
   }
 
@@ -684,8 +685,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                   ),
                   child: Row(
                     children: [
-                      if (!item.isOwner &&
-                          item.authorAvatarUrl != null &&
+                      if (item.authorAvatarUrl != null &&
                           item.authorAvatarUrl!.isNotEmpty)
                         Container(
                           width: 38,
@@ -993,8 +993,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                         const SizedBox(height: 14),
 
                         // Center Avatar
-                        if (!item.isOwner &&
-                            item.authorAvatarUrl != null &&
+                        if (item.authorAvatarUrl != null &&
                             item.authorAvatarUrl!.isNotEmpty)
                           Container(
                             width: 90,

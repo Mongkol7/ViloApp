@@ -101,23 +101,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   String _getDefaultAvatarForUser(String username) {
-    final lower = username.toLowerCase().trim().replaceAll('@', '');
-    if (lower == 'setkimliza' || lower == 'liza' || lower == 'kimliza') {
-      return 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80';
-    }
-    if (lower == 'mongkol' || lower == 'sereymongkol') {
-      return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80';
-    }
-    if (lower == 'bunheng' || lower == 'heng') {
-      return 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80';
-    }
-    if (lower == 'rithysak' || lower == 'sak') {
-      return 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80';
-    }
-    if (lower == 'admin') {
-      return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80';
-    }
-    return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500';
+    return ProfileSyncService.getDefaultAvatarForUser(username);
   }
 
   void _onProfileUpdated() {

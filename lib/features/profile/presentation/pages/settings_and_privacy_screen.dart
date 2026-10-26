@@ -7,6 +7,7 @@ import '../../../auth/presentation/pages/login_screen.dart';
 import '../../../bottom_nav/presentation/pages/main_navigation_shell.dart';
 import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../../inbox_activity/data/datasources/chat_manager.dart';
+import '../../../inbox_activity/data/datasources/thought_story_manager.dart';
 import '../../data/datasources/profile_sync_service.dart';
 
 class SettingsAndPrivacyScreen extends StatefulWidget {
@@ -381,6 +382,8 @@ class _SettingsAndPrivacyScreenState extends State<SettingsAndPrivacyScreen> {
                   Navigator.pop(ctx);
                   final authSource = AuthRemoteDataSource();
                   await authSource.logout();
+                  ProfileSyncService.instance.clearSession();
+                  ThoughtStoryManager.instance.deleteStory();
                   if (context.mounted) {
                     Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
                       MaterialPageRoute(
@@ -415,6 +418,8 @@ class _SettingsAndPrivacyScreenState extends State<SettingsAndPrivacyScreen> {
     try {
       final authSource = AuthRemoteDataSource();
       await authSource.logout();
+      ProfileSyncService.instance.clearSession();
+      ThoughtStoryManager.instance.deleteStory();
 
       final user = await authSource.login(
         usernameOrEmail: username,

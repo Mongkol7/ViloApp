@@ -184,13 +184,38 @@ class ProfileSyncService {
     mockFollowersCount = 0;
   }
 
+  /// Returns the default avatar for a given username across the entire app
+  static String getDefaultAvatarForUser(String username) {
+    final lower = username.toLowerCase().trim().replaceAll('@', '');
+    if (lower == 'setkimliza' || lower == 'liza' || lower == 'kimliza') {
+      return 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80';
+    }
+    if (lower == 'mongkol' || lower == 'sereymongkol') {
+      return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80';
+    }
+    if (lower == 'bunheng' || lower == 'heng') {
+      return 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80';
+    }
+    if (lower == 'rithysak' || lower == 'sak') {
+      return 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80';
+    }
+    if (lower == 'admin' || lower == 's1') {
+      return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80';
+    }
+    return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500';
+  }
+
   /// Returns the current active user's avatar URL
   String get currentUserAvatar {
     final cached = cachedMyProfile?.avatarUrl;
     if (cached != null && cached.trim().isNotEmpty) {
       return cached.trim();
     }
-    return ProfileMockData.avatarUrl;
+    final storedUser = TokenStorage.instance.getUserModel();
+    if (storedUser?.avatarUrl != null && storedUser!.avatarUrl!.trim().isNotEmpty) {
+      return storedUser.avatarUrl!.trim();
+    }
+    return getDefaultAvatarForUser(currentUsername);
   }
 
   /// Returns the current active user's display name
@@ -220,14 +245,16 @@ class ProfileSyncService {
 
   /// Returns true if the given username or ID belongs to the current user.
   bool isCurrentUser({String? username, String? id}) {
-    if (id != null && id.isNotEmpty && id != '0') {
+    if (id != null && id.isNotEmpty) {
       if (cachedMyProfile != null && cachedMyProfile!.id.toString() == id) return true;
       final storedId = TokenStorage.instance.currentUserIdSync;
       if (storedId != null && storedId.toString() == id) return true;
-      if (id == '1' && (storedId == null || storedId == 1)) return true;
+      if (storedId == null && (id == '1' || id == '0')) {
+        final isDemo = TokenStorage.instance.isDemoUserSync;
+        if (isDemo) return true;
+      }
     }
 
-    if (id != null && (id == '1' || id == '0')) return true;
     if (username != null && username.isNotEmpty) {
       final clean = username.trim().toLowerCase().replaceAll('@', '');
       final myUser = currentUsername;
@@ -240,7 +267,15 @@ class ProfileSyncService {
           (clean == 'sak' || clean == 'rithysak')) {
         return true;
       }
-      if (myUser == 'mongkol' && clean == 'mongkol') return true;
+      if ((myUser == 'mongkol' || myUser == 'sereymongkol') &&
+          (clean == 'mongkol' || clean == 'sereymongkol')) {
+        return true;
+      }
+      if ((myUser == 'bunheng' || myUser == 'heng') &&
+          (clean == 'bunheng' || clean == 'heng')) {
+        return true;
+      }
+      if (myUser == 's1' && clean == 's1') return true;
     }
 
     return false;

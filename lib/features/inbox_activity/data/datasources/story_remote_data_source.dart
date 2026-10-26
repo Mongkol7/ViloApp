@@ -22,8 +22,9 @@ class StoryRemoteDataSource {
         value.startsWith('assets/')) {
       return value;
     }
-    if (value.startsWith('/'))
+    if (value.startsWith('/')) {
       return '${ApiClient.baseUrl.replaceFirst('/api/v1', '')}$value';
+    }
     return '${ApiClient.baseUrl.replaceFirst('/api/v1', '')}/$value';
   }
 
@@ -60,15 +61,17 @@ class StoryRemoteDataSource {
             final id = item['id']?.toString() ?? '';
             final username = item['displayName'] ?? item['username'] ?? 'User';
             final uname = item['username'] ?? 'user';
-            final avatarUrl =
-                item['avatarUrl'] ??
-                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
             final isMy =
                 item['isMyStory'] == true ||
                 ProfileSyncService.instance.isCurrentUser(
                   username: uname,
                   id: item['userId']?.toString(),
                 );
+            final avatarUrl = isMy
+                ? ProfileSyncService.instance.currentUserAvatar
+                : ((item['avatarUrl'] != null && item['avatarUrl'].toString().isNotEmpty)
+                    ? item['avatarUrl'].toString()
+                    : ProfileSyncService.getDefaultAvatarForUser(uname));
             final message = item['message'] as String? ?? '';
             final mediaUrl = _resolveMediaUrl(item['mediaUrl'] as String?);
             final mediaType = item['mediaType'] as String? ?? 'TEXT';
@@ -261,8 +264,9 @@ class StoryRemoteDataSource {
       Uri.parse('${ApiClient.baseUrl}/stories/upload'),
     );
     final token = await TokenStorage.instance.getAccessToken();
-    if (token != null && token.isNotEmpty)
+    if (token != null && token.isNotEmpty) {
       request.headers['Authorization'] = 'Bearer $token';
+    }
     request.fields.addAll({
       'message': message,
       'mediaType': mediaType,
@@ -356,8 +360,9 @@ class StoryRemoteDataSource {
             if (myUsername != null &&
                 (cleanUser == myUsername ||
                     cleanUser == 'me' ||
-                    cleanUser == 'you'))
+                    cleanUser == 'you')) {
               continue;
+            }
 
             final fullName = item['displayName'] ?? username;
             final avatarUrl =

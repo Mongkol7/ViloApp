@@ -57,8 +57,9 @@ class ChatStompService {
   }
 
   Future<void> connect() async {
-    if (_isConnected || Platform.environment.containsKey('FLUTTER_TEST'))
+    if (_isConnected || Platform.environment.containsKey('FLUTTER_TEST')) {
       return;
+    }
 
     final token = await TokenStorage.instance.getAccessToken();
     final headers = <String, String>{};
@@ -230,7 +231,9 @@ class ChatStompService {
       body: jsonEncode({
         'recipientId': recipientId,
         'content': content,
-        if (mediaUrl != null) 'mediaUrl': mediaUrl,
+        if (mediaUrl != null) ...{
+          'mediaUrl': mediaUrl,
+        },
       }),
     );
   }

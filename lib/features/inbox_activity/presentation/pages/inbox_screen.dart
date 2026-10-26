@@ -27,6 +27,7 @@ import '../../../feed/presentation/pages/video_feed_page.dart';
 import '../../../feed/presentation/widgets/video_likes_bottom_sheet.dart';
 import '../widgets/story_viewers_bottom_sheet.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
+import '../../../profile/data/datasources/profile_remote_data_source.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -62,11 +63,16 @@ class _InboxScreenState extends State<InboxScreen> {
     _threads = isDemo
         ? List.from(StaticInboxData.threads)
         : List.from(ChatManager.instance.threads);
+    ProfileSyncService.instance.profileUpdatedEvents.addListener(_onProfileUpdated);
     _loadAllData();
     ChatStompService.instance.connect();
     ChatStompService.instance.addNotificationListener(
       _handleNotificationReceived,
     );
+  }
+
+  void _onProfileUpdated() {
+    if (mounted) setState(() {});
   }
 
   void _handleNotificationReceived(NotificationItem notification) {
@@ -118,6 +124,7 @@ class _InboxScreenState extends State<InboxScreen> {
 
   @override
   void dispose() {
+    ProfileSyncService.instance.profileUpdatedEvents.removeListener(_onProfileUpdated);
     ChatStompService.instance.removeNotificationListener(
       _handleNotificationReceived,
     );
@@ -126,6 +133,11 @@ class _InboxScreenState extends State<InboxScreen> {
 
   Future<void> _loadAllData() async {
     try {
+      try {
+        final myProfile = await ProfileRemoteDataSource.instance.getMyProfile();
+        ProfileSyncService.instance.cachedMyProfile = myProfile;
+      } catch (_) {}
+
       final stories = await StoryRemoteDataSource.instance.getActiveStories();
       final notifications = await NotificationRemoteDataSource.instance
           .getNotifications();
@@ -133,10 +145,15 @@ class _InboxScreenState extends State<InboxScreen> {
 
       if (mounted) {
         setState(() {
-          if (stories.isNotEmpty) _stories = List.from(stories);
-          if (notifications.isNotEmpty)
+          if (stories.isNotEmpty) {
+            _stories = List.from(stories);
+          }
+          if (notifications.isNotEmpty) {
             _notifications = List.from(notifications);
-          if (threads.isNotEmpty) _threads = List.from(threads);
+          }
+          if (threads.isNotEmpty) {
+            _threads = List.from(threads);
+          }
         });
         ChatManager.instance.init(threads);
         _updateNotificationBadge();
@@ -230,8 +247,9 @@ class _InboxScreenState extends State<InboxScreen> {
     for (final s in _stories) {
       if (s.isCreate ||
           s.isMyStory ||
-          ProfileSyncService.instance.isCurrentUser(username: s.authorUsername))
+          ProfileSyncService.instance.isCurrentUser(username: s.authorUsername)) {
         continue;
+      }
       final mediaT = (s.mediaType.isNotEmpty && s.mediaType != 'TEXT')
           ? s.mediaType
           : ((s.mediaUrl != null &&
@@ -1189,12 +1207,9 @@ class _InboxScreenState extends State<InboxScreen> {
                             padding: const EdgeInsets.all(2.0),
                             child: ClipOval(
                               child: Image.network(
-                                (myStory?.authorAvatarUrl != null &&
-                                        myStory!.authorAvatarUrl!.isNotEmpty)
-                                    ? myStory.authorAvatarUrl!
-                                    : ProfileSyncService
-                                          .instance
-                                          .currentUserAvatar,
+                                ProfileSyncService
+                                    .instance
+                                    .currentUserAvatar,
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) =>
                                     Container(
