@@ -5,6 +5,9 @@ import '../models/creator_merchant.dart';
 import '../models/product.dart';
 import '../presentation/controllers/cart_controller.dart';
 import '../presentation/pages/cart_page.dart';
+import '../../inbox_activity/data/datasources/inbox_message_manager.dart';
+import '../../inbox_activity/domain/entities/inbox_item.dart';
+import '../../inbox_activity/presentation/pages/chat_detail_screen.dart';
 
 /// Creator Merchant Card component matching Vilo's Obsidian Dark Canvas aesthetic (#141416 / #16171B).
 /// Strictly adheres to image_54f91d.png:
@@ -213,6 +216,53 @@ class MerchantCard extends StatelessWidget {
                       ],
                     ),
                   ),
+                  TextButton.icon(
+                    onPressed: () {
+                      final threadId = 'merchant_chat_${merchant.handle.hashCode.abs()}';
+                      var existingThread = InboxMessageManager.instance.getThread(threadId) ??
+                          InboxMessageManager.instance.getThreadByUsername(merchant.handle);
+                      final resolvedThread = existingThread ??
+                          InboxMessageManager.instance.addOrUpdateThread(
+                            DirectMessageThread(
+                              id: threadId,
+                              username: merchant.handle,
+                              avatarUrl: merchant.avatarUrl,
+                              lastMessage: 'Chat with ${merchant.handle}',
+                              timeAgo: 'Just now',
+                              isVerified: merchant.isVerified,
+                              followersCount: merchant.followers,
+                              messages: [
+                                ChatMessage(
+                                  id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
+                                  text: 'Hi ${merchant.handle}! I am exploring your store.',
+                                  isMe: true,
+                                  timestamp: 'Just now',
+                                  status: 'Sent',
+                                ),
+                              ],
+                            ),
+                          );
+                      Navigator.pop(ctx);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ChatDetailScreen(thread: resolvedThread),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.chat_outlined, size: 14, color: _accentBlue),
+                    label: const Text('Open Chat',
+                        style: TextStyle(
+                            color: _accentBlue,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold)),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      backgroundColor: _accentBlue.withValues(alpha: 0.12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -325,15 +375,44 @@ class MerchantCard extends StatelessWidget {
                 child: ElevatedButton(
                   onPressed: () {
                     final text = controller.text.trim();
+                    final messageText = text.isNotEmpty
+                        ? text
+                        : (specificProduct != null
+                            ? 'Hi ${merchant.handle}, I am interested in ${specificProduct.title} (${specificProduct.formattedPrice}). Is it available?'
+                            : 'Hi ${merchant.handle}, I would like to inquire about items from your store!');
+                    final threadId = 'merchant_chat_${merchant.handle.hashCode.abs()}';
+                    final thread = DirectMessageThread(
+                      id: threadId,
+                      username: merchant.handle,
+                      avatarUrl: merchant.avatarUrl,
+                      lastMessage: messageText,
+                      timeAgo: 'Just now',
+                      isVerified: merchant.isVerified,
+                      followersCount: merchant.followers,
+                      messages: [
+                        ChatMessage(
+                          id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
+                          text: messageText,
+                          isMe: true,
+                          timestamp: 'Just now',
+                          status: 'Sent',
+                        ),
+                      ],
+                    );
+                    final registeredThread =
+                        InboxMessageManager.instance.addOrUpdateThread(thread);
                     Navigator.pop(ctx);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         backgroundColor: const Color(0xFF1E1E22),
-                        content: Text(
-                          text.isNotEmpty
-                              ? 'Message sent to ${merchant.handle}: "$text"'
-                              : 'Message sent to ${merchant.handle}!',
-                        ),
+                        content: Text('Message sent to ${merchant.handle}! Opening chat...'),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChatDetailScreen(thread: registeredThread),
                       ),
                     );
                   },

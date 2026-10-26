@@ -7,6 +7,10 @@ import '../data/models/product_model.dart';
 import '../models/product.dart';
 import '../presentation/controllers/cart_controller.dart';
 import '../presentation/pages/cart_page.dart';
+import 'shop_search_results_screen.dart';
+import '../../inbox_activity/data/datasources/inbox_message_manager.dart';
+import '../../inbox_activity/domain/entities/inbox_item.dart';
+import '../../inbox_activity/presentation/pages/chat_detail_screen.dart';
 
 /// Product Detail Screen matching Vilo's Obsidian Dark Canvas aesthetic (#080808 / #141416).
 class ProductDetailScreen extends StatefulWidget {
@@ -377,30 +381,40 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Container(
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: _bgSurfaceElevated,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: _surfaceStroke),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.search_rounded, color: Colors.white38, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _resolvedTitle,
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12.5,
-                                overflow: TextOverflow.ellipsis,
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ShopSearchResultsScreen(initialQuery: _resolvedTitle),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: _bgSurfaceElevated,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: _surfaceStroke),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.search_rounded, color: Colors.white38, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _resolvedTitle,
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12.5,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             ),
-                          ),
-                          const Icon(Icons.mic_none_rounded, color: Colors.white38, size: 18),
-                        ],
+                            const Icon(Icons.mic_none_rounded, color: Colors.white38, size: 18),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1678,48 +1692,63 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               separatorBuilder: (context, index) => const SizedBox(width: 12),
               itemBuilder: (context, index) {
                 final item = recommendations[index];
-                return Container(
-                  width: 120,
-                  decoration: BoxDecoration(
-                    color: _bgSurface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _surfaceStroke),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                          child: Image.asset(
-                            item['image']!,
-                            width: 120,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                Container(color: _bgSurfaceElevated),
+                return GestureDetector(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ProductDetailScreen(
+                          title: item['title'],
+                          price: item['price'],
+                          imageUrl: item['image'],
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: 120,
+                    decoration: BoxDecoration(
+                      color: _bgSurface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _surfaceStroke),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                            child: Image.asset(
+                              item['image']!,
+                              width: 120,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(color: _bgSurfaceElevated),
+                            ),
                           ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item['title']!,
-                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              item['price']!,
-                              style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
-                            ),
-                          ],
+                        Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item['title']!,
+                                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                item['price']!,
+                                style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 );
               },
@@ -1853,111 +1882,290 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  Widget _buildSellerChatSheet(BuildContext ctx) {
-    final TextEditingController msgController = TextEditingController();
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: _bgSurface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  Widget _buildProductInquiryThumbnail() {
+    final img = _carouselImages.isNotEmpty ? _carouselImages.first : (widget.imageUrl ?? '');
+    if (img.startsWith('http://') || img.startsWith('https://')) {
+      return Image.network(
+        img,
+        width: 44,
+        height: 44,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          width: 44,
+          height: 44,
+          color: const Color(0xFF242428),
+          child: const Icon(Icons.shopping_bag_outlined, color: Colors.white38, size: 20),
+        ),
+      );
+    }
+    return Image.asset(
+      img.isNotEmpty ? img : 'assets/images/iphone_17_pro_max_case.jpg',
+      width: 44,
+      height: 44,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => Container(
+        width: 44,
+        height: 44,
+        color: const Color(0xFF242428),
+        child: const Icon(Icons.shopping_bag_outlined, color: Colors.white38, size: 20),
       ),
-      padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(ctx).viewInsets.bottom + 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              const CircleAvatar(
-                radius: 16,
-                backgroundColor: Color(0xFF1F2937),
-                child: Icon(Icons.storefront_rounded, color: Colors.white, size: 18),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(_resolvedSeller,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                  const Text('Typically replies in under 5 minutes',
-                      style: TextStyle(color: _accentGreen, fontSize: 11)),
-                ],
+    );
+  }
+
+  void _handleSendSellerInquiry(BuildContext ctx, String rawText) {
+    final text = rawText.trim();
+    final messageText = text.isNotEmpty
+        ? text
+        : 'Hi $_resolvedSeller, I have an inquiry about $_resolvedTitle ($_resolvedPrice). Is it currently available?';
+
+    final threadId = 'seller_chat_${_resolvedSeller.hashCode.abs()}';
+    final primaryImg = _carouselImages.isNotEmpty ? _carouselImages.first : (widget.imageUrl ?? '');
+    final handle = _resolvedSeller.startsWith('@')
+        ? _resolvedSeller
+        : '@${_resolvedSeller.replaceAll(' ', '_').toLowerCase()}';
+
+    final thread = DirectMessageThread(
+      id: threadId,
+      username: handle,
+      avatarUrl: primaryImg,
+      lastMessage: messageText,
+      timeAgo: 'Just now',
+      isVerified: true,
+      followersCount: '128k',
+      messages: [
+        ChatMessage(
+          id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
+          text: messageText,
+          isMe: true,
+          timestamp: 'Just now',
+          status: 'Sent',
+        ),
+      ],
+    );
+
+    final registeredThread = InboxMessageManager.instance.addOrUpdateThread(thread);
+
+    Navigator.pop(ctx);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: _bgSurfaceElevated,
+        content: Text('Message sent to $_resolvedSeller! Opening chat...'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatDetailScreen(thread: registeredThread),
+      ),
+    );
+  }
+
+  void _handleOpenSellerChatDirectly(BuildContext ctx) {
+    final threadId = 'seller_chat_${_resolvedSeller.hashCode.abs()}';
+    final primaryImg = _carouselImages.isNotEmpty ? _carouselImages.first : (widget.imageUrl ?? '');
+    final handle = _resolvedSeller.startsWith('@')
+        ? _resolvedSeller
+        : '@${_resolvedSeller.replaceAll(' ', '_').toLowerCase()}';
+
+    var existingThread = InboxMessageManager.instance.getThread(threadId) ??
+        InboxMessageManager.instance.getThreadByUsername(handle);
+
+    final resolvedThread = existingThread ??
+        InboxMessageManager.instance.addOrUpdateThread(
+          DirectMessageThread(
+            id: threadId,
+            username: handle,
+            avatarUrl: primaryImg,
+            lastMessage: 'Viewing $_resolvedTitle',
+            timeAgo: 'Just now',
+            isVerified: true,
+            followersCount: '128k',
+            messages: [
+              ChatMessage(
+                id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
+                text: 'Hi $_resolvedSeller! I am inquiring about $_resolvedTitle ($_resolvedPrice).',
+                isMe: true,
+                timestamp: 'Just now',
+                status: 'Sent',
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: _bgSurfaceElevated,
-              borderRadius: BorderRadius.circular(10),
+        );
+
+    Navigator.pop(ctx);
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatDetailScreen(thread: resolvedThread),
+      ),
+    );
+  }
+
+  Widget _buildQuickInquiryChip(String label, TextEditingController controller) {
+    return GestureDetector(
+      onTap: () {
+        controller.text = label;
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+        decoration: BoxDecoration(
+          color: _bgSurfaceElevated,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(color: Colors.white70, fontSize: 11.5, fontWeight: FontWeight.w500),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSellerChatSheet(BuildContext ctx) {
+    final TextEditingController msgController = TextEditingController();
+
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: _bgSurface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(ctx).viewInsets.bottom + 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+              ),
             ),
-            child: Row(
+            const SizedBox(height: 14),
+            Row(
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.asset(
-                    'assets/images/iphone_17_pro_max_case.jpg',
-                    width: 40,
-                    height: 40,
-                    fit: BoxFit.cover,
-                  ),
+                const CircleAvatar(
+                  radius: 17,
+                  backgroundColor: Color(0xFF1F2937),
+                  child: Icon(Icons.storefront_rounded, color: Colors.white, size: 18),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    'Inquiring about: $_resolvedTitle ($_resolvedPrice)',
-                    style: const TextStyle(color: Colors.white70, fontSize: 11.5),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _resolvedSeller,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const Text(
+                        'Typically replies in under 5 minutes',
+                        style: TextStyle(color: _accentGreen, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => _handleOpenSellerChatDirectly(ctx),
+                  icon: const Icon(Icons.chat_outlined, size: 14, color: _accentBlue),
+                  label: const Text('Open Chat', style: TextStyle(color: _accentBlue, fontSize: 12, fontWeight: FontWeight.bold)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    backgroundColor: _accentBlue.withValues(alpha: 0.12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: msgController,
-            style: const TextStyle(color: Colors.white, fontSize: 13),
-            decoration: InputDecoration(
-              hintText: 'Type your question to TechHorizon Global...',
-              hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
-              filled: true,
-              fillColor: _bgSurfaceElevated,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Message sent to seller!'),
-                    backgroundColor: _bgSurfaceElevated,
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: _bgSurfaceElevated,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
               ),
-              child: const Text('Send Inquiry', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: _buildProductInquiryThumbnail(),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Inquiring about: $_resolvedTitle ($_resolvedPrice)',
+                          style: const TextStyle(color: Colors.white70, fontSize: 11.5, fontWeight: FontWeight.w600),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Tap below to send inquiry or chat directly',
+                          style: TextStyle(color: Colors.white38, fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                children: [
+                  _buildQuickInquiryChip('Is this in stock?', msgController),
+                  const SizedBox(width: 6),
+                  _buildQuickInquiryChip('Can you ship today?', msgController),
+                  const SizedBox(width: 6),
+                  _buildQuickInquiryChip('Is price negotiable?', msgController),
+                  const SizedBox(width: 6),
+                  _buildQuickInquiryChip('Warranty details?', msgController),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: msgController,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'Type your question to $_resolvedSeller...',
+                hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+                filled: true,
+                fillColor: _bgSurfaceElevated,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: ElevatedButton.icon(
+                onPressed: () => _handleSendSellerInquiry(ctx, msgController.text),
+                icon: const Icon(Icons.send_rounded, size: 16),
+                label: const Text('Send Inquiry', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

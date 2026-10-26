@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../auth/data/datasources/token_storage.dart';
 import '../models/product.dart';
 
@@ -29,8 +30,41 @@ class ShopService {
     return 'http://localhost:3000/api/v1/products';
   }
 
+  static const String _storageKey = 'vilo_user_added_products';
+
+  /// Loads cached products from persistent SharedPreferences storage
+  Future<void> _loadPersistentProducts() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonString = prefs.getString(_storageKey);
+      if (jsonString != null && jsonString.isNotEmpty) {
+        final List<dynamic> list = jsonDecode(jsonString);
+        for (final item in list) {
+          if (item is Map<String, dynamic>) {
+            final p = Product.fromJson(item);
+            Product.addCreatorProduct(p);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[ShopService] Error loading persistent products: $e');
+    }
+  }
+
+  /// Saves current local products to SharedPreferences
+  Future<void> _savePersistentProducts() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = Product.userAddedProducts.map((p) => p.toJson()).toList();
+      await prefs.setString(_storageKey, jsonEncode(list));
+    } catch (e) {
+      debugPrint('[ShopService] Error saving persistent products: $e');
+    }
+  }
+
   /// Fetches products from the backend with robust error handling and fallback mock data.
   Future<List<Product>> getProducts({String? category, String? query}) async {
+    await _loadPersistentProducts();
     try {
       final uri = Uri.parse(baseUrl).replace(
         queryParameters: {
@@ -185,6 +219,7 @@ class ShopService {
         if (data is Map<String, dynamic>) {
           final publishedProduct = Product.fromJson(data);
           Product.addCreatorProduct(publishedProduct);
+          await _savePersistentProducts();
           publishedProductNotifier.value = publishedProduct;
           return publishedProduct;
         }
@@ -199,6 +234,7 @@ class ShopService {
 
     // Always ensure product is added and live in creator catalog
     Product.addCreatorProduct(product);
+    await _savePersistentProducts();
     publishedProductNotifier.value = product;
     return product;
   }

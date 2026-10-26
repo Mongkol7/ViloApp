@@ -1,4 +1,5 @@
 import '../../../../core/network/api_client.dart';
+import '../../../inbox_activity/data/datasources/inbox_message_manager.dart';
 import '../models/user_model.dart';
 import 'token_storage.dart';
 
@@ -37,6 +38,9 @@ class AuthRemoteDataSource {
       displayName: user.displayName,
     );
 
+    // Switch InboxMessageManager to this authenticated account and load its saved conversations
+    await InboxMessageManager.instance.loadForUser(user.id);
+
     return user;
   }
 
@@ -71,6 +75,9 @@ class AuthRemoteDataSource {
       displayName: user.displayName,
     );
 
+    // Switch InboxMessageManager to this authenticated account and load its saved conversations
+    await InboxMessageManager.instance.loadForUser(user.id);
+
     return user;
   }
 
@@ -89,5 +96,7 @@ class AuthRemoteDataSource {
       );
     } catch (_) {}
     await _tokenStorage.clear();
+    // Switch InboxMessageManager back to guest mode
+    await InboxMessageManager.instance.loadForCurrentUser();
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../auth/data/datasources/token_storage.dart';
 import '../../domain/entities/inbox_item.dart';
 import 'static_inbox_data.dart';
@@ -8,7 +9,9 @@ import 'static_inbox_data.dart';
 /// Centralized in-memory manager for direct message threads and active conversations.
 ///
 /// Ensures real-time state synchronization between Cart inquiries, ChatDetailScreen,
-/// and the InboxScreen MESSAGES list.
+/// and the InboxScreen MESSAGES list, with dual persistence:
+/// 1. Local per-account SharedPreferences (works on Web, Windows, Android, iOS).
+/// 2. Remote PostgreSQL database (/api/v1/chats) when authenticated.
 class InboxMessageManager {
   InboxMessageManager._internal() {
     _threads = List<DirectMessageThread>.from(StaticInboxData.threads);
@@ -62,14 +65,14 @@ class InboxMessageManager {
   }
 
   @visibleForTesting
-  Future<void> loadForUser(int userId) {
-    if (_activeUserId == userId && _loadFuture != null) return _loadFuture!;
+  Future<void> loadForUser(int userId) async {
     _activeUserId = userId;
     _threads.clear();
     threadsNotifier.value = const [];
     _drafts.clear();
     _loadFuture = _loadUserData(userId);
-    return _loadFuture!;
+    await _loadFuture;
+    _syncFromRemoteDatabase();
   }
 
   @visibleForTesting
@@ -84,6 +87,24 @@ class InboxMessageManager {
     final saved = preferences.getString(_storageKey(userId));
     _drafts.clear();
     if (saved == null) {
+      // First time user logs in: check if there are guest threads that were created
+      final guestSaved = preferences.getString(_guestStorageKey);
+      if (guestSaved != null) {
+        try {
+          final decoded = jsonDecode(guestSaved) as Map<String, dynamic>;
+          final guestThreads = (decoded['threads'] as List<dynamic>? ?? const [])
+              .map((thread) => DirectMessageThread.fromJson(thread as Map<String, dynamic>))
+              .toList();
+          if (guestThreads.isNotEmpty) {
+            _threads
+              ..clear()
+              ..addAll(guestThreads);
+            threadsNotifier.value = List.unmodifiable(_threads);
+            await _persist();
+            return;
+          }
+        } catch (_) {}
+      }
       _threads
         ..clear()
         ..addAll(StaticInboxData.threads);
@@ -194,6 +215,13 @@ class InboxMessageManager {
     _threads.insert(0, resolvedThread);
     threadsNotifier.value = List.unmodifiable(_threads);
     _persistInBackground();
+
+    // Also sync the message to backend PostgreSQL database if authenticated
+    if (resolvedThread.messages.isNotEmpty) {
+      final lastMsg = resolvedThread.messages.last;
+      _syncMessageToBackend(resolvedThread.id, resolvedThread.username, lastMsg.text);
+    }
+
     return resolvedThread;
   }
 
@@ -212,7 +240,100 @@ class InboxMessageManager {
       _threads.insert(0, updatedThread);
       threadsNotifier.value = List.unmodifiable(_threads);
       await _persist();
+
+      // Sync to backend
+      _syncMessageToBackend(threadId, thread.username, message.text);
     }
+  }
+
+  void _syncMessageToBackend(String threadId, String recipientHandle, String messageText) {
+    TokenStorage.instance.hasValidToken().then((hasToken) {
+      if (!hasToken) return;
+      ApiClient.instance.post(
+        '/chats/messages',
+        body: {
+          'threadId': threadId,
+          'recipientHandle': recipientHandle,
+          'messageText': messageText,
+        },
+        requireAuth: true,
+      ).catchError((Object err) {
+        debugPrint('[InboxMessageManager] Remote chat sync deferred (offline): $err');
+      });
+    });
+  }
+
+  void _syncFromRemoteDatabase() {
+    TokenStorage.instance.hasValidToken().then((hasToken) {
+      if (!hasToken) return;
+      ApiClient.instance.get('/chats/conversations', requireAuth: true).then((response) {
+        if (response is Map<String, dynamic> && response['data'] is List) {
+          final list = response['data'] as List<dynamic>;
+          if (list.isEmpty) return;
+          bool hasChanges = false;
+          for (final item in list) {
+            if (item is! Map<String, dynamic>) continue;
+            final threadId = item['threadId'] as String? ?? '';
+            final recipient = item['recipientHandle'] as String? ?? '';
+            final msgText = item['messageText'] as String? ?? '';
+            final msgId = 'remote_${item['id']}';
+            if (threadId.isEmpty || msgText.isEmpty) continue;
+
+            final existing = getThread(threadId);
+            if (existing == null) {
+              final newThread = DirectMessageThread(
+                id: threadId,
+                username: recipient,
+                avatarUrl: '',
+                lastMessage: msgText,
+                timeAgo: 'Recently',
+                isVerified: true,
+                followersCount: '',
+                messages: [
+                  ChatMessage(
+                    id: msgId,
+                    text: msgText,
+                    isMe: item['isMe'] as bool? ?? true,
+                    timestamp: 'Recently',
+                    status: 'Sent',
+                  ),
+                ],
+              );
+              _threads.insert(0, newThread);
+              hasChanges = true;
+            } else {
+              final hasMsg = existing.messages.any((m) => m.id == msgId || m.text == msgText);
+              if (!hasMsg) {
+                final updated = existing.copyWith(
+                  messages: [
+                    ...existing.messages,
+                    ChatMessage(
+                      id: msgId,
+                      text: msgText,
+                      isMe: item['isMe'] as bool? ?? true,
+                      timestamp: 'Recently',
+                      status: 'Sent',
+                    ),
+                  ],
+                  lastMessage: msgText,
+                );
+                final idx = _threads.indexOf(existing);
+                if (idx != -1) {
+                  _threads[idx] = updated;
+                  hasChanges = true;
+                }
+              }
+            }
+          }
+          if (hasChanges) {
+            threadsNotifier.value = List.unmodifiable(_threads);
+            _persistInBackground();
+          }
+        }
+      }).catchError((Object err) {
+        debugPrint('[InboxMessageManager] Remote conversation sync deferred: $err');
+      });
+    });
   }
 
   /// Resets threads to initial StaticInboxData for testing.
