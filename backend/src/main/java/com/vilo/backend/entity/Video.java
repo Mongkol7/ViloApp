@@ -194,9 +194,11 @@ public class Video {
 
     public Long getCommentCount() { return commentCount; }
     public void setCommentCount(Long commentCount) { this.commentCount = commentCount; }
+    public void setCommentCount(int commentCount) { this.commentCount = (long) commentCount; }
 
     public Long getCommentsCount() { return commentCount; }
     public void setCommentsCount(Long commentsCount) { this.commentCount = commentsCount; }
+    public void setCommentsCount(int commentsCount) { this.commentCount = (long) commentsCount; }
 
     public Long getSaveCount() { return saveCount; }
     public void setSaveCount(Long saveCount) { this.saveCount = saveCount; }

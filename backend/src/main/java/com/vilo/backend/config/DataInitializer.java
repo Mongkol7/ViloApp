@@ -543,11 +543,11 @@ public class DataInitializer implements CommandLineRunner {
                     commentRepository.save(new Comment(2L, rithysak.getId(), null, "Clean build goals 💯"));
                 }
                 videoRepository.findById(1L).ifPresent(v -> {
-                    v.setCommentCount(4);
+                    v.setCommentCount(4L);
                     videoRepository.save(v);
                 });
                 videoRepository.findById(2L).ifPresent(v -> {
-                    v.setCommentCount(2);
+                    v.setCommentCount(2L);
                     videoRepository.save(v);
                 });
                 log.info("Initial video comments seeded successfully!");
