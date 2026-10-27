@@ -9,6 +9,7 @@ class CommentModel {
   final String content;
   final DateTime? createdAt;
   final List<CommentModel> replies;
+  final int likesCount;
 
   const CommentModel({
     required this.id,
@@ -21,6 +22,7 @@ class CommentModel {
     required this.content,
     this.createdAt,
     this.replies = const [],
+    this.likesCount = 0,
   });
 
   factory CommentModel.fromJson(Map<String, dynamic> json) {
@@ -46,6 +48,9 @@ class CommentModel {
           ? DateTime.tryParse(json['createdAt'].toString())
           : null,
       replies: repliesList,
+      likesCount: (json['likesCount'] as num?)?.toInt() ??
+          (json['likes'] as num?)?.toInt() ??
+          0,
     );
   }
 
@@ -61,6 +66,7 @@ class CommentModel {
       'content': content,
       'createdAt': createdAt?.toIso8601String(),
       'replies': replies.map((r) => r.toJson()).toList(),
+      'likesCount': likesCount,
     };
   }
 
@@ -75,6 +81,7 @@ class CommentModel {
     String? content,
     DateTime? createdAt,
     List<CommentModel>? replies,
+    int? likesCount,
   }) {
     return CommentModel(
       id: id ?? this.id,
@@ -87,6 +94,7 @@ class CommentModel {
       content: content ?? this.content,
       createdAt: createdAt ?? this.createdAt,
       replies: replies ?? this.replies,
+      likesCount: likesCount ?? this.likesCount,
     );
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../data/datasources/notification_remote_data_source.dart';
 import '../../domain/entities/inbox_item.dart';
@@ -73,6 +74,60 @@ class _ActivityScreenState extends State<ActivityScreen> {
   late List<ActivityModel> _activities;
 
   static final List<ActivityModel> _demoActivities = [
+    ActivityModel(
+      id: 'mono_liza_like_video',
+      userNames: ['Tren Mono', 'Set Kimliza'],
+      userAvatarUrls: [
+        'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80',
+        'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
+      ],
+      othersCount: 0,
+      hasActiveStory: true,
+      actionText: 'liked your video.',
+      timeAgo: '2m',
+      mediaThumbnailUrl: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=200&auto=format&fit=crop&q=80',
+      type: 'like_video',
+      videoIndex: 0,
+      videoId: 1,
+      actorUsername: 'trenmono',
+      actorId: 5,
+    ),
+    ActivityModel(
+      id: 'liza_comment_video',
+      userNames: ['Set Kimliza'],
+      userAvatarUrls: [
+        'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
+      ],
+      othersCount: 0,
+      hasActiveStory: true,
+      actionText: 'commented: "Mechanical keyboard sound is so satisfying ⌨️"',
+      timeAgo: '2h',
+      mediaThumbnailUrl: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=200&auto=format&fit=crop&q=80',
+      type: 'comment',
+      videoIndex: 0,
+      videoId: 1,
+      commentContent: 'Mechanical keyboard sound is so satisfying ⌨️',
+      actorUsername: 'setkimliza',
+      actorId: 2,
+    ),
+    ActivityModel(
+      id: 'mono_comment_video',
+      userNames: ['Tren Mono'],
+      userAvatarUrls: [
+        'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80',
+      ],
+      othersCount: 0,
+      hasActiveStory: true,
+      actionText: 'commented: "That clutch play was insane 🎯"',
+      timeAgo: '4h',
+      mediaThumbnailUrl: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=200&auto=format&fit=crop&q=80',
+      type: 'comment',
+      videoIndex: 0,
+      videoId: 1,
+      commentContent: 'That clutch play was insane 🎯',
+      actorUsername: 'trenmono',
+      actorId: 5,
+    ),
     ActivityModel(
       id: 's1_like_video',
       userNames: ['s1'],
@@ -496,12 +551,18 @@ class _ActivityScreenState extends State<ActivityScreen> {
   }
 
   void _openUserProfile(String username, int? userId, String? avatarUrl) {
+    final clean = username.trim().replaceAll('@', '');
+    final effectiveId = userId ?? ProfileSyncService.getUserIdForUsername(clean);
+    final effectiveAvatar = (avatarUrl != null && avatarUrl.isNotEmpty)
+        ? avatarUrl
+        : ProfileSyncService.getDefaultAvatarForUser(clean);
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PublicProfileScreen(
-          userId: userId,
-          username: username,
-          avatarUrl: avatarUrl,
+          userId: effectiveId,
+          username: clean,
+          avatarUrl: effectiveAvatar,
         ),
       ),
     );
@@ -628,19 +689,24 @@ class _ActivityScreenState extends State<ActivityScreen> {
   Widget _buildAvatar(ActivityModel item) {
     if (item.userAvatarUrls.length >= 2) {
       // Overlapping stacked avatars
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _openUserProfile(item.userName, item.actorId, item.userAvatarUrl),
-        child: SizedBox(
-          width: 48,
-          height: 44,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              // 1. Primary left avatar
-              Positioned(
-                left: 0,
-                top: 2,
+      final name1 = item.userNames.isNotEmpty ? item.userNames[0] : 'User';
+      final name2 = item.userNames.length > 1 ? item.userNames[1] : 'User';
+      final av1 = item.userAvatarUrls[0];
+      final av2 = item.userAvatarUrls[1];
+
+      return SizedBox(
+        width: 48,
+        height: 44,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // 1. Primary left avatar (User 1)
+            Positioned(
+              left: 0,
+              top: 2,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openUserProfile(name1, item.actorId, av1),
                 child: Container(
                   width: 32,
                   height: 32,
@@ -650,7 +716,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
                   ),
                   child: ClipOval(
                     child: Image.network(
-                      item.userAvatarUrls[0],
+                      av1,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) => Container(
                         color: const Color(0xFF2A2A30),
@@ -660,10 +726,14 @@ class _ActivityScreenState extends State<ActivityScreen> {
                   ),
                 ),
               ),
-              // 2. Secondary right overlapping avatar
-              Positioned(
-                left: 14,
-                top: 8,
+            ),
+            // 2. Secondary right overlapping avatar (User 2)
+            Positioned(
+              left: 14,
+              top: 8,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openUserProfile(name2, null, av2),
                 child: Container(
                   width: 32,
                   height: 32,
@@ -673,7 +743,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
                   ),
                   child: ClipOval(
                     child: Image.network(
-                      item.userAvatarUrls[1],
+                      av2,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) => Container(
                         color: const Color(0xFF2A2A30),
@@ -683,8 +753,8 @@ class _ActivityScreenState extends State<ActivityScreen> {
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     }
@@ -736,53 +806,48 @@ class _ActivityScreenState extends State<ActivityScreen> {
         style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 13.5),
       ));
     } else if (item.userNames.length == 1) {
+      final name0 = item.userNames[0];
+      final av0 = item.userAvatarUrls.isNotEmpty ? item.userAvatarUrls[0] : null;
       spans.add(TextSpan(
-        text: item.userNames[0],
+        text: name0,
         style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 13.5),
+        recognizer: TapGestureRecognizer()..onTap = () => _openUserProfile(name0, item.actorId, av0),
       ));
       if (item.othersCount > 0) {
         spans.add(const TextSpan(text: ' and ', style: TextStyle(fontWeight: FontWeight.w400, color: Color(0xFFD1D1D6), fontSize: 13.5)));
         spans.add(TextSpan(
           text: '${item.othersCount} ${item.othersCount == 1 ? "other" : "others"}',
           style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 13.5),
+          recognizer: TapGestureRecognizer()..onTap = () => _handleActivityTap(item),
         ));
       }
-    } else if (item.userNames.length == 2 && item.othersCount == 0) {
+    } else if (item.userNames.length >= 2) {
+      final name0 = item.userNames[0];
+      final name1 = item.userNames[1];
+      final av0 = item.userAvatarUrls.isNotEmpty ? item.userAvatarUrls[0] : null;
+      final av1 = item.userAvatarUrls.length > 1 ? item.userAvatarUrls[1] : null;
+
       spans.add(TextSpan(
-        text: item.userNames[0],
+        text: name0,
         style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 13.5),
+        recognizer: TapGestureRecognizer()..onTap = () => _openUserProfile(name0, item.actorId, av0),
       ));
-      spans.add(const TextSpan(text: ' and ', style: TextStyle(fontWeight: FontWeight.w400, color: Color(0xFFD1D1D6), fontSize: 13.5)));
       spans.add(TextSpan(
-        text: item.userNames[1],
-        style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 13.5),
+        text: item.othersCount > 0 ? ', ' : ' and ',
+        style: const TextStyle(fontWeight: FontWeight.w400, color: Color(0xFFD1D1D6), fontSize: 13.5),
       ));
-    } else if (item.userNames.length >= 2 && item.othersCount > 0) {
       spans.add(TextSpan(
-        text: item.userNames[0],
+        text: name1,
         style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 13.5),
+        recognizer: TapGestureRecognizer()..onTap = () => _openUserProfile(name1, null, av1),
       ));
-      spans.add(const TextSpan(text: ', ', style: TextStyle(fontWeight: FontWeight.w400, color: Color(0xFFD1D1D6), fontSize: 13.5)));
-      spans.add(TextSpan(
-        text: item.userNames[1],
-        style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 13.5),
-      ));
-      spans.add(const TextSpan(text: ' and ', style: TextStyle(fontWeight: FontWeight.w400, color: Color(0xFFD1D1D6), fontSize: 13.5)));
-      spans.add(TextSpan(
-        text: '${item.othersCount} ${item.othersCount == 1 ? "other" : "others"}',
-        style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 13.5),
-      ));
-    } else {
-      for (int i = 0; i < item.userNames.length; i++) {
+      if (item.othersCount > 0) {
+        spans.add(const TextSpan(text: ' and ', style: TextStyle(fontWeight: FontWeight.w400, color: Color(0xFFD1D1D6), fontSize: 13.5)));
         spans.add(TextSpan(
-          text: item.userNames[i],
+          text: '${item.othersCount} ${item.othersCount == 1 ? "other" : "others"}',
           style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 13.5),
+          recognizer: TapGestureRecognizer()..onTap = () => _handleActivityTap(item),
         ));
-        if (i < item.userNames.length - 2) {
-          spans.add(const TextSpan(text: ', ', style: TextStyle(fontWeight: FontWeight.w400, color: Color(0xFFD1D1D6), fontSize: 13.5)));
-        } else if (i == item.userNames.length - 2) {
-          spans.add(const TextSpan(text: ' and ', style: TextStyle(fontWeight: FontWeight.w400, color: Color(0xFFD1D1D6), fontSize: 13.5)));
-        }
       }
     }
 
@@ -793,6 +858,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
         color: Color(0xFFD1D1D6),
         fontSize: 13.5,
       ),
+      recognizer: TapGestureRecognizer()..onTap = () => _handleActivityTap(item),
     ));
 
     spans.add(TextSpan(
@@ -929,7 +995,8 @@ class _ActivityScreenState extends State<ActivityScreen> {
 
                         // Right: Clean Video Thumbnail
                         GestureDetector(
-                          onTap: () => _handleActivityTap(item),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _navigateToVideo(item, openComments: item.type != 'like_video'),
                           child: Container(
                             width: 44,
                             height: 56,

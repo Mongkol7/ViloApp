@@ -34,6 +34,8 @@ public class DataInitializer implements CommandLineRunner {
     private final ThoughtStoryRepository storyRepository;
     private final StoryViewRepository storyViewRepository;
     private final NotificationRepository notificationRepository;
+    private final VideoLikeRepository videoLikeRepository;
+    private final CommentRepository commentRepository;
     private final PasswordEncoder passwordEncoder;
 
     public DataInitializer(
@@ -47,6 +49,8 @@ public class DataInitializer implements CommandLineRunner {
             ThoughtStoryRepository storyRepository,
             StoryViewRepository storyViewRepository,
             NotificationRepository notificationRepository,
+            VideoLikeRepository videoLikeRepository,
+            CommentRepository commentRepository,
             PasswordEncoder passwordEncoder
     ) {
         this.userRepository = userRepository;
@@ -59,6 +63,8 @@ public class DataInitializer implements CommandLineRunner {
         this.storyRepository = storyRepository;
         this.storyViewRepository = storyViewRepository;
         this.notificationRepository = notificationRepository;
+        this.videoLikeRepository = videoLikeRepository;
+        this.commentRepository = commentRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -479,6 +485,72 @@ public class DataInitializer implements CommandLineRunner {
                         .isRead(false)
                         .build();
                 notificationRepository.save(notifS1Mongkol);
+            }
+
+            if (trenmono != null && mongkol != null) {
+                Notification notifMonoMongkol = Notification.builder()
+                        .recipient(mongkol)
+                        .actor(trenmono)
+                        .type(NotificationType.LIKE)
+                        .title("New Like")
+                        .body("trenmono liked your video")
+                        .entityId("1")
+                        .entityType("VIDEO")
+                        .isRead(false)
+                        .build();
+                notificationRepository.save(notifMonoMongkol);
+            }
+            if (setkimliza != null && mongkol != null) {
+                Notification notifLizaMongkol = Notification.builder()
+                        .recipient(mongkol)
+                        .actor(setkimliza)
+                        .type(NotificationType.LIKE)
+                        .title("New Like")
+                        .body("setkimliza liked your video")
+                        .entityId("1")
+                        .entityType("VIDEO")
+                        .isRead(false)
+                        .build();
+                notificationRepository.save(notifLizaMongkol);
+            }
+
+            // Seed VideoLikes for Video 1 so /videos/1/likes returns Mono and Liza
+            if (trenmono != null && !videoLikeRepository.existsByUserIdAndVideoId(trenmono.getId(), 1L)) {
+                videoLikeRepository.save(new VideoLike(trenmono.getId(), 1L));
+            }
+            if (setkimliza != null && !videoLikeRepository.existsByUserIdAndVideoId(setkimliza.getId(), 1L)) {
+                videoLikeRepository.save(new VideoLike(setkimliza.getId(), 1L));
+            }
+
+            // Seed initial video comments so comments show who commented on video
+            if (commentRepository.countByVideoId(1L) == 0) {
+                if (setkimliza != null) {
+                    commentRepository.save(new Comment(1L, setkimliza.getId(), null, "Mechanical keyboard sound is so satisfying ⌨️"));
+                }
+                if (trenmono != null) {
+                    commentRepository.save(new Comment(1L, trenmono.getId(), null, "That clutch play was insane 🎯"));
+                }
+                if (s1 != null) {
+                    commentRepository.save(new Comment(1L, s1.getId(), null, "Clean desk aesthetic and lighting 🔥"));
+                }
+                if (sophia != null) {
+                    commentRepository.save(new Comment(1L, sophia.getId(), null, "Fluid animation and 60fps feed 🚀"));
+                }
+                if (bunheng != null && commentRepository.countByVideoId(2L) == 0) {
+                    commentRepository.save(new Comment(2L, bunheng.getId(), null, "Amazing workspace inspiration ✨"));
+                }
+                if (rithysak != null && commentRepository.countByVideoId(2L) <= 1) {
+                    commentRepository.save(new Comment(2L, rithysak.getId(), null, "Clean build goals 💯"));
+                }
+                videoRepository.findById(1L).ifPresent(v -> {
+                    v.setCommentCount(4);
+                    videoRepository.save(v);
+                });
+                videoRepository.findById(2L).ifPresent(v -> {
+                    v.setCommentCount(2);
+                    videoRepository.save(v);
+                });
+                log.info("Initial video comments seeded successfully!");
             }
 
             log.info("Default seed data created successfully for chat, stories, and notifications!");

@@ -762,14 +762,26 @@ MultipartFile thumbnailFile, String thumbnailPath,
         List<User> users = userRepository.findAllById(userIds);
         Map<Long, User> userMap = users.stream().collect(Collectors.toMap(User::getId, u -> u));
 
-        Set<Long> followingIds = (currentUser != null && currentUser.getFollowing() != null)
-                ? currentUser.getFollowing().stream().map(User::getId).collect(Collectors.toSet())
+        final User me = (currentUser != null && currentUser.getId() != null)
+                ? userRepository.findById(currentUser.getId()).orElse(currentUser)
+                : null;
+
+        Set<Long> followingIds = (me != null && me.getFollowing() != null)
+                ? me.getFollowing().stream().map(User::getId).collect(Collectors.toSet())
+                : Collections.emptySet();
+
+        Set<Long> followersIds = (me != null && me.getFollowers() != null)
+                ? me.getFollowers().stream().map(User::getId).collect(Collectors.toSet())
                 : Collections.emptySet();
 
         return likes.stream()
                 .map(like -> {
                     User u = userMap.get(like.getUserId());
                     if (u == null) return null;
+                    boolean isFollowing = followingIds.contains(u.getId());
+                    boolean followsYou = followersIds.contains(u.getId());
+                    boolean isFriend = isFollowing && followsYou;
+
                     Map<String, Object> map = new LinkedHashMap<>();
                     map.put("id", like.getId());
                     map.put("userId", u.getId());
@@ -778,7 +790,9 @@ MultipartFile thumbnailFile, String thumbnailPath,
                     map.put("avatarUrl", resolveDefaultAvatar(u.getUsername(), u.getAvatarUrl()));
                     map.put("bio", u.getBio());
                     map.put("isVerified", u.getIsVerified());
-                    map.put("isFollowing", followingIds.contains(u.getId()));
+                    map.put("isFollowing", isFollowing);
+                    map.put("followsYou", followsYou);
+                    map.put("isFriend", isFriend);
                     map.put("createdAt", like.getCreatedAt());
                     return map;
                 })
@@ -803,6 +817,9 @@ MultipartFile thumbnailFile, String thumbnailPath,
         }
         if ("bunheng".equals(lower) || "heng".equals(lower)) {
             return "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80";
+        }
+        if ("trenmono".equals(lower) || "mono".equals(lower)) {
+            return "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500&auto=format&fit=crop&q=80";
         }
         if ("s1".equals(lower) || "admin".equals(lower)) {
             return "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80";

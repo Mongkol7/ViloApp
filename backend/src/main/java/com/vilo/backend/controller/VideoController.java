@@ -632,6 +632,9 @@ public class VideoController {
         if ("bunheng".equals(lower) || "heng".equals(lower)) {
             return "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80";
         }
+        if ("trenmono".equals(lower) || "mono".equals(lower)) {
+            return "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500&auto=format&fit=crop&q=80";
+        }
         if ("s1".equals(lower) || "admin".equals(lower)) {
             return "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80";
         }

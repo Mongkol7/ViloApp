@@ -202,7 +202,22 @@ class ProfileSyncService {
     if (lower == 'admin' || lower == 's1') {
       return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80';
     }
+    if (lower == 'trenmono' || lower == 'mono') {
+      return 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500&auto=format&fit=crop&q=80';
+    }
     return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500';
+  }
+
+  /// Maps known usernames to user IDs for reliable profile navigation
+  static int? getUserIdForUsername(String username) {
+    final lower = username.toLowerCase().trim().replaceAll('@', '');
+    if (lower == 'mongkol' || lower == 'sereymongkol') return 1;
+    if (lower == 'setkimliza' || lower == 'liza' || lower == 'kimliza') return 2;
+    if (lower == 'bunheng' || lower == 'heng') return 3;
+    if (lower == 'rithysak' || lower == 'sak') return 4;
+    if (lower == 'trenmono' || lower == 'mono') return 5;
+    if (lower == 's1' || lower == 'admin') return 99;
+    return null;
   }
 
   /// Returns the current active user's avatar URL

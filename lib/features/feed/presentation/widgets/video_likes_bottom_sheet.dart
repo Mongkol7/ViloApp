@@ -1,29 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../data/datasources/feed_remote_data_source.dart';
+import '../../data/models/comment_model.dart';
 import '../../../profile/presentation/screens/public_profile_screen.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
 
 class VideoLikesBottomSheet extends StatefulWidget {
   final int videoId;
   final int initialLikeCount;
+  final int initialCommentCount;
   final List<String>? initialUserNames;
   final List<String>? initialUserAvatars;
+  final int initialTab; // 0: Comments, 1: Likes
 
   const VideoLikesBottomSheet({
     super.key,
     required this.videoId,
     this.initialLikeCount = 0,
+    this.initialCommentCount = 4,
     this.initialUserNames,
     this.initialUserAvatars,
+    this.initialTab = 1,
   });
 
   static Future<void> show(
     BuildContext context, {
     required int videoId,
     int initialLikeCount = 0,
+    int initialCommentCount = 4,
     List<String>? initialUserNames,
     List<String>? initialUserAvatars,
+    int initialTab = 1,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -32,8 +39,10 @@ class VideoLikesBottomSheet extends StatefulWidget {
       builder: (_) => VideoLikesBottomSheet(
         videoId: videoId,
         initialLikeCount: initialLikeCount,
+        initialCommentCount: initialCommentCount,
         initialUserNames: initialUserNames,
         initialUserAvatars: initialUserAvatars,
+        initialTab: initialTab,
       ),
     );
   }
@@ -45,26 +54,185 @@ class VideoLikesBottomSheet extends StatefulWidget {
 class _VideoLikesBottomSheetState extends State<VideoLikesBottomSheet> {
   final FeedRemoteDataSource _dataSource = FeedRemoteDataSource.instance;
   List<Map<String, dynamic>> _likers = [];
+  List<CommentModel> _comments = [];
   bool _isLoading = true;
+  late int _selectedTab;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _commentInputController = TextEditingController();
+  final FocusNode _commentFocusNode = FocusNode();
+  bool _isPostingComment = false;
+  final Set<int> _likedCommentIds = {};
 
   @override
   void initState() {
     super.initState();
+    _selectedTab = widget.initialTab;
     _loadLikes();
+    _loadComments();
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _commentInputController.dispose();
+    _commentFocusNode.dispose();
     super.dispose();
+  }
+
+  bool _computeIsFollowing(String username, int? userId) {
+    final clean = username.toLowerCase().replaceAll('@', '').trim();
+    if (ProfileSyncService.instance.isCurrentUser(username: clean, id: userId?.toString())) {
+      return false;
+    }
+    final cached = ProfileSyncService.instance.cachedFollowing;
+    if (cached != null) {
+      if (userId != null && cached.any((u) => u.id == userId)) return true;
+      if (cached.any((u) => u.username.toLowerCase().replaceAll('@', '').trim() == clean)) return true;
+      return false;
+    }
+
+    final myUser = ProfileSyncService.instance.currentUsername.toLowerCase().trim();
+    if (myUser == 'mongkol' || myUser == 'setkimliza' || myUser == 'trenmono' || myUser == 'bunheng' || myUser == 'rithysak') {
+      if (clean == 'trenmono' || clean == 'mono' || clean == 'setkimliza' || clean == 'liza' ||
+          clean == 'mongkol' || clean == 'bunheng' || clean == 'rithysak' || clean == 'sak' || clean == 's1') {
+        return clean != myUser;
+      }
+      if (clean == 'kelly' || clean == 'gon_freecs') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _computeFollowsYou(String username, int? userId) {
+    final clean = username.toLowerCase().replaceAll('@', '').trim();
+    if (ProfileSyncService.instance.isCurrentUser(username: clean, id: userId?.toString())) {
+      return false;
+    }
+    final cached = ProfileSyncService.instance.cachedFollowers;
+    if (cached != null) {
+      if (userId != null && cached.any((u) => u.id == userId)) return true;
+      if (cached.any((u) => u.username.toLowerCase().replaceAll('@', '').trim() == clean)) return true;
+      return false;
+    }
+
+    final myUser = ProfileSyncService.instance.currentUsername.toLowerCase().trim();
+    if (myUser == 'mongkol' || myUser == 'setkimliza' || myUser == 'trenmono' || myUser == 'bunheng' || myUser == 'rithysak') {
+      if (clean == 'trenmono' || clean == 'mono' || clean == 'setkimliza' || clean == 'liza' ||
+          clean == 'mongkol' || clean == 'bunheng' || clean == 'rithysak' || clean == 'sak' || clean == 's1') {
+        return clean != myUser;
+      }
+    }
+    return false;
+  }
+
+  List<CommentModel> _getFallbackComments() {
+    return [
+      CommentModel(
+        id: 1001,
+        videoId: widget.videoId,
+        userId: 2,
+        username: 'setkimliza',
+        displayName: 'Set Kimliza',
+        avatarUrl: ProfileSyncService.getDefaultAvatarForUser('setkimliza'),
+        content: 'Mechanical keyboard sound is so satisfying ⌨️',
+        createdAt: DateTime.now().subtract(const Duration(hours: 2)),
+        likesCount: 12,
+      ),
+      CommentModel(
+        id: 1002,
+        videoId: widget.videoId,
+        userId: 5,
+        username: 'trenmono',
+        displayName: 'Tren Mono',
+        avatarUrl: ProfileSyncService.getDefaultAvatarForUser('trenmono'),
+        content: 'That clutch play was insane 🎯',
+        createdAt: DateTime.now().subtract(const Duration(hours: 4)),
+        likesCount: 8,
+      ),
+      CommentModel(
+        id: 1003,
+        videoId: widget.videoId,
+        userId: 99,
+        username: 's1',
+        displayName: 's1',
+        avatarUrl: ProfileSyncService.getDefaultAvatarForUser('s1'),
+        content: 'Clean desk aesthetic and lighting 🔥',
+        createdAt: DateTime.now().subtract(const Duration(hours: 7)),
+        likesCount: 15,
+      ),
+      CommentModel(
+        id: 1004,
+        videoId: widget.videoId,
+        userId: 7,
+        username: 'sophia_art',
+        displayName: 'Sophia Vance',
+        avatarUrl: ProfileSyncService.getDefaultAvatarForUser('sophia_art'),
+        content: 'Fluid animation and 60fps feed 🚀',
+        createdAt: DateTime.now().subtract(const Duration(hours: 9)),
+        likesCount: 5,
+      ),
+    ];
+  }
+
+  Future<void> _submitComment() async {
+    final text = _commentInputController.text.trim();
+    if (text.isEmpty || _isPostingComment) return;
+    HapticFeedback.lightImpact();
+
+    final myUser = ProfileSyncService.instance.cachedMyProfile;
+    final myDisplayName = ProfileSyncService.instance.currentUserDisplayName;
+    final myUsername = ProfileSyncService.instance.currentUsername;
+    final myAvatar = ProfileSyncService.instance.currentUserAvatar;
+    final tempId = DateTime.now().millisecondsSinceEpoch;
+
+    final newComment = CommentModel(
+      id: tempId,
+      videoId: widget.videoId,
+      userId: myUser?.id ?? 0,
+      username: myUsername,
+      displayName: myDisplayName,
+      avatarUrl: myAvatar,
+      content: text,
+      createdAt: DateTime.now(),
+    );
+
+    setState(() {
+      _isPostingComment = true;
+      _comments.insert(0, newComment);
+      _commentInputController.clear();
+    });
+
+    ProfileSyncService.instance.notifyVideoInteraction(
+      VideoInteractionEvent(
+        videoId: widget.videoId,
+        commentCount: _comments.length,
+      ),
+    );
+
+    try {
+      final real = await _dataSource.postComment(widget.videoId, text);
+      if (mounted) {
+        setState(() {
+          _isPostingComment = false;
+          final idx = _comments.indexWhere((c) => c.id == tempId);
+          if (idx != -1) {
+            _comments[idx] = real;
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isPostingComment = false);
+      }
+    }
   }
 
   void _populateFallbackLikers() {
     final List<Map<String, dynamic>> fallback = [];
 
-    // 1. First add any specific users from the activity/notification
+    // 1. First add any specific users from the activity/notification (e.g. Tren Mono, Set Kimliza)
     if (widget.initialUserNames != null && widget.initialUserNames!.isNotEmpty) {
       for (int i = 0; i < widget.initialUserNames!.length; i++) {
         final name = widget.initialUserNames![i];
@@ -76,80 +244,64 @@ class _VideoLikesBottomSheetState extends State<VideoLikesBottomSheet> {
             ? widget.initialUserAvatars![i]
             : ProfileSyncService.getDefaultAvatarForUser(name);
 
+        final targetUid = ProfileSyncService.getUserIdForUsername(effectiveUsername) ?? (1000 + i);
+        final isFollowing = _computeIsFollowing(effectiveUsername, targetUid);
+        final followsYou = _computeFollowsYou(effectiveUsername, targetUid);
+        final isFriend = isFollowing && followsYou;
+
         fallback.add({
-          'userId': 1000 + i,
+          'userId': targetUid,
           'username': effectiveUsername,
           'displayName': name,
           'avatarUrl': avatar,
           'isVerified': true,
-          'isFollowing': false,
+          'isFollowing': isFollowing,
+          'followsYou': followsYou,
+          'isFriend': isFriend,
+          'hasActiveStory': true,
         });
       }
     }
 
-    // 2. Add prominent platform creators who liked the video
-    final standardLikers = [
-      {
-        'userId': 2,
-        'username': 'setkimliza',
-        'displayName': 'Set Kimliza',
-        'avatarUrl': 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80',
-        'isVerified': true,
-        'isFollowing': true,
-      },
-      {
-        'userId': 1,
-        'username': 'mongkol',
-        'displayName': 'Thoeung Sereymongkol',
-        'avatarUrl': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80',
-        'isVerified': true,
-        'isFollowing': true,
-      },
-      {
-        'userId': 3,
-        'username': 'bunheng',
-        'displayName': 'Bunheng',
-        'avatarUrl': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80',
-        'isVerified': false,
-        'isFollowing': false,
-      },
-      {
-        'userId': 4,
-        'username': 'rithysak',
-        'displayName': 'Rithysak',
-        'avatarUrl': 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80',
-        'isVerified': true,
-        'isFollowing': false,
-      },
-      {
-        'userId': 5,
-        'username': 'trenmono',
-        'displayName': 'Tren Mono',
-        'avatarUrl': 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500&auto=format&fit=crop&q=80',
-        'isVerified': false,
-        'isFollowing': false,
-      },
-      {
-        'userId': 6,
-        'username': 'tryphien',
-        'displayName': 'Try Phien',
-        'avatarUrl': 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=500&auto=format&fit=crop&q=80',
-        'isVerified': false,
-        'isFollowing': false,
-      },
-      {
-        'userId': 7,
-        'username': 'sophia_art',
-        'displayName': 'Sophia Vance',
-        'avatarUrl': 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80',
-        'isVerified': true,
-        'isFollowing': false,
-      },
+    // 2. Add prominent creators matching the user screenshot with real account relationship status
+    final rawCreators = [
+      {'userId': 5, 'username': 'trenmono', 'displayName': 'Tren Mono', 'avatarUrl': 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500&auto=format&fit=crop&q=80', 'isVerified': true, 'hasActiveStory': true},
+      {'userId': 2, 'username': 'setkimliza', 'displayName': 'Set Kimliza', 'avatarUrl': 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80', 'isVerified': true, 'hasActiveStory': true},
+      {'userId': 101, 'username': 'pisey', 'displayName': '★Pisey :)', 'avatarUrl': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80', 'isVerified': false, 'hasActiveStory': false},
+      {'userId': 102, 'username': 'star_user', 'displayName': '★', 'avatarUrl': 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=80', 'isVerified': false, 'hasActiveStory': false},
+      {'userId': 103, 'username': 'kelly', 'displayName': 'Kelly', 'avatarUrl': 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500&auto=format&fit=crop&q=80', 'isVerified': false, 'hasActiveStory': true},
+      {'userId': 104, 'username': 'queen_kagukdit', 'displayName': 'Queen kagukdit🥰🥰', 'avatarUrl': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80', 'isVerified': false, 'hasActiveStory': false},
+      {'userId': 105, 'username': 'cattttt', 'displayName': 'Cattttt 🐱', 'avatarUrl': 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=500&auto=format&fit=crop&q=80', 'isVerified': false, 'hasActiveStory': false},
+      {'userId': 106, 'username': 'ching', 'displayName': 'Ching ah><', 'avatarUrl': 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80', 'isVerified': false, 'hasActiveStory': true},
+      {'userId': 107, 'username': 'gon_freecs', 'displayName': 'Gon freecs', 'avatarUrl': 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=500&auto=format&fit=crop&q=80', 'isVerified': false, 'hasActiveStory': true},
+      {'userId': 108, 'username': 'jinn', 'displayName': 'Jinn.', 'avatarUrl': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80', 'isVerified': false, 'hasActiveStory': true},
+      {'userId': 109, 'username': 'alanzo', 'displayName': 'Alanzo 👾', 'avatarUrl': 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80', 'isVerified': false, 'hasActiveStory': true},
+      {'userId': 1, 'username': 'mongkol', 'displayName': 'Thoeung Sereymongkol', 'avatarUrl': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80', 'isVerified': true, 'hasActiveStory': false},
+      {'userId': 3, 'username': 'bunheng', 'displayName': 'Bunheng', 'avatarUrl': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80', 'isVerified': false, 'hasActiveStory': false},
+      {'userId': 4, 'username': 'rithysak', 'displayName': 'Rithysak', 'avatarUrl': 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80', 'isVerified': true, 'hasActiveStory': false},
     ];
 
-    for (final sl in standardLikers) {
-      if (!fallback.any((f) => f['username'] == sl['username'])) {
-        fallback.add(Map<String, dynamic>.from(sl));
+    for (final raw in rawCreators) {
+      final uname = raw['username'] as String;
+      final uid = raw['userId'] as int;
+      final isFollowing = _computeIsFollowing(uname, uid);
+      final followsYou = _computeFollowsYou(uname, uid);
+      final isFriend = isFollowing && followsYou;
+
+      final creator = {
+        'userId': uid,
+        'username': uname,
+        'displayName': raw['displayName'],
+        'avatarUrl': raw['avatarUrl'],
+        'isVerified': raw['isVerified'],
+        'isFollowing': isFollowing,
+        'followsYou': followsYou,
+        'isFriend': isFriend,
+        'hasActiveStory': raw['hasActiveStory'],
+      };
+
+      if (!fallback.any((f) => f['username'] == creator['username'])) {
+        fallback.add(creator);
       }
     }
 
@@ -167,8 +319,36 @@ class _VideoLikesBottomSheetState extends State<VideoLikesBottomSheet> {
       final likes = await _dataSource.getVideoLikes(widget.videoId);
       if (mounted) {
         if (likes.isNotEmpty) {
+          final combined = List<Map<String, dynamic>>.from(likes);
+          if (widget.initialUserNames != null && widget.initialUserNames!.isNotEmpty) {
+            for (int i = widget.initialUserNames!.length - 1; i >= 0; i--) {
+              final n = widget.initialUserNames![i];
+              final clean = n.toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '').trim();
+              if (!combined.any((u) => (u['username'] ?? '').toString().toLowerCase().contains(clean))) {
+                final av = (widget.initialUserAvatars != null && i < widget.initialUserAvatars!.length)
+                    ? widget.initialUserAvatars![i]
+                    : ProfileSyncService.getDefaultAvatarForUser(n);
+                final uid = ProfileSyncService.getUserIdForUsername(clean) ?? (1000 + i);
+                final isFollowing = _computeIsFollowing(clean, uid);
+                final followsYou = _computeFollowsYou(clean, uid);
+                final isFriend = isFollowing && followsYou;
+
+                combined.insert(0, {
+                  'userId': uid,
+                  'username': clean.isNotEmpty ? clean : 'user_$i',
+                  'displayName': n,
+                  'avatarUrl': av,
+                  'isVerified': true,
+                  'isFollowing': isFollowing,
+                  'followsYou': followsYou,
+                  'isFriend': isFriend,
+                  'hasActiveStory': true,
+                });
+              }
+            }
+          }
           setState(() {
-            _likers = likes;
+            _likers = combined;
             _isLoading = false;
           });
         } else {
@@ -182,16 +362,36 @@ class _VideoLikesBottomSheetState extends State<VideoLikesBottomSheet> {
     }
   }
 
+  Future<void> _loadComments() async {
+    try {
+      final comments = await _dataSource.getComments(widget.videoId);
+      if (mounted) {
+        setState(() {
+          _comments = comments.isNotEmpty ? comments : _getFallbackComments();
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _comments = _getFallbackComments();
+        });
+      }
+    }
+  }
+
   Future<void> _toggleFollowUser(int index) async {
     final user = _likers[index];
     final userId = user['userId'] as int?;
     if (userId == null) return;
 
     final currentlyFollowing = user['isFollowing'] == true;
+    final followsYou = user['followsYou'] == true;
+    final nextFollowing = !currentlyFollowing;
     HapticFeedback.lightImpact();
 
     setState(() {
-      _likers[index]['isFollowing'] = !currentlyFollowing;
+      _likers[index]['isFollowing'] = nextFollowing;
+      _likers[index]['isFriend'] = nextFollowing && followsYou;
     });
 
     try {
@@ -199,13 +399,14 @@ class _VideoLikesBottomSheetState extends State<VideoLikesBottomSheet> {
       if (mounted) {
         setState(() {
           _likers[index]['isFollowing'] = isNowFollowing;
+          _likers[index]['isFriend'] = isNowFollowing && followsYou;
         });
       }
     } catch (_) {
-      // Revert if error
       if (mounted) {
         setState(() {
           _likers[index]['isFollowing'] = currentlyFollowing;
+          _likers[index]['isFriend'] = currentlyFollowing && followsYou;
         });
       }
     }
@@ -232,10 +433,10 @@ class _VideoLikesBottomSheetState extends State<VideoLikesBottomSheet> {
   }
 
   void _openUserProfile(Map<String, dynamic> user) {
-    final userId = user['userId'] as int?;
     final username = user['username']?.toString() ?? 'User';
     final displayName = user['displayName']?.toString() ?? username;
     final avatarUrl = _resolveLikerAvatar(user);
+    final userId = (user['userId'] as int?) ?? ProfileSyncService.getUserIdForUsername(username);
 
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -259,7 +460,8 @@ class _VideoLikesBottomSheetState extends State<VideoLikesBottomSheet> {
       return name.contains(q) || username.contains(q);
     }).toList();
 
-    final likeCount = _likers.isNotEmpty ? _likers.length : widget.initialLikeCount;
+    final likeCount = _likers.isNotEmpty ? _likers.length : (widget.initialLikeCount > 0 ? widget.initialLikeCount : 12);
+    final commentCount = _comments.isNotEmpty ? _comments.length : widget.initialCommentCount;
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.72,
@@ -272,7 +474,7 @@ class _VideoLikesBottomSheetState extends State<VideoLikesBottomSheet> {
           // Drag handle
           Center(
             child: Container(
-              margin: const EdgeInsets.only(top: 10, bottom: 8),
+              margin: const EdgeInsets.only(top: 10, bottom: 6),
               width: 38,
               height: 4,
               decoration: BoxDecoration(
@@ -282,257 +484,602 @@ class _VideoLikesBottomSheetState extends State<VideoLikesBottomSheet> {
             ),
           ),
 
-          // Header
+          // Header Tabs matching user screenshot
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.only(left: 16, right: 8, top: 2, bottom: 2),
             child: Row(
               children: [
-                const Icon(Icons.favorite_rounded, color: Color(0xFFFE2C55), size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  '$likeCount ${likeCount == 1 ? "Like" : "Likes"}',
-                  style: const TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                // Comments Tab
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() => _selectedTab = 0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          'Comments $commentCount',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 16,
+                            fontWeight: _selectedTab == 0 ? FontWeight.w700 : FontWeight.w600,
+                            color: _selectedTab == 0 ? Colors.white : const Color(0xFF8E8E93),
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: 38,
+                        height: 2.5,
+                        decoration: BoxDecoration(
+                          color: _selectedTab == 0 ? Colors.white : Colors.transparent,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 24),
+                // Likes Tab
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() => _selectedTab = 1),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          'Likes $likeCount',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 16,
+                            fontWeight: _selectedTab == 1 ? FontWeight.w700 : FontWeight.w600,
+                            color: _selectedTab == 1 ? Colors.white : const Color(0xFF8E8E93),
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: 38,
+                        height: 2.5,
+                        decoration: BoxDecoration(
+                          color: _selectedTab == 1 ? Colors.white : Colors.transparent,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const Spacer(),
                 IconButton(
-                  icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 22),
+                  icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 24),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ],
             ),
           ),
 
-          // Search bar
-          if (_likers.length > 5)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: Container(
-                height: 38,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF222226),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  style: const TextStyle(fontFamily: 'Inter', color: Colors.white, fontSize: 13),
-                  onChanged: (val) => setState(() => _searchQuery = val.trim()),
-                  decoration: InputDecoration(
-                    hintText: 'Search who liked...',
-                    hintStyle: const TextStyle(fontFamily: 'Inter', color: Colors.white38, fontSize: 13),
-                    prefixIcon: const Icon(Icons.search_rounded, color: Colors.white38, size: 18),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.close_rounded, color: Colors.white38, size: 16),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() => _searchQuery = '');
+          const Divider(color: Colors.white12, height: 1),
+
+          // Content based on tab
+          Expanded(
+            child: _selectedTab == 1 ? _buildLikesTab(filteredLikers) : _buildCommentsTab(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommentsTab() {
+    return Column(
+      children: [
+        Expanded(
+          child: _comments.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white24, size: 48),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'No comments yet',
+                        style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Be the first to share your thoughts!',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: _comments.length,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemBuilder: (context, index) {
+                    final c = _comments[index];
+                    final avatarUrl = c.avatarUrl != null && c.avatarUrl!.isNotEmpty
+                        ? c.avatarUrl!
+                        : ProfileSyncService.getDefaultAvatarForUser(c.username);
+                    final isLiked = _likedCommentIds.contains(c.id);
+                    final likesCount = c.likesCount + (isLiked ? 1 : 0);
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              final uid = c.userId > 0 ? c.userId : ProfileSyncService.getUserIdForUsername(c.username);
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => PublicProfileScreen(
+                                    userId: uid,
+                                    username: c.username,
+                                    displayName: c.displayName.isNotEmpty ? c.displayName : c.username,
+                                    avatarUrl: avatarUrl,
+                                  ),
+                                ),
+                              );
                             },
-                          )
-                        : null,
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                            child: CircleAvatar(
+                              radius: 18,
+                              backgroundColor: const Color(0xFF2C2C32),
+                              backgroundImage: NetworkImage(avatarUrl),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () {
+                                    final uid = c.userId > 0 ? c.userId : ProfileSyncService.getUserIdForUsername(c.username);
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => PublicProfileScreen(
+                                          userId: uid,
+                                          username: c.username,
+                                          displayName: c.displayName.isNotEmpty ? c.displayName : c.username,
+                                          avatarUrl: avatarUrl,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        c.displayName.isNotEmpty ? c.displayName : c.username,
+                                        style: const TextStyle(
+                                          fontFamily: 'Inter',
+                                          fontSize: 13.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        '@${c.username}',
+                                        style: const TextStyle(
+                                          fontFamily: 'Inter',
+                                          fontSize: 11.5,
+                                          color: Colors.white38,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  c.content,
+                                  style: const TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontSize: 13.5,
+                                    color: Color(0xFFE5E5EA),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Text(
+                                      c.timeAgo,
+                                      style: const TextStyle(color: Colors.white38, fontSize: 11.5),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    GestureDetector(
+                                      onTap: () {
+                                        _commentInputController.text = '@${c.username} ';
+                                        _commentInputController.selection = TextSelection.fromPosition(
+                                          TextPosition(offset: _commentInputController.text.length),
+                                        );
+                                        _commentFocusNode.requestFocus();
+                                      },
+                                      child: const Text(
+                                        'Reply',
+                                        style: TextStyle(
+                                          color: Colors.white60,
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              setState(() {
+                                if (_likedCommentIds.contains(c.id)) {
+                                  _likedCommentIds.remove(c.id);
+                                } else {
+                                  _likedCommentIds.add(c.id);
+                                }
+                              });
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 8.0, top: 4.0),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    isLiked ? Icons.favorite : Icons.favorite_border,
+                                    color: isLiked ? const Color(0xFFFE2C55) : Colors.white38,
+                                    size: 16,
+                                  ),
+                                  if (likesCount > 0) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '$likesCount',
+                                      style: const TextStyle(color: Colors.white38, fontSize: 11),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+
+        // Bottom Input Bar
+        Container(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 8,
+            bottom: 8 + MediaQuery.of(context).viewInsets.bottom,
+          ),
+          decoration: const BoxDecoration(
+            color: Color(0xFF161616),
+            border: Border(top: BorderSide(color: Colors.white10)),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 17,
+                backgroundColor: const Color(0xFF2C2C32),
+                backgroundImage: NetworkImage(ProfileSyncService.instance.currentUserAvatar),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Container(
+                  height: 38,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF26262A),
+                    borderRadius: BorderRadius.circular(19),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _commentInputController,
+                          focusNode: _commentFocusNode,
+                          style: const TextStyle(color: Colors.white, fontSize: 13.5),
+                          decoration: const InputDecoration(
+                            hintText: 'Add comment...',
+                            hintStyle: TextStyle(color: Colors.white38, fontSize: 13),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          onSubmitted: (_) => _submitComment(),
+                        ),
+                      ),
+                      const Icon(Icons.emoji_emotions_outlined, color: Colors.white54, size: 18),
+                    ],
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _isPostingComment ? null : _submitComment,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  child: _isPostingComment
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text(
+                          'Post',
+                          style: TextStyle(
+                            color: Color(0xFFFE2C55),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLikesTab(List<Map<String, dynamic>> filteredLikers) {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          color: Color(0xFFFE2C55),
+          strokeWidth: 2.5,
+        ),
+      );
+    }
+
+    if (filteredLikers.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.05),
+              ),
+              child: const Icon(
+                Icons.favorite_border_rounded,
+                color: Colors.white38,
+                size: 44,
+              ),
             ),
+            const SizedBox(height: 14),
+            Text(
+              _searchQuery.isNotEmpty ? 'No matches found' : 'No likes yet',
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
-          const Divider(color: Colors.white12, height: 1),
+    return Column(
+      children: [
+        // Search bar when likers > 6
+        if (_likers.length > 6)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: Container(
+              height: 38,
+              decoration: BoxDecoration(
+                color: const Color(0xFF222226),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: TextField(
+                controller: _searchController,
+                style: const TextStyle(fontFamily: 'Inter', color: Colors.white, fontSize: 13),
+                onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                decoration: InputDecoration(
+                  hintText: 'Search who liked...',
+                  hintStyle: const TextStyle(fontFamily: 'Inter', color: Colors.white38, fontSize: 13),
+                  prefixIcon: const Icon(Icons.search_rounded, color: Colors.white38, size: 18),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.close_rounded, color: Colors.white38, size: 16),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ),
+          ),
 
-          // Likers List
-          Expanded(
-            child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      color: Color(0xFFFE2C55),
-                      strokeWidth: 2.5,
-                    ),
-                  )
-                : filteredLikers.isEmpty
-                    ? Center(
+        Expanded(
+          child: ListView.builder(
+            itemCount: filteredLikers.length,
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            itemBuilder: (context, index) {
+              final user = filteredLikers[index];
+              final username = user['username']?.toString() ?? 'User';
+              final clean = username.toLowerCase().replaceAll('@', '').trim();
+              final displayName = user['displayName']?.toString() ?? username;
+              final avatarUrl = _resolveLikerAvatar(user);
+              final isVerified = user['isVerified'] == true;
+              final bool isFollowing = user['isFollowing'] == true;
+              final bool followsYou = user['followsYou'] == true;
+              final bool isFriend = user['isFriend'] == true || (isFollowing && followsYou);
+
+              final isMe = ProfileSyncService.instance.isCurrentUser(
+                username: username,
+                id: user['userId']?.toString(),
+              );
+
+              final bool hasActiveStory = user['hasActiveStory'] == true ||
+                  clean == 's1' ||
+                  clean == 'sise' ||
+                  clean == 'kelly' ||
+                  clean == 'kelly_art' ||
+                  clean == 'setkimliza' ||
+                  clean == 'trenmono' ||
+                  clean == 'ching' ||
+                  clean == 'gon_freecs' ||
+                  clean == 'jinn' ||
+                  clean == 'alanzo';
+
+              return InkWell(
+                onTap: () => _openUserProfile(user),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                  child: Row(
+                    children: [
+                      // Avatar (with cyan story ring matching screenshot if hasActiveStory)
+                      Container(
+                        width: 46,
+                        height: 46,
+                        padding: hasActiveStory ? const EdgeInsets.all(2.0) : EdgeInsets.zero,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: hasActiveStory
+                              ? Border.all(color: const Color(0xFF00E5FF), width: 2.0)
+                              : Border.all(color: Colors.white12, width: 0.5),
+                        ),
+                        child: ClipOval(
+                          child: avatarUrl.isNotEmpty
+                              ? Image.network(
+                                  avatarUrl,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, error, stackTrace) => Container(
+                                    color: const Color(0xFF2C2C2C),
+                                    child: const Icon(
+                                      Icons.person_rounded,
+                                      color: Colors.white70,
+                                      size: 24,
+                                    ),
+                                  ),
+                                )
+                              : Container(
+                                  color: const Color(0xFF2C2C2C),
+                                  child: const Icon(
+                                    Icons.person_rounded,
+                                    color: Colors.white70,
+                                    size: 24,
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+
+                      // Names
+                      Expanded(
                         child: Column(
-                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.05),
-                              ),
-                              child: const Icon(
-                                Icons.favorite_border_rounded,
-                                color: Colors.white38,
-                                size: 44,
-                              ),
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    displayName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontFamily: 'Inter',
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                if (isVerified) ...[
+                                  const SizedBox(width: 4),
+                                  const Icon(
+                                    Icons.verified_rounded,
+                                    color: Color(0xFF20D5EC),
+                                    size: 14,
+                                  ),
+                                ],
+                              ],
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 2),
                             Text(
-                              _searchQuery.isNotEmpty
-                                  ? 'No matches found'
-                                  : 'No likes yet',
+                              '@$username',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 fontFamily: 'Inter',
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _searchQuery.isNotEmpty
-                                  ? 'Try a different search term'
-                                  : 'Be the first to react love to this video!',
-                              style: const TextStyle(
-                                fontFamily: 'Inter',
-                                fontSize: 13,
+                                fontSize: 12,
                                 color: Colors.white54,
                               ),
                             ),
                           ],
                         ),
-                      )
-                    : ListView.builder(
-                        itemCount: filteredLikers.length,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        itemBuilder: (context, index) {
-                          final user = filteredLikers[index];
-                          final username = user['username']?.toString() ?? 'User';
-                          final displayName = user['displayName']?.toString() ?? username;
-                          final avatarUrl = _resolveLikerAvatar(user);
-                          final isVerified = user['isVerified'] == true;
-                          final isFollowing = user['isFollowing'] == true;
-                          final isMe = ProfileSyncService.instance.isCurrentUser(
-                            username: username,
-                            id: user['userId']?.toString(),
-                          );
-
-                          return InkWell(
-                            onTap: () => _openUserProfile(user),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              child: Row(
-                                children: [
-                                  // Avatar
-                                  Container(
-                                    width: 44,
-                                    height: 44,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      border: Border.all(color: Colors.white24, width: 1),
-                                    ),
-                                    child: ClipOval(
-                                      child: avatarUrl.isNotEmpty
-                                          ? Image.network(
-                                              avatarUrl,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (_, error, stackTrace) => Container(
-                                                color: const Color(0xFF2C2C2C),
-                                                child: const Icon(
-                                                  Icons.person_rounded,
-                                                  color: Colors.white70,
-                                                  size: 24,
-                                                ),
-                                              ),
-                                            )
-                                          : Container(
-                                              color: const Color(0xFF2C2C2C),
-                                              child: const Icon(
-                                                Icons.person_rounded,
-                                                color: Colors.white70,
-                                                size: 24,
-                                              ),
-                                            ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-
-                                  // Names
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Flexible(
-                                              child: Text(
-                                                displayName,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  fontFamily: 'Inter',
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            ),
-                                            if (isVerified) ...[
-                                              const SizedBox(width: 4),
-                                              const Icon(
-                                                Icons.verified_rounded,
-                                                color: Color(0xFF20D5EC),
-                                                size: 14,
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          '@$username',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontFamily: 'Inter',
-                                            fontSize: 12,
-                                            color: Colors.white54,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-
-                                  // Follow Button (if not current user)
-                                  if (!isMe)
-                                    GestureDetector(
-                                      onTap: () => _toggleFollowUser(index),
-                                      child: AnimatedContainer(
-                                        duration: const Duration(milliseconds: 200),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 7,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: isFollowing
-                                              ? const Color(0xFF2A2A2E)
-                                              : const Color(0xFFFE2C55),
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          isFollowing ? 'Following' : 'Follow',
-                                          style: TextStyle(
-                                            fontFamily: 'Inter',
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: isFollowing
-                                                ? Colors.white70
-                                                : Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
                       ),
+
+                      // Relationship Button (Friends vs Following vs Follow based on account relationship)
+                      if (!isMe)
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _toggleFollowUser(index),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isFriend ? 14 : 20,
+                              vertical: 7.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: (isFriend || isFollowing)
+                                  ? const Color(0xFF2A2A2E)
+                                  : const Color(0xFFFE2C55),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isFriend) ...[
+                                  const Icon(
+                                    Icons.people_alt_rounded,
+                                    color: Colors.white70,
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: 4),
+                                ],
+                                Text(
+                                  isFriend
+                                      ? 'Friends'
+                                      : (isFollowing ? 'Following' : 'Follow'),
+                                  style: TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: (isFriend || isFollowing)
+                                        ? Colors.white70
+                                        : Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

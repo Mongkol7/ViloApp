@@ -1477,43 +1477,63 @@ class _InboxScreenState extends State<InboxScreen> {
         );
       }
 
-      leadingIcon = Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            padding: actorHasStory ? const EdgeInsets.all(2.0) : EdgeInsets.zero,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: actorHasStory
-                  ? Border.all(color: const Color(0xFF00E5FF), width: 2.0)
-                  : null,
-            ),
-            child: CircleAvatar(
-              radius: 26,
-              backgroundColor: const Color(0xFF2C2C32),
-              child: ClipOval(
-                child: item.actorAvatarUrl!.startsWith('assets/')
-                    ? Image.asset(
-                        item.actorAvatarUrl!,
-                        width: 52,
-                        height: 52,
-                        fit: BoxFit.cover,
-                      )
-                    : Image.network(
-                        item.actorAvatarUrl!,
-                        width: 52,
-                        height: 52,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(Icons.person, color: Colors.white38, size: 26),
-                      ),
+      leadingIcon = GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          final actorName = item.actorUsername ?? (item.subtitle.contains(' liked your') ? item.subtitle.split(' liked your').first.trim() : '');
+          if (actorName.isNotEmpty && !actorName.contains('others') && !actorName.contains(' and ')) {
+            final effectiveId = item.actorId ?? ProfileSyncService.getUserIdForUsername(actorName);
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => PublicProfileScreen(
+                  userId: effectiveId,
+                  username: actorName,
+                  avatarUrl: item.actorAvatarUrl,
+                ),
+              ),
+            );
+          } else {
+            _openNotificationHub(item);
+          }
+        },
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              padding: actorHasStory ? const EdgeInsets.all(2.0) : EdgeInsets.zero,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: actorHasStory
+                    ? Border.all(color: const Color(0xFF00E5FF), width: 2.0)
+                    : null,
+              ),
+              child: CircleAvatar(
+                radius: 26,
+                backgroundColor: const Color(0xFF2C2C32),
+                child: ClipOval(
+                  child: item.actorAvatarUrl!.startsWith('assets/')
+                      ? Image.asset(
+                          item.actorAvatarUrl!,
+                          width: 52,
+                          height: 52,
+                          fit: BoxFit.cover,
+                        )
+                      : Image.network(
+                          item.actorAvatarUrl!,
+                          width: 52,
+                          height: 52,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(Icons.person, color: Colors.white38, size: 26),
+                        ),
+                ),
               ),
             ),
-          ),
-          Positioned(right: 0, bottom: 0, child: miniBadge),
-        ],
+            Positioned(right: 0, bottom: 0, child: miniBadge),
+          ],
+        ),
       );
     } else if (isMessage) {
       leadingIcon = Container(
@@ -1677,29 +1697,48 @@ class _InboxScreenState extends State<InboxScreen> {
                     ),
                   ),
                 )
-              else if (isLike && item.entityId != null)
-                Container(
-                  width: 44,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(6),
-                    color: const Color(0xFF1E1E22),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      width: 0.5,
+              else if ((isLike || isComment) && item.entityId != null)
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    final vidId = int.tryParse(item.entityId ?? '0') ?? 1;
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => VideoFeedPage(
+                          isActive: true,
+                          isStandalone: true,
+                          initialVideoId: vidId > 0 ? vidId : null,
+                          openCommentsOnStart: isComment,
+                          initialCommentReplyUser: item.actorUsername,
+                          initialCommentUserAvatar: item.actorAvatarUrl,
+                          initialCommentText: item.subtitle,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: 44,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      color: const Color(0xFF1E1E22),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        width: 0.5,
+                      ),
                     ),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Image.network(
-                      'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=200&auto=format&fit=crop&q=80',
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: const Color(0xFF1E1E22),
-                        child: const Icon(
-                          Icons.videocam_rounded,
-                          color: Colors.white24,
-                          size: 20,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.network(
+                        'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=200&auto=format&fit=crop&q=80',
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: const Color(0xFF1E1E22),
+                          child: const Icon(
+                            Icons.videocam_rounded,
+                            color: Colors.white24,
+                            size: 20,
+                          ),
                         ),
                       ),
                     ),
