@@ -1,5 +1,6 @@
 import '../../../auth/data/datasources/token_storage.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../domain/entities/inbox_item.dart';
 import 'static_inbox_data.dart';
 
@@ -11,7 +12,7 @@ class NotificationRemoteDataSource {
     try {
       final response = await ApiClient.instance.get('/notifications');
       if (response is List) {
-        final rawList = response.map<NotificationItem>((item) {
+        final rawList = response.map<NotificationItem?>((item) {
           final id = item['id']?.toString() ?? '';
           final title = item['title'] ?? 'Notification';
           final subtitle = item['body'] ?? '';
@@ -28,13 +29,23 @@ class NotificationRemoteDataSource {
           final lowerTitle = title.toLowerCase();
           final lowerSub = subtitle.toLowerCase();
 
+          // Do NOT alert or notify for story views
+          if (rawType == 'STORY_VIEW' ||
+              lowerTitle.contains('story view') ||
+              lowerSub.contains('viewed your story') ||
+              lowerSub.contains('viewed your 24h thought')) {
+            return null;
+          }
+
           if (rawType == 'SYSTEM' || rawType == 'LIKE' || rawType == 'ACTIVITY' || rawType.isEmpty) {
-            if (lowerTitle.contains('story view') || lowerSub.contains('24h thought') || lowerSub.contains('viewed your')) {
-              rawType = 'STORY_VIEW';
-            } else if (lowerTitle.contains('message') || lowerTitle.contains('hi sak') || lowerSub.contains('hi sak') || lowerSub.contains('me liza')) {
+            if (lowerTitle.contains('message') || lowerTitle.contains('hi sak') || lowerSub.contains('hi sak') || lowerSub.contains('me liza')) {
               rawType = 'MESSAGE';
             } else if (lowerTitle.contains('follower') || lowerSub.contains('started following')) {
               rawType = 'FOLLOW';
+            } else if (lowerTitle.contains('comment') || lowerSub.contains('commented:')) {
+              rawType = 'COMMENT';
+            } else if (lowerTitle.contains('like') || lowerSub.contains('liked your')) {
+              rawType = 'LIKE';
             }
           }
 
@@ -43,8 +54,8 @@ class NotificationRemoteDataSource {
             iconType = 'followers';
           } else if (rawType == 'MESSAGE') {
             iconType = 'message';
-          } else if (rawType == 'STORY_VIEW') {
-            iconType = 'story_view';
+          } else if (rawType == 'LIKE') {
+            iconType = 'like';
           } else if (rawType == 'SYSTEM') {
             iconType = 'system';
           }
@@ -55,8 +66,10 @@ class NotificationRemoteDataSource {
             if (lowerTitle.contains('from ')) {
               final idx = lowerTitle.indexOf('from ');
               cleanUsername = title.substring(idx + 5).trim();
-            } else if (lowerSub.contains(' viewed your')) {
-              cleanUsername = subtitle.split(' viewed').first.trim();
+            } else if (lowerSub.contains(' commented:')) {
+              cleanUsername = subtitle.split(' commented:').first.trim();
+            } else if (lowerSub.contains(' liked your')) {
+              cleanUsername = subtitle.split(' liked your').first.trim();
             } else if (lowerSub.contains(' started following')) {
               cleanUsername = subtitle.split(' started').first.trim();
             } else if (lowerSub.contains('me liza')) {
@@ -72,11 +85,12 @@ class NotificationRemoteDataSource {
           }
 
           String? effectiveAvatar = actorAvatarUrl;
-          if (effectiveAvatar == null || effectiveAvatar.isEmpty) {
-            if (cleanUsername?.toLowerCase() == 'liza') {
-              effectiveAvatar = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80';
-            } else if (cleanUsername?.toLowerCase() == 'sak') {
-              effectiveAvatar = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80';
+          if (effectiveAvatar == null ||
+              effectiveAvatar.isEmpty ||
+              effectiveAvatar.contains('534528741775') ||
+              effectiveAvatar.contains('535713875002')) {
+            if (cleanUsername != null && cleanUsername.isNotEmpty) {
+              effectiveAvatar = ProfileSyncService.getDefaultAvatarForUser(cleanUsername);
             }
           }
 
@@ -95,7 +109,7 @@ class NotificationRemoteDataSource {
             actorAvatarUrl: effectiveAvatar,
             timeAgo: 'Recently',
           );
-        }).toList();
+        }).whereType<NotificationItem>().toList();
 
         // Deduplicate: Keep only the latest notification per actor & type
         final List<NotificationItem> deduplicated = [];

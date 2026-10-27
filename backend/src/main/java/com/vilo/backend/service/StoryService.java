@@ -153,18 +153,7 @@ public class StoryService {
                 story.setViewCount(story.getViewCount() + 1);
                 storyRepository.save(story);
 
-                // Notify owner if viewed by another user
-                try {
-                    notificationService.sendNotification(
-                            story.getUser(),
-                            currentUser,
-                            NotificationType.STORY_VIEW,
-                            "New Story View",
-                            currentUser.getDisplayName() + " viewed your story",
-                            String.valueOf(story.getId()),
-                            "STORY"
-                    );
-                } catch (Exception ignored) {}
+                // Do not send notification on story view so that no alert pops up on screen
             }
         }
 

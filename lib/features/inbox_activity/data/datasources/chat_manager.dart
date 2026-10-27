@@ -155,6 +155,13 @@ class ChatManager {
                   mediaUrl: m['mediaUrl']?.toString(),
                   isDeletedForEveryone: m['isDeletedForEveryone'] == true,
                   sentAt: DateTime.tryParse(m['sentAt']?.toString() ?? ''),
+                  senderUsername: m['senderUsername']?.toString(),
+                  senderDisplayName: m['senderDisplayName']?.toString(),
+                  senderAvatarUrl: m['senderAvatarUrl']?.toString(),
+                  isStoryReply: m['isStoryReply'] == true ||
+                      (m['text'] != null &&
+                          m['text'].toString().startsWith('Replied to ')),
+                  storyAuthorName: m['storyAuthorName']?.toString(),
                 );
               })
               .toList();
@@ -249,6 +256,11 @@ class ChatManager {
                   'mediaUrl': m.mediaUrl,
                   'isDeletedForEveryone': m.isDeletedForEveryone,
                   'sentAt': m.sentAt?.toIso8601String(),
+                  'senderUsername': m.senderUsername,
+                  'senderDisplayName': m.senderDisplayName,
+                  'senderAvatarUrl': m.senderAvatarUrl,
+                  'isStoryReply': m.isStoryReply,
+                  'storyAuthorName': m.storyAuthorName,
                 },
               )
               .toList(),
@@ -484,6 +496,11 @@ class ChatManager {
     required String threadId,
     required String text,
     String? mediaUrl,
+    String? senderUsername,
+    String? senderDisplayName,
+    String? senderAvatarUrl,
+    bool isStoryReply = false,
+    String? storyAuthorName,
     // Kept optional for backwards-compatibility; never invoked
     Function(ChatMessage incomingReply)? onAutoReply,
   }) {
@@ -491,6 +508,11 @@ class ChatManager {
 
     final trimmed = text.trim();
     final tempId = DateTime.now().millisecondsSinceEpoch.toString();
+    final resolvedSenderUsername = senderUsername ?? ProfileSyncService.instance.currentUsername;
+    final resolvedSenderDisplayName = senderDisplayName ?? ProfileSyncService.instance.currentUserDisplayName;
+    final resolvedSenderAvatar = senderAvatarUrl ?? ProfileSyncService.instance.currentUserAvatar;
+    final resolvedIsStoryReply = isStoryReply || trimmed.startsWith('Replied to ');
+
     final newMsg = ChatMessage(
       id: tempId,
       text: trimmed,
@@ -500,6 +522,11 @@ class ChatManager {
       sentAt: DateTime.now(),
       mediaUrl: mediaUrl,
       isDeletedForEveryone: false,
+      senderUsername: resolvedSenderUsername,
+      senderDisplayName: resolvedSenderDisplayName,
+      senderAvatarUrl: resolvedSenderAvatar,
+      isStoryReply: resolvedIsStoryReply,
+      storyAuthorName: storyAuthorName,
     );
 
     final currentList = List<DirectMessageThread>.from(_threadsNotifier.value);
@@ -629,6 +656,10 @@ class ChatManager {
         'isDeletedForEveryone': false,
         if (mediaUrl != null && mediaUrl.isNotEmpty) 'mediaUrl': mediaUrl,
         'sentAt': now.toIso8601String(),
+        'senderUsername': senderUsername,
+        'senderDisplayName': senderUsername,
+        'senderAvatarUrl': senderAvatar,
+        'isStoryReply': text.startsWith('Replied to '),
       };
 
       final senderIdStr = senderUid != null ? senderUid.toString() : '21';

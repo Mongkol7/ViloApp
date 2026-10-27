@@ -1,6 +1,5 @@
 package com.vilo.backend.dto;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 public class CreateStoryRequest {

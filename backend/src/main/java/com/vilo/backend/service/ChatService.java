@@ -251,13 +251,18 @@ public class ChatService {
             displayMedia = null;
         }
 
+        String rawAvatar = msg.getSender().getAvatarUrl();
+        String senderAvatar = (rawAvatar != null && !rawAvatar.isBlank() && !rawAvatar.contains("534528741775") && !rawAvatar.contains("535713875002"))
+                ? rawAvatar
+                : resolveDefaultAvatar(msg.getSender().getUsername());
+
         return MessageResponse.builder()
                 .id(msg.getId())
                 .conversationId(msg.getConversation().getId())
                 .senderId(msg.getSender().getId())
                 .senderUsername(msg.getSender().getUsername())
                 .senderDisplayName(msg.getSender().getDisplayName())
-                .senderAvatarUrl(msg.getSender().getAvatarUrl())
+                .senderAvatarUrl(senderAvatar)
                 .recipientId(msg.getRecipient().getId())
                 .recipientUsername(msg.getRecipient().getUsername())
                 .content(displayContent)
@@ -387,5 +392,26 @@ public class ChatService {
             conv.setLastMessageTime(null);
         }
         conversationRepository.save(conv);
+    }
+
+    private String resolveDefaultAvatar(String username) {
+        if (username == null) return "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500";
+        String lower = username.toLowerCase().trim().replace("@", "");
+        if ("sak".equals(lower) || "rithysak".equals(lower)) {
+            return "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80";
+        }
+        if ("liza".equals(lower) || "setkimliza".equals(lower) || "kimliza".equals(lower)) {
+            return "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80";
+        }
+        if ("mongkol".equals(lower) || "sereymongkol".equals(lower)) {
+            return "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80";
+        }
+        if ("bunheng".equals(lower) || "heng".equals(lower)) {
+            return "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80";
+        }
+        if ("s1".equals(lower) || "admin".equals(lower)) {
+            return "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80";
+        }
+        return "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500";
     }
 }

@@ -48,6 +48,20 @@ class StaticInboxData {
 
   static const List<NotificationItem> notifications = [
     NotificationItem(
+      id: 'n_s1_like',
+      title: 's1',
+      subtitle: 's1 liked your video.',
+      iconType: 'like',
+      type: 'LIKE',
+      actorUsername: 's1',
+      actorDisplayName: 's1',
+      actorAvatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80',
+      entityId: '1',
+      entityType: 'VIDEO',
+      hasDot: true,
+      timeAgo: '7h',
+    ),
+    NotificationItem(
       id: 'n1',
       title: 'New followers',
       subtitle: 'R.DRR and 12 others followed you',
@@ -56,9 +70,9 @@ class StaticInboxData {
     NotificationItem(
       id: 'n2',
       title: 'Activity',
-      subtitle: 'Junta liked your photos',
+      subtitle: 'Spey juu🤪, Ly_xie★ and 6 others liked your comment',
       iconType: 'activity',
-      badgeCount: 1,
+      badgeCount: 11,
     ),
     NotificationItem(
       id: 'n3',

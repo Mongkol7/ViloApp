@@ -775,7 +775,7 @@ MultipartFile thumbnailFile, String thumbnailPath,
                     map.put("userId", u.getId());
                     map.put("username", u.getUsername());
                     map.put("displayName", u.getDisplayName());
-                    map.put("avatarUrl", u.getAvatarUrl());
+                    map.put("avatarUrl", resolveDefaultAvatar(u.getUsername(), u.getAvatarUrl()));
                     map.put("bio", u.getBio());
                     map.put("isVerified", u.getIsVerified());
                     map.put("isFollowing", followingIds.contains(u.getId()));
@@ -784,5 +784,29 @@ MultipartFile thumbnailFile, String thumbnailPath,
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
+    }
+
+    private String resolveDefaultAvatar(String username, String avatarUrl) {
+        if (avatarUrl != null && !avatarUrl.isBlank() && !avatarUrl.contains("534528741775") && !avatarUrl.contains("535713875002")) {
+            return avatarUrl;
+        }
+        if (username == null) return "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500";
+        String lower = username.toLowerCase().trim().replace("@", "");
+        if ("sak".equals(lower) || "rithysak".equals(lower)) {
+            return "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80";
+        }
+        if ("liza".equals(lower) || "setkimliza".equals(lower) || "kimliza".equals(lower)) {
+            return "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80";
+        }
+        if ("mongkol".equals(lower) || "sereymongkol".equals(lower)) {
+            return "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80";
+        }
+        if ("bunheng".equals(lower) || "heng".equals(lower)) {
+            return "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80";
+        }
+        if ("s1".equals(lower) || "admin".equals(lower)) {
+            return "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80";
+        }
+        return "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500";
     }
 }

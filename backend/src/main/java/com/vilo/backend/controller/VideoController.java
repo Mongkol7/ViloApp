@@ -477,13 +477,17 @@ public class VideoController {
                 request.getContent()
         );
 
+        String postAvatar = (currentUser.getAvatarUrl() != null && !currentUser.getAvatarUrl().isBlank())
+                ? currentUser.getAvatarUrl()
+                : resolveDefaultAvatar(currentUser.getUsername());
+
         CommentResponse response = CommentResponse.builder()
                 .id(savedComment.getId())
                 .videoId(savedComment.getVideoId())
                 .userId(currentUser.getId())
                 .username(currentUser.getUsername())
                 .displayName(currentUser.getDisplayName() != null ? currentUser.getDisplayName() : currentUser.getUsername())
-                .avatarUrl(currentUser.getAvatarUrl())
+                .avatarUrl(postAvatar)
                 .parentId(savedComment.getParentId())
                 .content(savedComment.getContent())
                 .createdAt(savedComment.getCreatedAt())
@@ -613,6 +617,27 @@ public class VideoController {
                 .build();
     }
 
+    private String resolveDefaultAvatar(String username) {
+        if (username == null) return "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500";
+        String lower = username.toLowerCase().trim().replace("@", "");
+        if ("sak".equals(lower) || "rithysak".equals(lower)) {
+            return "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80";
+        }
+        if ("liza".equals(lower) || "setkimliza".equals(lower) || "kimliza".equals(lower)) {
+            return "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80";
+        }
+        if ("mongkol".equals(lower) || "sereymongkol".equals(lower)) {
+            return "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80";
+        }
+        if ("bunheng".equals(lower) || "heng".equals(lower)) {
+            return "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80";
+        }
+        if ("s1".equals(lower) || "admin".equals(lower)) {
+            return "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80";
+        }
+        return "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500";
+    }
+
     private CommentResponse mapToCommentResponseWithReplies(Comment comment) {
         User author = userRepository.findById(comment.getUserId()).orElse(null);
 
@@ -620,7 +645,10 @@ public class VideoController {
         String displayName = author != null && author.getDisplayName() != null
                 ? author.getDisplayName()
                 : username;
-        String avatarUrl = author != null ? author.getAvatarUrl() : null;
+        String rawAvatar = author != null ? author.getAvatarUrl() : null;
+        String avatarUrl = (rawAvatar != null && !rawAvatar.isBlank() && !rawAvatar.contains("534528741775") && !rawAvatar.contains("535713875002"))
+                ? rawAvatar
+                : resolveDefaultAvatar(username);
 
         Page<Comment> replyPage = commentService.getRepliesForComment(comment.getId(), PageRequest.of(0, 50));
         List<CommentResponse> replies = replyPage.getContent().stream()
@@ -648,7 +676,10 @@ public class VideoController {
         String displayName = author != null && author.getDisplayName() != null
                 ? author.getDisplayName()
                 : username;
-        String avatarUrl = author != null ? author.getAvatarUrl() : null;
+        String rawAvatar = author != null ? author.getAvatarUrl() : null;
+        String avatarUrl = (rawAvatar != null && !rawAvatar.isBlank() && !rawAvatar.contains("534528741775") && !rawAvatar.contains("535713875002"))
+                ? rawAvatar
+                : resolveDefaultAvatar(username);
 
         return CommentResponse.builder()
                 .id(reply.getId())

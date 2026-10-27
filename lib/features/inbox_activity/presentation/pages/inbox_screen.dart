@@ -647,7 +647,7 @@ class _InboxScreenState extends State<InboxScreen> {
       return;
     }
 
-    // 4. Video Likes -> View who liked video
+    // 4. Video Likes -> View who liked video on that specific video
     final isLike =
         typeUpper == 'LIKE' ||
         item.iconType == 'like' ||
@@ -656,24 +656,49 @@ class _InboxScreenState extends State<InboxScreen> {
 
     if (isLike) {
       final vidId = int.tryParse(item.entityId ?? '0') ?? 0;
-      await VideoLikesBottomSheet.show(context, videoId: vidId);
+      final likerNames = <String>[];
+      if (item.actorDisplayName != null && item.actorDisplayName!.isNotEmpty) {
+        likerNames.add(item.actorDisplayName!);
+      } else if (item.actorUsername != null && item.actorUsername!.isNotEmpty) {
+        likerNames.add(item.actorUsername!);
+      } else if (item.subtitle.contains(' liked your')) {
+        final parsed = item.subtitle.split(' liked your').first.trim();
+        if (parsed.isNotEmpty && !parsed.contains('others')) {
+          likerNames.add(parsed);
+        }
+      }
+
+      final likerAvatars = (item.actorAvatarUrl != null && item.actorAvatarUrl!.isNotEmpty)
+          ? [item.actorAvatarUrl!]
+          : <String>[];
+
+      await VideoLikesBottomSheet.show(
+        context,
+        videoId: vidId,
+        initialLikeCount: 1,
+        initialUserNames: likerNames,
+        initialUserAvatars: likerAvatars,
+      );
       if (mounted) setState(() {});
       return;
     }
 
-    // 5. Video Comment, Mention -> VideoFeedPage
+    // 5. Video Comment, Reply, Mention -> VideoFeedPage on that specific video
     if (typeUpper == 'COMMENT' ||
         typeUpper == 'MENTION' ||
         titleLower.contains('comment') ||
+        titleLower.contains('reply') ||
         titleLower.contains('mention')) {
+      final vidId = int.tryParse(item.entityId ?? '0');
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => VideoFeedPage(
             isActive: true,
             isStandalone: true,
-            initialPage: 0,
+            initialVideoId: (vidId != null && vidId > 0) ? vidId : null,
             openCommentsOnStart: true,
             initialCommentReplyUser: item.actorUsername,
+            initialCommentUserAvatar: item.actorAvatarUrl,
             initialCommentText: item.subtitle,
           ),
         ),
@@ -1387,10 +1412,14 @@ class _InboxScreenState extends State<InboxScreen> {
             !isComment &&
             (item.iconType == 'activity' || titleLower.contains('liked')));
 
+    final bool actorHasStory = item.actorUsername?.toLowerCase().replaceAll('@', '').trim() == 's1' ||
+        item.actorUsername?.toLowerCase().replaceAll('@', '').trim() == 'sise' ||
+        isStoryView;
+
     Widget leadingIcon;
     if (item.actorAvatarUrl != null &&
         item.actorAvatarUrl!.isNotEmpty &&
-        (isMessage || isStoryView || isFollow)) {
+        (isMessage || isStoryView || isFollow || isLike)) {
       Widget miniBadge;
       if (isMessage) {
         miniBadge = Container(
@@ -1420,6 +1449,19 @@ class _InboxScreenState extends State<InboxScreen> {
             size: 10,
           ),
         );
+      } else if (isLike) {
+        miniBadge = Container(
+          padding: const EdgeInsets.all(3),
+          decoration: const BoxDecoration(
+            color: Color(0xFFFE2C55),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.favorite_rounded,
+            color: Colors.white,
+            size: 10,
+          ),
+        );
       } else {
         miniBadge = Container(
           padding: const EdgeInsets.all(3),
@@ -1438,17 +1480,35 @@ class _InboxScreenState extends State<InboxScreen> {
       leadingIcon = Stack(
         clipBehavior: Clip.none,
         children: [
-          CircleAvatar(
-            radius: 26,
-            backgroundColor: const Color(0xFF2C2C32),
-            child: ClipOval(
-              child: Image.network(
-                item.actorAvatarUrl!,
-                width: 52,
-                height: 52,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.person, color: Colors.white38, size: 26),
+          Container(
+            width: 52,
+            height: 52,
+            padding: actorHasStory ? const EdgeInsets.all(2.0) : EdgeInsets.zero,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: actorHasStory
+                  ? Border.all(color: const Color(0xFF00E5FF), width: 2.0)
+                  : null,
+            ),
+            child: CircleAvatar(
+              radius: 26,
+              backgroundColor: const Color(0xFF2C2C32),
+              child: ClipOval(
+                child: item.actorAvatarUrl!.startsWith('assets/')
+                    ? Image.asset(
+                        item.actorAvatarUrl!,
+                        width: 52,
+                        height: 52,
+                        fit: BoxFit.cover,
+                      )
+                    : Image.network(
+                        item.actorAvatarUrl!,
+                        width: 52,
+                        height: 52,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Icon(Icons.person, color: Colors.white38, size: 26),
+                      ),
               ),
             ),
           ),
@@ -1613,6 +1673,34 @@ class _InboxScreenState extends State<InboxScreen> {
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                         color: Colors.white,
+                      ),
+                    ),
+                  ),
+                )
+              else if (isLike && item.entityId != null)
+                Container(
+                  width: 44,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6),
+                    color: const Color(0xFF1E1E22),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      width: 0.5,
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Image.network(
+                      'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=200&auto=format&fit=crop&q=80',
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: const Color(0xFF1E1E22),
+                        child: const Icon(
+                          Icons.videocam_rounded,
+                          color: Colors.white24,
+                          size: 20,
+                        ),
                       ),
                     ),
                   ),

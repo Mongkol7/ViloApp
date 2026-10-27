@@ -16,11 +16,13 @@ import '../../../profile/presentation/screens/public_profile_screen.dart';
 import '../../../search_discover/presentation/pages/search_screen.dart';
 
 class VideoFeedPage extends StatefulWidget {
+  final int? initialVideoId;
   final bool isActive;
   final int initialPage;
   final int initialIndex;
   final bool openCommentsOnStart;
   final String? initialCommentReplyUser;
+  final String? initialCommentUserAvatar;
   final String? initialCommentText;
   final bool openLikesOnStart;
   final bool isStandalone;
@@ -32,11 +34,13 @@ class VideoFeedPage extends StatefulWidget {
 
   const VideoFeedPage({
     super.key,
+    this.initialVideoId,
     this.isActive = true,
     this.initialPage = 0,
     this.initialIndex = 0,
     this.openCommentsOnStart = false,
     this.initialCommentReplyUser,
+    this.initialCommentUserAvatar,
     this.initialCommentText,
     this.openLikesOnStart = false,
     this.isStandalone = false,
@@ -94,14 +98,15 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
     if (widget.initialVideos != null && widget.initialVideos!.isNotEmpty) {
       _videos = List.from(widget.initialVideos!);
       _isLoading = false;
-      _currentPage = startIdx.clamp(0, _videos.length - 1);
+      int matchIdx = -1;
+      if (widget.initialVideoId != null) {
+        matchIdx = _videos.indexWhere((v) => v.id == widget.initialVideoId);
+      }
+      _currentPage = (matchIdx != -1 ? matchIdx : startIdx).clamp(0, _videos.length - 1);
       _pageController = PageController(initialPage: _currentPage);
       _hasMore = false;
       _scheduleVideoPrefetch();
     } else {
-      _currentPage = startIdx != 0 ? startIdx : (_savedPageIndices[widget.feedType] ?? 0);
-      _pageController = PageController(initialPage: _currentPage);
-
       // Instant zero-latency display if feed is already in memory cache
       final cached = _dataSource.getCachedFeed(widget.feedType);
       if (cached != null && cached.isNotEmpty) {
@@ -109,6 +114,13 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
         _addToForYouReplayPool(cached);
         _isLoading = false;
       }
+
+      int matchIdx = -1;
+      if (widget.initialVideoId != null && _videos.isNotEmpty) {
+        matchIdx = _videos.indexWhere((v) => v.id == widget.initialVideoId);
+      }
+      _currentPage = matchIdx != -1 ? matchIdx : (startIdx != 0 ? startIdx : (_savedPageIndices[widget.feedType] ?? 0));
+      _pageController = PageController(initialPage: _currentPage);
 
       _fetchFeed(refresh: true);
     }
@@ -119,16 +131,24 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
         final currentVideo = _videos.isNotEmpty && _currentPage < _videos.length
             ? _videos[_currentPage]
             : null;
+        final effectiveVideo = (widget.initialVideoId != null)
+            ? _videos.cast<VideoModel?>().firstWhere(
+                (v) => v?.id == widget.initialVideoId,
+                orElse: () => currentVideo,
+              )
+            : currentVideo;
+        final targetVidId = widget.initialVideoId ?? effectiveVideo?.id;
         showModalBottomSheet(
           context: context,
           isScrollControlled: true,
           backgroundColor: Colors.transparent,
           builder: (context) => CommentBottomSheet(
-            videoId: currentVideo?.id,
-            videoCreatorId: currentVideo?.creatorId,
-            videoCreatorUsername: currentVideo?.username,
-            initialCommentCount: currentVideo?.commentCount ?? 0,
+            videoId: targetVidId,
+            videoCreatorId: effectiveVideo?.creatorId,
+            videoCreatorUsername: effectiveVideo?.username,
+            initialCommentCount: effectiveVideo?.commentCount ?? 0,
             initialReplyTo: widget.initialCommentReplyUser,
+            initialCommentUserAvatar: widget.initialCommentUserAvatar,
             highlightCommentText: widget.initialCommentText,
           ),
         );
@@ -141,11 +161,18 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
         final currentVideo = _videos.isNotEmpty && _currentPage < _videos.length
             ? _videos[_currentPage]
             : null;
-        if (currentVideo != null) {
+        final effectiveVideo = (widget.initialVideoId != null)
+            ? _videos.cast<VideoModel?>().firstWhere(
+                (v) => v?.id == widget.initialVideoId,
+                orElse: () => currentVideo,
+              )
+            : currentVideo;
+        final targetVidId = widget.initialVideoId ?? effectiveVideo?.id;
+        if (targetVidId != null) {
           VideoLikesBottomSheet.show(
             context,
-            videoId: currentVideo.id,
-            initialLikeCount: currentVideo.likeCount,
+            videoId: targetVidId,
+            initialLikeCount: effectiveVideo?.likeCount ?? 0,
           );
         }
       });
@@ -459,7 +486,34 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
 
       _scheduleVideoPrefetch();
 
-      if (_currentPage >= _videos.length && _videos.isNotEmpty) {
+      if (widget.initialVideoId != null) {
+        final targetIdx = _videos.indexWhere((v) => v.id == widget.initialVideoId);
+        if (targetIdx != -1) {
+          _currentPage = targetIdx;
+          _savedPageIndices[widget.feedType] = targetIdx;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_pageController.hasClients) {
+              _pageController.jumpToPage(targetIdx);
+            }
+          });
+        } else {
+          try {
+            final directVideo = await _dataSource.getVideoById(widget.initialVideoId!);
+            if (mounted) {
+              setState(() {
+                _videos.insert(0, directVideo);
+                _currentPage = 0;
+                _savedPageIndices[widget.feedType] = 0;
+              });
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (_pageController.hasClients) {
+                  _pageController.jumpToPage(0);
+                }
+              });
+            }
+          } catch (_) {}
+        }
+      } else if (_currentPage >= _videos.length && _videos.isNotEmpty) {
         _currentPage = _videos.length - 1;
         _savedPageIndices[widget.feedType] = _currentPage;
       }

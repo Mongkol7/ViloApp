@@ -61,7 +61,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
     // Always open a conversation at its newest message instead of leaving
     // the list at its default position near the beginning of the chat.
-    _scrollToBottom();
+    _scrollToBottom(immediate: true);
   }
 
   @override
@@ -110,7 +110,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         setState(() {
           _messages = [...remoteMessages, ...unsynced];
         });
-        _scrollToBottom();
+        _scrollToBottom(immediate: true);
       }
     }
   }
@@ -193,15 +193,28 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     }
   }
 
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOut,
-        );
+  void _scrollToBottom({bool immediate = false}) {
+    void doScroll() {
+      if (!mounted || !_scrollController.hasClients) return;
+      final max = _scrollController.position.maxScrollExtent;
+      if (max > 0) {
+        if (immediate) {
+          _scrollController.jumpTo(max);
+        } else {
+          _scrollController.animateTo(
+            max,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+          );
+        }
       }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      doScroll();
+      Future.delayed(const Duration(milliseconds: 50), doScroll);
+      Future.delayed(const Duration(milliseconds: 150), doScroll);
+      Future.delayed(const Duration(milliseconds: 300), doScroll);
     });
   }
 
@@ -1658,7 +1671,357 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
+  bool _isStoryReply(ChatMessage message) {
+    if (message.isDeletedForEveryone) return false;
+    if (message.isStoryReply) return true;
+    final text = message.text.trim();
+    return text.startsWith('Replied to your story') ||
+        text.startsWith('Replied to their story') ||
+        (text.startsWith('Replied to ') && text.contains('story'));
+  }
+
+  String _extractStoryReplyText(String fullText) {
+    final trimmed = fullText.trim();
+    final quoteMatch = RegExp(r'Replied to [^:]+:\s*"(.*)"$', dotAll: true).firstMatch(trimmed);
+    if (quoteMatch != null) {
+      return quoteMatch.group(1) ?? '';
+    }
+    final colonIndex = trimmed.indexOf(':');
+    if (colonIndex != -1) {
+      var rest = trimmed.substring(colonIndex + 1).trim();
+      if (rest.startsWith('"') && rest.endsWith('"') && rest.length >= 2) {
+        rest = rest.substring(1, rest.length - 1);
+      }
+      return rest;
+    }
+    return trimmed;
+  }
+
+  String _resolveSenderAvatar(ChatMessage message) {
+    if (message.isMe) {
+      return ProfileSyncService.instance.currentUserAvatar;
+    }
+    final raw = (message.senderAvatarUrl != null && message.senderAvatarUrl!.isNotEmpty)
+        ? message.senderAvatarUrl!
+        : widget.thread.avatarUrl;
+    final uname = message.senderUsername ?? widget.thread.username;
+    final clean = uname.toLowerCase().replaceAll('@', '').trim();
+    if (raw.isNotEmpty &&
+        !raw.contains('534528741775') &&
+        !raw.contains('535713875002')) {
+      return raw;
+    }
+    return ProfileSyncService.getDefaultAvatarForUser(clean);
+  }
+
+  void _openUserProfile(String username, [String? avatarUrl, String? displayName]) {
+    final clean = username.toLowerCase().replaceAll('@', '').trim();
+    if (clean.isEmpty) return;
+    final uid = ChatManager.instance.resolveUserId(clean, clean);
+    final effAvatar = (avatarUrl != null && avatarUrl.isNotEmpty && !avatarUrl.contains('534528741775'))
+        ? avatarUrl
+        : ProfileSyncService.getDefaultAvatarForUser(clean);
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PublicProfileScreen(
+          userId: uid,
+          username: clean,
+          displayName: displayName ?? username,
+          avatarUrl: effAvatar,
+          isFollowing: _isFollowing,
+          followsYou: _followsYou,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStoryMediaPreview(String url) {
+    final isLocal = !url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('assets/');
+    final isAsset = url.startsWith('assets/');
+
+    Widget img;
+    if (isAsset) {
+      img = Image.asset(url, width: 220, height: 200, fit: BoxFit.cover);
+    } else if (isLocal) {
+      final f = File(url);
+      if (f.existsSync()) {
+        img = Image.file(f, width: 220, height: 200, fit: BoxFit.cover);
+      } else {
+        img = Container(
+          width: 220,
+          height: 180,
+          color: const Color(0xFF1E293B),
+          child: const Center(
+            child: Icon(Icons.auto_stories_rounded, color: Colors.white70, size: 36),
+          ),
+        );
+      }
+    } else {
+      img = Image.network(
+        url,
+        width: 220,
+        height: 200,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Container(
+          width: 220,
+          height: 180,
+          color: const Color(0xFF1E293B),
+          child: const Center(
+            child: Icon(Icons.auto_stories_rounded, color: Colors.white70, size: 36),
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () => showDialog(
+        context: context,
+        builder: (_) => Dialog(
+          backgroundColor: Colors.black,
+          insetPadding: EdgeInsets.zero,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              InteractiveViewer(
+                child: Center(
+                  child: isAsset
+                      ? Image.asset(url, fit: BoxFit.contain)
+                      : (isLocal
+                          ? (File(url).existsSync()
+                              ? Image.file(File(url), fit: BoxFit.contain)
+                              : const Icon(Icons.broken_image, color: Colors.white70, size: 48))
+                          : Image.network(url, fit: BoxFit.contain)),
+                ),
+              ),
+              Positioned(
+                top: 40,
+                right: 20,
+                child: IconButton(
+                  icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      child: img,
+    );
+  }
+
+  Widget _buildStoryReplyBubble(ChatMessage message) {
+    final cleanReplyText = _extractStoryReplyText(message.text);
+    final isMe = message.isMe;
+    final displayStatus = _displayMessageStatus(message);
+    final showTimestamp = _shouldShowTimestamp(message);
+
+    final whoReplied = isMe
+        ? 'You'
+        : (message.senderDisplayName ?? message.senderUsername ?? widget.thread.username);
+    final whoseStory = isMe
+        ? (message.storyAuthorName ?? widget.thread.username)
+        : 'your';
+
+    final headerTitle = isMe
+        ? 'You replied to $whoseStory\'s story'
+        : '$whoReplied replied to your story';
+
+    final avatarUrl = _resolveSenderAvatar(message);
+    final mediaUrl = (message.mediaUrl != null && message.mediaUrl!.isNotEmpty)
+        ? _resolveChatMediaUrl(message.mediaUrl!)
+        : null;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          // 1. Reply Header: curved arrow + who replied to your story
+          Padding(
+            padding: EdgeInsets.only(
+              left: isMe ? 0 : 4,
+              right: isMe ? 4 : 0,
+              bottom: 8,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.reply_rounded,
+                  color: Color(0xFF7FA2D4),
+                  size: 18,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  headerTitle,
+                  style: const TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF9FBCE4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 2. Story Media Preview Card
+          if (mediaUrl != null)
+            Container(
+              margin: EdgeInsets.only(
+                left: isMe ? 0 : 38,
+                right: isMe ? 4 : 0,
+                bottom: 8,
+              ),
+              constraints: const BoxConstraints(
+                maxWidth: 220,
+                maxHeight: 220,
+              ),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: _buildStoryMediaPreview(mediaUrl),
+              ),
+            ),
+
+          // 3. Avatar + Message Bubble
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              // Circular avatar with yellow accent border/background (based on who replied)
+              GestureDetector(
+                onTap: () {
+                  final uname = isMe
+                      ? ProfileSyncService.instance.currentUsername
+                      : (message.senderUsername ?? widget.thread.username);
+                  _openUserProfile(uname, avatarUrl);
+                },
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  margin: const EdgeInsets.only(right: 8, bottom: 2),
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(0xFFEAB308), // Yellow ring from screenshot
+                  ),
+                  padding: const EdgeInsets.all(1.5),
+                  child: ClipOval(
+                    child: Image.network(
+                      avatarUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => const Icon(
+                        Icons.person_rounded,
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Navy Blue Message Bubble
+              Flexible(
+                child: GestureDetector(
+                  onTap: () => _toggleTimestamp(message),
+                  onLongPress: () => _showMessageOptions(message),
+                  child: Container(
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.70,
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1B2D4B), // Dark navy blue from screenshot
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          cleanReplyText,
+                          style: const TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 16,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.white,
+                            height: 1.3,
+                          ),
+                        ),
+                        if (showTimestamp) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            _messageTime(message),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.white54,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          if (isMe && displayStatus != null) ...[
+            const SizedBox(height: 4),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (displayStatus == 'Seen') ...[
+                  const Icon(
+                    Icons.done_all_rounded,
+                    size: 14,
+                    color: Color(0xFF38BDF8),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                Text(
+                  displayStatus,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: displayStatus == 'Seen'
+                        ? const Color(0xFF38BDF8)
+                        : const Color(0xFF8E8E93),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildMessageBubble(ChatMessage message) {
+    if (_isStoryReply(message)) {
+      return _buildStoryReplyBubble(message);
+    }
     if (message.isMe) {
       final displayStatus = _displayMessageStatus(message);
       final isDeleted = message.isDeletedForEveryone;

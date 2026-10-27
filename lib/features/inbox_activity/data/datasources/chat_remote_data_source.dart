@@ -5,6 +5,7 @@ import '../../../../core/network/api_client.dart';
 import '../../domain/entities/inbox_item.dart';
 import 'chat_manager.dart';
 import 'static_inbox_data.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
 
 class ChatRemoteDataSource {
   ChatRemoteDataSource._();
@@ -31,9 +32,11 @@ class ChatRemoteDataSource {
               : int.tryParse(otherId);
           final otherUsername = json['otherUsername'] ?? 'User';
           final otherDisplayName = json['otherDisplayName'] ?? otherUsername;
-          final avatarUrl =
-              json['otherAvatarUrl'] ??
-              'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
+          final rawAvatar = json['otherAvatarUrl']?.toString() ?? '';
+          final avatarUrl = (rawAvatar.isNotEmpty &&
+                  !rawAvatar.contains('534528741775'))
+              ? rawAvatar
+              : ProfileSyncService.getDefaultAvatarForUser(otherUsername);
           final lastMsg = json['lastMessageContent'] ?? '';
           final isVerified = json['isOtherVerified'] == true;
           final isFollowing = json['isFollowing'] == true;
@@ -99,6 +102,7 @@ class ChatRemoteDataSource {
             json['createdAt']?.toString() ?? '',
           )?.toLocal();
 
+          final isStoryReply = text.startsWith('Replied to ');
           return ChatMessage(
             id: id,
             text: text,
@@ -110,6 +114,10 @@ class ChatRemoteDataSource {
                 : _resolveMediaUrl(json['mediaUrl']?.toString()),
             isDeletedForEveryone: deleted,
             sentAt: sentAt,
+            senderUsername: json['senderUsername']?.toString(),
+            senderDisplayName: json['senderDisplayName']?.toString(),
+            senderAvatarUrl: json['senderAvatarUrl']?.toString(),
+            isStoryReply: isStoryReply,
           );
         }).toList();
 

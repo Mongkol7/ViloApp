@@ -163,6 +163,11 @@ class ChatMessage {
   final String? mediaUrl;
   final bool isDeletedForEveryone;
   final DateTime? sentAt;
+  final String? senderUsername;
+  final String? senderDisplayName;
+  final String? senderAvatarUrl;
+  final bool isStoryReply;
+  final String? storyAuthorName;
 
   const ChatMessage({
     required this.id,
@@ -173,6 +178,11 @@ class ChatMessage {
     this.mediaUrl,
     this.isDeletedForEveryone = false,
     this.sentAt,
+    this.senderUsername,
+    this.senderDisplayName,
+    this.senderAvatarUrl,
+    this.isStoryReply = false,
+    this.storyAuthorName,
   });
 
   ChatMessage copyWith({
@@ -184,6 +194,11 @@ class ChatMessage {
     String? mediaUrl,
     bool? isDeletedForEveryone,
     DateTime? sentAt,
+    String? senderUsername,
+    String? senderDisplayName,
+    String? senderAvatarUrl,
+    bool? isStoryReply,
+    String? storyAuthorName,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -194,6 +209,11 @@ class ChatMessage {
       mediaUrl: mediaUrl ?? this.mediaUrl,
       isDeletedForEveryone: isDeletedForEveryone ?? this.isDeletedForEveryone,
       sentAt: sentAt ?? this.sentAt,
+      senderUsername: senderUsername ?? this.senderUsername,
+      senderDisplayName: senderDisplayName ?? this.senderDisplayName,
+      senderAvatarUrl: senderAvatarUrl ?? this.senderAvatarUrl,
+      isStoryReply: isStoryReply ?? this.isStoryReply,
+      storyAuthorName: storyAuthorName ?? this.storyAuthorName,
     );
   }
 }

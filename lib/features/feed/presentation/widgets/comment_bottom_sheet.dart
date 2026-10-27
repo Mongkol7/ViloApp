@@ -13,6 +13,7 @@ class CommentBottomSheet extends StatefulWidget {
   final int initialCommentCount;
   final ValueChanged<int>? onCommentCountChanged;
   final String? initialReplyTo;
+  final String? initialCommentUserAvatar;
   final String? highlightCommentText;
 
   const CommentBottomSheet({
@@ -23,8 +24,54 @@ class CommentBottomSheet extends StatefulWidget {
     this.initialCommentCount = 0,
     this.onCommentCountChanged,
     this.initialReplyTo,
+    this.initialCommentUserAvatar,
     this.highlightCommentText,
   });
+
+  static String extractCleanCommentText(String raw) {
+    String cleanText = raw.trim();
+    if (cleanText.contains('replied to your comment: "')) {
+      final start = cleanText.indexOf('replied to your comment: "') + 26;
+      final end = cleanText.lastIndexOf('"');
+      if (end > start) return cleanText.substring(start, end).trim();
+    }
+    if (cleanText.contains('replied to your comment: \'')) {
+      final start = cleanText.indexOf('replied to your comment: \'') + 26;
+      final end = cleanText.lastIndexOf('\'');
+      if (end > start) return cleanText.substring(start, end).trim();
+    }
+    if (cleanText.contains('replied to your comment:')) {
+      final start = cleanText.indexOf('replied to your comment:') + 24;
+      final sub = cleanText.substring(start).trim().replaceAll('"', '').replaceAll("'", "");
+      if (sub.isNotEmpty) return sub;
+    }
+    if (cleanText.contains('commented: "')) {
+      final start = cleanText.indexOf('commented: "') + 12;
+      final end = cleanText.lastIndexOf('"');
+      if (end > start) return cleanText.substring(start, end).trim();
+    }
+    if (cleanText.contains('commented: \'')) {
+      final start = cleanText.indexOf('commented: \'') + 12;
+      final end = cleanText.lastIndexOf('\'');
+      if (end > start) return cleanText.substring(start, end).trim();
+    }
+    if (cleanText.contains('commented:')) {
+      final start = cleanText.indexOf('commented:') + 10;
+      final sub = cleanText.substring(start).trim().replaceAll('"', '').replaceAll("'", "");
+      if (sub.isNotEmpty) return sub;
+    }
+    if (cleanText.contains('"')) {
+      final start = cleanText.indexOf('"') + 1;
+      final end = cleanText.lastIndexOf('"');
+      if (end > start) return cleanText.substring(start, end).trim();
+    }
+    if (cleanText.contains('\'')) {
+      final start = cleanText.indexOf('\'') + 1;
+      final end = cleanText.lastIndexOf('\'');
+      if (end > start) return cleanText.substring(start, end).trim();
+    }
+    return cleanText;
+  }
 
   @override
   State<CommentBottomSheet> createState() => _CommentBottomSheetState();
@@ -34,6 +81,8 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
   final FeedRemoteDataSource _dataSource = FeedRemoteDataSource();
   final TextEditingController _commentController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _highlightKey = GlobalKey();
 
   List<CommentModel> _comments = [];
   bool _isLoading = true;
@@ -70,6 +119,7 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
   void dispose() {
     _commentController.dispose();
     _focusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -91,29 +141,34 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
     return false;
   }
 
+  static String extractCleanCommentText(String raw) => CommentBottomSheet.extractCleanCommentText(raw);
+
   void _ensureHighlightedCommentExists() {
     if (widget.highlightCommentText == null || widget.highlightCommentText!.trim().isEmpty) return;
     final hasMatch = _comments.any(_isCommentHighlighted);
     if (!hasMatch) {
-      String cleanText = widget.highlightCommentText!.trim();
-      if (cleanText.contains('commented: "')) {
-        final start = cleanText.indexOf('commented: "') + 12;
-        final end = cleanText.lastIndexOf('"');
-        if (end > start) cleanText = cleanText.substring(start, end);
-      } else if (cleanText.contains('"')) {
-        final start = cleanText.indexOf('"') + 1;
-        final end = cleanText.lastIndexOf('"');
-        if (end > start) cleanText = cleanText.substring(start, end);
-      }
+      String cleanText = extractCleanCommentText(widget.highlightCommentText!);
+      final commenterUsername = widget.initialReplyTo ?? 'User';
+      final isCommenterMe = ProfileSyncService.instance.isCurrentUser(username: commenterUsername);
+      final rawHlAvatar = widget.initialCommentUserAvatar?.trim() ?? '';
+      final clean = commenterUsername.toLowerCase().replaceAll('@', '').trim();
+      final resolvedAvatar = isCommenterMe
+          ? ProfileSyncService.instance.currentUserAvatar
+          : ((rawHlAvatar.isNotEmpty &&
+                  !rawHlAvatar.contains('535713875002') &&
+                  !(rawHlAvatar.contains('534528741775') && clean != 'mongkol'))
+              ? rawHlAvatar
+              : ProfileSyncService.getDefaultAvatarForUser(commenterUsername));
+
       _comments.insert(
         0,
         CommentModel(
           id: DateTime.now().millisecondsSinceEpoch,
           videoId: widget.videoId ?? 0,
-          userId: 0,
-          username: widget.initialReplyTo ?? 'User',
-          displayName: widget.initialReplyTo ?? 'User',
-          avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500',
+          userId: isCommenterMe ? (ProfileSyncService.instance.cachedMyProfile?.id ?? 0) : 0,
+          username: commenterUsername,
+          displayName: commenterUsername,
+          avatarUrl: resolvedAvatar,
           content: cleanText,
           createdAt: DateTime.now(),
         ),
@@ -125,19 +180,46 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
     if (widget.highlightCommentText == null || widget.highlightCommentText!.trim().isEmpty) {
       return false;
     }
-    final hl = widget.highlightCommentText!.toLowerCase().trim();
+    final target = extractCleanCommentText(widget.highlightCommentText!).toLowerCase().trim();
     final content = comment.content.toLowerCase().trim();
-    if (content.isNotEmpty && (hl.contains(content) || content.contains(hl))) {
+    if (target.isNotEmpty && content.isNotEmpty && (content.contains(target) || target.contains(content))) {
       return true;
+    }
+    // Also match if any nested reply matches
+    for (final reply in comment.replies) {
+      final rContent = reply.content.toLowerCase().trim();
+      if (target.isNotEmpty && rContent.isNotEmpty && (rContent.contains(target) || target.contains(rContent))) {
+        return true;
+      }
     }
     if (widget.initialReplyTo != null && widget.initialReplyTo!.isNotEmpty) {
       final u = widget.initialReplyTo!.toLowerCase().replaceAll('@', '').trim();
       final cu = comment.username.toLowerCase().replaceAll('@', '').trim();
-      if (cu == u && content.isNotEmpty && hl.contains(content)) {
+      if (cu == u && content.isNotEmpty && target.contains(content)) {
         return true;
       }
     }
     return false;
+  }
+
+  void _scrollToHighlightedComment() {
+    void tryScroll() {
+      if (!mounted) return;
+      if (_highlightKey.currentContext != null) {
+        Scrollable.ensureVisible(
+          _highlightKey.currentContext!,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeInOut,
+          alignment: 0.25,
+        );
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      tryScroll();
+      Future.delayed(const Duration(milliseconds: 150), tryScroll);
+      Future.delayed(const Duration(milliseconds: 350), tryScroll);
+    });
   }
 
   Future<void> _loadComments() async {
@@ -149,6 +231,9 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
           _commentCount = _comments.length;
           _isLoading = false;
         });
+        if (widget.highlightCommentText != null && widget.highlightCommentText!.isNotEmpty) {
+          _scrollToHighlightedComment();
+        }
       }
       return;
     }
@@ -162,6 +247,9 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
           _commentCount = _comments.length;
           _isLoading = false;
         });
+        if (widget.highlightCommentText != null && widget.highlightCommentText!.isNotEmpty) {
+          _scrollToHighlightedComment();
+        }
       }
     } catch (_) {
       if (mounted) {
@@ -171,6 +259,9 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
           _commentCount = _comments.length;
           _isLoading = false;
         });
+        if (widget.highlightCommentText != null && widget.highlightCommentText!.isNotEmpty) {
+          _scrollToHighlightedComment();
+        }
       }
     }
   }
@@ -368,6 +459,7 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                         ),
                       )
                     : ListView.builder(
+                        controller: _scrollController,
                         itemCount: _comments.length,
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         itemBuilder: (context, index) {
@@ -377,6 +469,8 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                           return _CommentCard(
                             comment: comment,
                             isHighlighted: isHighlighted,
+                            highlightKey: isHighlighted ? _highlightKey : null,
+                            highlightText: widget.highlightCommentText,
                             onReply: () => _onReplyTap(comment),
                             onDelete: canDelete ? () => _deleteComment(comment) : null,
                           );
@@ -532,12 +626,16 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
 class _CommentCard extends StatefulWidget {
   final CommentModel comment;
   final bool isHighlighted;
+  final GlobalKey? highlightKey;
+  final String? highlightText;
   final VoidCallback onReply;
   final VoidCallback? onDelete;
 
   const _CommentCard({
     required this.comment,
     this.isHighlighted = false,
+    this.highlightKey,
+    this.highlightText,
     required this.onReply,
     this.onDelete,
   });
@@ -551,23 +649,63 @@ class _CommentCardState extends State<_CommentCard> {
   bool _isLiked = false;
   int _likes = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    _checkAndExpandReplies();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CommentCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if ((widget.isHighlighted && !oldWidget.isHighlighted) ||
+        (widget.highlightText != oldWidget.highlightText)) {
+      _checkAndExpandReplies();
+    }
+  }
+
+  void _checkAndExpandReplies() {
+    final target = widget.highlightText != null
+        ? CommentBottomSheet.extractCleanCommentText(widget.highlightText!).toLowerCase().trim()
+        : '';
+    final hasMatchingReply = target.isNotEmpty &&
+        widget.comment.replies.any((r) {
+          final rContent = r.content.toLowerCase().trim();
+          return rContent.contains(target) || target.contains(rContent);
+        });
+    if (hasMatchingReply || (widget.isHighlighted && widget.comment.replies.isNotEmpty)) {
+      _showReplies = true;
+    }
+  }
+
+  String _resolveAvatar(CommentModel c) {
+    final isUserMe = ProfileSyncService.instance.isCurrentUser(
+      username: c.username,
+      id: c.userId.toString(),
+    );
+    if (isUserMe) {
+      return ProfileSyncService.instance.currentUserAvatar;
+    }
+    final raw = c.avatarUrl?.trim() ?? '';
+    final clean = c.username.toLowerCase().replaceAll('@', '').trim();
+    if (raw.isNotEmpty &&
+        !raw.contains('535713875002') &&
+        !(raw.contains('534528741775') && clean != 'mongkol')) {
+      return raw;
+    }
+    return ProfileSyncService.getDefaultAvatarForUser(c.username);
+  }
+
   void _navigateToProfile(BuildContext context) {
     final comment = widget.comment;
-    final isMe = ProfileSyncService.instance.isCurrentUser(
-      username: comment.username,
-      id: comment.userId.toString(),
-    );
     final rawName = comment.displayName.isNotEmpty ? comment.displayName : comment.username;
     final cleanUsername = comment.username.replaceAll('@', '').trim();
-    final avatar = (comment.avatarUrl != null && comment.avatarUrl!.isNotEmpty)
-        ? comment.avatarUrl!
-        : (isMe
-            ? ProfileSyncService.instance.currentUserAvatar
-            : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150');
+    final avatar = _resolveAvatar(comment);
 
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PublicProfileScreen(
+          userId: comment.userId > 0 ? comment.userId : null,
           displayName: rawName,
           username: cleanUsername,
           avatarUrl: avatar,
@@ -579,15 +717,16 @@ class _CommentCardState extends State<_CommentCard> {
   @override
   Widget build(BuildContext context) {
     final comment = widget.comment;
-    final isMe = ProfileSyncService.instance.isCurrentUser(
-      username: comment.username,
-      id: comment.userId.toString(),
-    );
-    final avatar = (comment.avatarUrl != null && comment.avatarUrl!.isNotEmpty)
-        ? comment.avatarUrl!
-        : (isMe
-            ? ProfileSyncService.instance.currentUserAvatar
-            : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150');
+    final avatar = _resolveAvatar(comment);
+
+    final cleanHighlight = widget.highlightText != null
+        ? CommentBottomSheet.extractCleanCommentText(widget.highlightText!).toLowerCase().trim()
+        : '';
+    final hasMatchingReply = cleanHighlight.isNotEmpty &&
+        comment.replies.any((r) {
+          final rContent = r.content.toLowerCase().trim();
+          return rContent.contains(cleanHighlight) || cleanHighlight.contains(rContent);
+        });
 
     final contentWidget = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
@@ -755,22 +894,30 @@ class _CommentCardState extends State<_CommentCard> {
                 padding: const EdgeInsets.only(left: 48.0, top: 8.0),
                 child: Column(
                   children: comment.replies.map((reply) {
-                    final isReplyMe = ProfileSyncService.instance.isCurrentUser(
-                      username: reply.username,
-                      id: reply.userId.toString(),
-                    );
-                    final replyAvatar = (reply.avatarUrl != null && reply.avatarUrl!.isNotEmpty)
-                        ? reply.avatarUrl!
-                        : (isReplyMe
-                            ? ProfileSyncService.instance.currentUserAvatar
-                            : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150');
+                    final replyAvatar = _resolveAvatar(reply);
+                    final rName = reply.displayName.isNotEmpty ? reply.displayName : reply.username;
+                    final rClean = reply.username.replaceAll('@', '').trim();
+                    final rContent = reply.content.toLowerCase().trim();
+                    final isThisReplyHighlighted = cleanHighlight.isNotEmpty &&
+                        (rContent.contains(cleanHighlight) || cleanHighlight.contains(rContent));
 
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6.0),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
+                    final replyRow = Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => PublicProfileScreen(
+                                  userId: reply.userId > 0 ? reply.userId : null,
+                                  displayName: rName,
+                                  username: rClean,
+                                  avatarUrl: replyAvatar,
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
                             width: 28,
                             height: 28,
                             decoration: BoxDecoration(
@@ -792,29 +939,82 @@ class _CommentCardState extends State<_CommentCard> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  reply.displayName.isNotEmpty ? reply.displayName : reply.username,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => PublicProfileScreen(
+                                        userId: reply.userId > 0 ? reply.userId : null,
+                                        displayName: rName,
+                                        username: rClean,
+                                        avatarUrl: replyAvatar,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Text(
+                                  rName,
                                   style: const TextStyle(
                                     color: Colors.white70,
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                const SizedBox(height: 2),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                reply.content,
+                                style: const TextStyle(color: Colors.white, fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+
+                    if (isThisReplyHighlighted) {
+                      return Container(
+                        key: widget.highlightKey,
+                        margin: const EdgeInsets.symmetric(vertical: 4.0),
+                        padding: const EdgeInsets.all(8.0),
+                        decoration: BoxDecoration(
+                          color: const Color(0x1F2F80ED),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFF2F80ED), width: 1.2),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.reply_rounded, size: 14, color: Color(0xFF2F80ED)),
+                                SizedBox(width: 4),
                                 Text(
-                                  reply.content,
-                                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                                  'Replied comment',
+                                  style: TextStyle(
+                                    color: Color(0xFF2F80ED),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ],
                             ),
-                          ),
-                        ],
-                      ),
+                            const SizedBox(height: 6),
+                            replyRow,
+                          ],
+                        ),
+                      );
+                    }
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6.0),
+                      child: replyRow,
                     );
                   }).toList(),
                 ),
@@ -826,6 +1026,7 @@ class _CommentCardState extends State<_CommentCard> {
 
     if (widget.isHighlighted) {
       return Container(
+        key: hasMatchingReply ? null : widget.highlightKey,
         margin: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
         decoration: BoxDecoration(
           color: const Color(0x1F2F80ED),
@@ -835,15 +1036,19 @@ class _CommentCardState extends State<_CommentCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
-              padding: EdgeInsets.only(left: 14.0, top: 8.0, bottom: 2.0),
+            Padding(
+              padding: const EdgeInsets.only(left: 14.0, top: 8.0, bottom: 2.0),
               child: Row(
                 children: [
-                  Icon(Icons.stars_rounded, size: 14, color: Color(0xFF2F80ED)),
-                  SizedBox(width: 4),
+                  Icon(
+                    hasMatchingReply ? Icons.reply_rounded : Icons.stars_rounded,
+                    size: 14,
+                    color: const Color(0xFF2F80ED),
+                  ),
+                  const SizedBox(width: 4),
                   Text(
-                    'Highlighted comment',
-                    style: TextStyle(
+                    hasMatchingReply ? 'Replied thread' : 'Highlighted comment',
+                    style: const TextStyle(
                       fontFamily: 'Inter',
                       color: Color(0xFF2F80ED),
                       fontSize: 11,

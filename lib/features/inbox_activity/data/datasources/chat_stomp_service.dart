@@ -114,6 +114,7 @@ class ChatStompService {
               data['createdAt']?.toString() ?? '',
             )?.toLocal();
 
+            final isStoryReply = text.startsWith('Replied to ');
             final chatMsg = ChatMessage(
               id:
                   data['id']?.toString() ??
@@ -125,6 +126,10 @@ class ChatStompService {
               mediaUrl: deleted ? null : _resolveMediaUrl(data['mediaUrl']),
               isDeletedForEveryone: deleted,
               sentAt: sentAt,
+              senderUsername: data['senderUsername']?.toString(),
+              senderDisplayName: data['senderDisplayName']?.toString(),
+              senderAvatarUrl: data['senderAvatarUrl']?.toString(),
+              isStoryReply: isStoryReply,
             );
 
             for (final listener in List.of(_messageListeners)) {

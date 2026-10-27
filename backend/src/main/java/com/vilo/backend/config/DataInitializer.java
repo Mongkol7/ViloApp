@@ -136,6 +136,11 @@ public class DataInitializer implements CommandLineRunner {
                 "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80",
                 true, Set.of(Role.ROLE_USER, Role.ROLE_ADMIN));
 
+        User s1 = getOrCreateUser("s1", "s1@vilo.app", "password123",
+                "S1", "Vilo Creator",
+                "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80",
+                true, Set.of(Role.ROLE_USER, Role.ROLE_CREATOR));
+
         User sophia = getOrCreateUser("sophia_art", "sophia@vilo.app", "password123",
                 "Sophia Vance", "Digital Artist & Visual Storyteller",
                 "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80",
@@ -204,11 +209,6 @@ public class DataInitializer implements CommandLineRunner {
         getOrCreateUser("ryan_explores", "ryan@vilo.app", "password123",
                 "Ryan Walker", "Wild camping & drone aerial shots",
                 "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80",
-                false, Set.of(Role.ROLE_USER));
-
-        User s1 = getOrCreateUser("s1", "s1@vilo.app", "password123",
-                "s1", "Vilo Creator & Peer Tester",
-                "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80",
                 false, Set.of(Role.ROLE_USER));
 
         // Set up team follow graph
@@ -453,6 +453,34 @@ public class DataInitializer implements CommandLineRunner {
                     .build();
 
             notificationRepository.saveAll(List.of(notif1, notif2, notif3, notif4));
+
+            if (s1 != null) {
+                Notification notifS1 = Notification.builder()
+                        .recipient(kimliza)
+                        .actor(s1)
+                        .type(NotificationType.LIKE)
+                        .title("New Like")
+                        .body("s1 liked your video")
+                        .entityId("1")
+                        .entityType("VIDEO")
+                        .isRead(false)
+                        .build();
+                notificationRepository.save(notifS1);
+            }
+            if (s1 != null && mongkol != null) {
+                Notification notifS1Mongkol = Notification.builder()
+                        .recipient(mongkol)
+                        .actor(s1)
+                        .type(NotificationType.LIKE)
+                        .title("New Like")
+                        .body("s1 liked your video")
+                        .entityId("1")
+                        .entityType("VIDEO")
+                        .isRead(false)
+                        .build();
+                notificationRepository.save(notifS1Mongkol);
+            }
+
             log.info("Default seed data created successfully for chat, stories, and notifications!");
         }
 

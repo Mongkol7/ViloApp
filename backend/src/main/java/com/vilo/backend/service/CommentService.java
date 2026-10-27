@@ -78,16 +78,18 @@ public class CommentService {
                 commentRepository.findById(parentId).ifPresent(parentComment -> {
                     if (!parentComment.getUserId().equals(userId) && (finalCreator == null || !parentComment.getUserId().equals(finalCreator.getId()))) {
                         userRepository.findById(parentComment.getUserId()).ifPresent(parentUser -> {
-                            String snippet = content.length() > 50 ? content.substring(0, 47) + "..." : content;
-                            notificationService.sendNotification(
-                                    parentUser,
-                                    commenter,
-                                    NotificationType.COMMENT,
-                                    "New Reply",
-                                    commenter.getDisplayName() + " replied to your comment: \"" + snippet + "\"",
-                                    String.valueOf(videoId),
-                                    "VIDEO"
-                            );
+                            if (commenter != null) {
+                                String snippet = content.length() > 50 ? content.substring(0, 47) + "..." : content;
+                                notificationService.sendNotification(
+                                        parentUser,
+                                        commenter,
+                                        NotificationType.COMMENT,
+                                        "New Reply",
+                                        commenter.getDisplayName() + " replied to your comment: \"" + snippet + "\"",
+                                        String.valueOf(videoId),
+                                        "VIDEO"
+                                );
+                            }
                         });
                     }
                 });

@@ -5,6 +5,7 @@ import 'package:video_player/video_player.dart';
 import '../../data/datasources/chat_manager.dart';
 import '../../data/datasources/story_remote_data_source.dart';
 import '../../domain/entities/shared_thought_story.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../widgets/story_viewers_bottom_sheet.dart';
 
 class StoryViewerItem {
@@ -130,6 +131,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       threadId: thread.id,
       text: replyContent,
       mediaUrl: item.story.mediaUrl,
+      senderUsername: ProfileSyncService.instance.currentUsername,
+      senderAvatarUrl: ProfileSyncService.instance.currentUserAvatar,
+      senderDisplayName: ProfileSyncService.instance.currentUserDisplayName,
+      isStoryReply: true,
+      storyAuthorName: authorName,
     );
 
     ScaffoldMessenger.of(context).showSnackBar(
