@@ -7,9 +7,12 @@ class CommentModel {
   final String? avatarUrl;
   final int? parentId;
   final String content;
+  final String? attachmentUrl;
   final DateTime? createdAt;
   final List<CommentModel> replies;
   final int likesCount;
+  final int dislikesCount;
+  final bool isDisliked;
 
   const CommentModel({
     required this.id,
@@ -20,9 +23,12 @@ class CommentModel {
     this.avatarUrl,
     this.parentId,
     required this.content,
+    this.attachmentUrl,
     this.createdAt,
     this.replies = const [],
     this.likesCount = 0,
+    this.dislikesCount = 0,
+    this.isDisliked = false,
   });
 
   factory CommentModel.fromJson(Map<String, dynamic> json) {
@@ -44,6 +50,9 @@ class CommentModel {
       avatarUrl: json['avatarUrl']?.toString(),
       parentId: (json['parentId'] as num?)?.toInt(),
       content: json['content']?.toString() ?? '',
+      attachmentUrl: json['attachmentUrl']?.toString() ??
+          json['imageUrl']?.toString() ??
+          json['mediaUrl']?.toString(),
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString())
           : null,
@@ -51,6 +60,8 @@ class CommentModel {
       likesCount: (json['likesCount'] as num?)?.toInt() ??
           (json['likes'] as num?)?.toInt() ??
           0,
+      dislikesCount: (json['dislikesCount'] as num?)?.toInt() ?? 0,
+      isDisliked: json['isDisliked'] == true,
     );
   }
 
@@ -64,9 +75,12 @@ class CommentModel {
       'avatarUrl': avatarUrl,
       'parentId': parentId,
       'content': content,
+      'attachmentUrl': attachmentUrl,
       'createdAt': createdAt?.toIso8601String(),
       'replies': replies.map((r) => r.toJson()).toList(),
       'likesCount': likesCount,
+      'dislikesCount': dislikesCount,
+      'isDisliked': isDisliked,
     };
   }
 
@@ -79,9 +93,12 @@ class CommentModel {
     String? avatarUrl,
     int? parentId,
     String? content,
+    String? attachmentUrl,
     DateTime? createdAt,
     List<CommentModel>? replies,
     int? likesCount,
+    int? dislikesCount,
+    bool? isDisliked,
   }) {
     return CommentModel(
       id: id ?? this.id,
@@ -92,9 +109,12 @@ class CommentModel {
       avatarUrl: avatarUrl ?? this.avatarUrl,
       parentId: parentId ?? this.parentId,
       content: content ?? this.content,
+      attachmentUrl: attachmentUrl ?? this.attachmentUrl,
       createdAt: createdAt ?? this.createdAt,
       replies: replies ?? this.replies,
       likesCount: likesCount ?? this.likesCount,
+      dislikesCount: dislikesCount ?? this.dislikesCount,
+      isDisliked: isDisliked ?? this.isDisliked,
     );
   }
 

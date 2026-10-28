@@ -11,6 +11,8 @@ import '../../../bottom_nav/presentation/pages/main_navigation_shell.dart';
 import '../../data/datasources/auth_remote_data_source.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../../inbox_activity/data/datasources/chat_manager.dart';
+import '../../../inbox_activity/data/datasources/thought_story_manager.dart';
+import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import 'login_screen.dart';
 
 /// Screen 3 — Register / Join Vilo
@@ -135,6 +137,10 @@ class _RegisterScreenState extends State<RegisterScreen>
         displayName: fullName,
       );
 
+      ProfileSyncService.instance.clear();
+      ProfileSyncService.instance.clearSession();
+      FeedRemoteDataSource.instance.clearCache();
+      ThoughtStoryManager.instance.deleteStory();
       ProfileSyncService.instance.setCurrentUser(user);
       ChatManager.instance.switchUser(user.id);
 

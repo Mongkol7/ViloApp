@@ -160,7 +160,10 @@ class StoryRemoteDataSource {
       }
     } catch (_) {}
 
-    final isDemoUser = TokenStorage.instance.isDemoUserSync;
+    final isDemoUser = (TokenStorage.instance.isDemoUserSync ||
+            TokenStorage.instance.currentUserIdSync == null) &&
+        (TokenStorage.instance.currentUsernameSync == null ||
+            TokenStorage.instance.currentUsernameSync == 'mongkol');
     if (isDemoUser) {
       return StaticInboxData.stories;
     }

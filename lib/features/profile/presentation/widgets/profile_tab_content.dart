@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../auth/data/datasources/token_storage.dart';
 import '../../../feed/data/models/video_feed_model.dart';
 import '../mock/profile_mock_data.dart';
 import '../style/pulse_tokens.dart';
@@ -265,7 +266,41 @@ List<Widget> buildProfileTabSlivers(
         ),
       ];
 
-    case 2: // Shop (Untouched)
+    case 2: // Shop
+      final isDemoUser = (TokenStorage.instance.isDemoUserSync ||
+              TokenStorage.instance.currentUserIdSync == null) &&
+          (TokenStorage.instance.currentUsernameSync == null ||
+              TokenStorage.instance.currentUsernameSync == 'mongkol');
+      if (!isDemoUser) {
+        return [
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.shopping_bag_outlined, color: Colors.white24, size: 48),
+                  SizedBox(height: 12),
+                  Text(
+                    'No products showcase',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'Inter',
+                    ),
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    'Products showcased will appear here',
+                    style: TextStyle(color: Colors.white38, fontSize: 13, fontFamily: 'Inter'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ];
+      }
       return [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(

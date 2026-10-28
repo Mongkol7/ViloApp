@@ -1458,4 +1458,32 @@ final newVideo = VideoModel.fromJson(data as Map<String, dynamic>);
 
     return interleaveAndRandomizeVideos(filtered, seed: seed);
   }
+
+  List<VideoModel> getFallbackVideos() {
+    return _getFallbackFeed('foryou');
+  }
+
+  String resolveVideoThumbnail(int? videoId) {
+    if (videoId == null || videoId <= 0) {
+      return 'assets/video_thumbnails/vid1.jpg';
+    }
+    // 1. Search cached videos
+    final all = getAllCachedVideos();
+    final match = all.where((v) => v.id == videoId).firstOrNull;
+    if (match != null) {
+      final t = match.thumbnailUrl;
+      if (t != null && t.trim().isNotEmpty) return t.trim();
+    }
+    // 2. Search fallback videos
+    final fb = _getFallbackFeed('foryou');
+    final matchFb = fb.where((v) => v.id == videoId).firstOrNull;
+    if (matchFb != null) {
+      final t = matchFb.thumbnailUrl;
+      if (t != null && t.trim().isNotEmpty) return t.trim();
+    }
+    // 3. Asset video index mapping
+    final assetIndex = ((videoId - 1) % 20) + 1;
+    return 'assets/video_thumbnails/vid$assetIndex.jpg';
+  }
 }
+

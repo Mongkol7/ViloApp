@@ -54,6 +54,9 @@ class _ProfileScreenState extends State<ProfileScreen>
     final storedUsername = TokenStorage.instance.currentUsernameSync;
     final storedDisplayName = TokenStorage.instance.currentDisplayNameSync;
 
+    final isDemo = (TokenStorage.instance.isDemoUserSync || currentUid == null) &&
+        (storedUsername == null || storedUsername == 'mongkol');
+
     _user = cachedProfile ??
         (storedUsername != null && storedUsername.isNotEmpty
             ? UserModel(
@@ -64,20 +67,32 @@ class _ProfileScreenState extends State<ProfileScreen>
                 bio: '',
                 avatarUrl: _getDefaultAvatarForUser(storedUsername),
                 isVerified: false,
-                followersCount: ProfileSyncService.instance.mockFollowersCount,
-                followingCount: ProfileSyncService.instance.mockFollowingCount,
+                followersCount: isDemo ? ProfileSyncService.instance.mockFollowersCount : 0,
+                followingCount: isDemo ? ProfileSyncService.instance.mockFollowingCount : 0,
               )
-            : UserModel(
-                id: 1,
-                username: ProfileMockData.username,
-                email: 'mongkol@vilo.app',
-                displayName: ProfileMockData.name,
-                bio: ProfileMockData.bio,
-                avatarUrl: ProfileMockData.avatarUrl,
-                isVerified: true,
-                followersCount: ProfileSyncService.instance.mockFollowersCount,
-                followingCount: ProfileSyncService.instance.mockFollowingCount,
-              ));
+            : (isDemo
+                ? UserModel(
+                    id: 1,
+                    username: ProfileMockData.username,
+                    email: 'mongkol@vilo.app',
+                    displayName: ProfileMockData.name,
+                    bio: ProfileMockData.bio,
+                    avatarUrl: ProfileMockData.avatarUrl,
+                    isVerified: true,
+                    followersCount: ProfileSyncService.instance.mockFollowersCount,
+                    followingCount: ProfileSyncService.instance.mockFollowingCount,
+                  )
+                : UserModel(
+                    id: currentUid ?? 0,
+                    username: storedUsername ?? 'user',
+                    email: '',
+                    displayName: storedDisplayName ?? storedUsername ?? 'User',
+                    bio: '',
+                    avatarUrl: _getDefaultAvatarForUser(storedUsername ?? 'user'),
+                    isVerified: false,
+                    followersCount: 0,
+                    followingCount: 0,
+                  )));
     ProfileSyncService.instance.followEvents.addListener(_onFollowEvent);
     ProfileSyncService.instance.videoUploadedEvents.addListener(_onVideoUploaded);
     ProfileSyncService.instance.videoInteractionEvents.addListener(_onVideoInteractionEvent);

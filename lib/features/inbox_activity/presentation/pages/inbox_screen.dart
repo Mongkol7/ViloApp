@@ -24,7 +24,7 @@ import 'new_followers_screen.dart';
 import 'system_notifications_screen.dart';
 import '../../../profile/presentation/screens/public_profile_screen.dart';
 import '../../../feed/presentation/pages/video_feed_page.dart';
-import '../../../feed/presentation/widgets/video_likes_bottom_sheet.dart';
+import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../widgets/story_viewers_bottom_sheet.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../../profile/data/datasources/profile_remote_data_source.dart';
@@ -45,10 +45,10 @@ class _InboxScreenState extends State<InboxScreen> {
   @override
   void initState() {
     super.initState();
-    final isDemo =
-        TokenStorage.instance.isDemoUserSync ||
-        TokenStorage.instance.currentUserIdSync == null ||
-        TokenStorage.instance.currentUserIdSync == 1;
+    final isDemo = (TokenStorage.instance.isDemoUserSync ||
+            TokenStorage.instance.currentUserIdSync == null) &&
+        (TokenStorage.instance.currentUsernameSync == null ||
+            TokenStorage.instance.currentUsernameSync == 'mongkol');
     _stories = isDemo
         ? List.from(StaticInboxData.stories)
         : const [
@@ -59,7 +59,7 @@ class _InboxScreenState extends State<InboxScreen> {
               isCreate: true,
             ),
           ];
-    _notifications = List.from(StaticInboxData.notifications);
+    _notifications = isDemo ? List.from(StaticInboxData.notifications) : [];
     _threads = isDemo
         ? List.from(StaticInboxData.threads)
         : List.from(ChatManager.instance.threads);
@@ -143,15 +143,20 @@ class _InboxScreenState extends State<InboxScreen> {
           .getNotifications();
       final threads = await ChatRemoteDataSource.instance.getConversations();
 
+      final isDemoUser = (TokenStorage.instance.isDemoUserSync ||
+              TokenStorage.instance.currentUserIdSync == null) &&
+          (TokenStorage.instance.currentUsernameSync == null ||
+              TokenStorage.instance.currentUsernameSync == 'mongkol');
+
       if (mounted) {
         setState(() {
-          if (stories.isNotEmpty) {
+          if (stories.isNotEmpty || !isDemoUser) {
             _stories = List.from(stories);
           }
-          if (notifications.isNotEmpty) {
+          if (notifications.isNotEmpty || !isDemoUser) {
             _notifications = List.from(notifications);
           }
-          if (threads.isNotEmpty) {
+          if (threads.isNotEmpty || !isDemoUser) {
             _threads = List.from(threads);
           }
         });
@@ -655,29 +660,19 @@ class _InboxScreenState extends State<InboxScreen> {
         subLower.contains('liked your');
 
     if (isLike) {
-      final vidId = int.tryParse(item.entityId ?? '0') ?? 0;
-      final likerNames = <String>[];
-      if (item.actorDisplayName != null && item.actorDisplayName!.isNotEmpty) {
-        likerNames.add(item.actorDisplayName!);
-      } else if (item.actorUsername != null && item.actorUsername!.isNotEmpty) {
-        likerNames.add(item.actorUsername!);
-      } else if (item.subtitle.contains(' liked your')) {
-        final parsed = item.subtitle.split(' liked your').first.trim();
-        if (parsed.isNotEmpty && !parsed.contains('others')) {
-          likerNames.add(parsed);
-        }
-      }
-
-      final likerAvatars = (item.actorAvatarUrl != null && item.actorAvatarUrl!.isNotEmpty)
-          ? [item.actorAvatarUrl!]
-          : <String>[];
-
-      await VideoLikesBottomSheet.show(
-        context,
-        videoId: vidId,
-        initialLikeCount: 1,
-        initialUserNames: likerNames,
-        initialUserAvatars: likerAvatars,
+      final vidId = int.tryParse(item.entityId ?? '0') ?? 1;
+      final likerName = item.actorDisplayName ?? item.actorUsername ?? (titleLower != 'activity' && titleLower != 'likes' ? item.title : null);
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => VideoFeedPage(
+            isActive: true,
+            isStandalone: true,
+            initialVideoId: vidId > 0 ? vidId : 1,
+            openLikesOnStart: true,
+            initialLikeUserNames: likerName != null ? [likerName] : null,
+            initialLikeUserAvatars: item.actorAvatarUrl != null ? [item.actorAvatarUrl!] : null,
+          ),
+        ),
       );
       if (mounted) setState(() {});
       return;
@@ -686,10 +681,14 @@ class _InboxScreenState extends State<InboxScreen> {
     // 5. Video Comment, Reply, Mention -> VideoFeedPage on that specific video
     if (typeUpper == 'COMMENT' ||
         typeUpper == 'MENTION' ||
+        item.iconType == 'comment' ||
         titleLower.contains('comment') ||
         titleLower.contains('reply') ||
-        titleLower.contains('mention')) {
+        titleLower.contains('mention') ||
+        subLower.contains('commented:') ||
+        subLower.contains('replied to')) {
       final vidId = int.tryParse(item.entityId ?? '0');
+      final commenterName = item.actorUsername ?? item.actorDisplayName ?? (titleLower != 'activity' && titleLower != 'comments' ? item.title : null);
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => VideoFeedPage(
@@ -697,7 +696,7 @@ class _InboxScreenState extends State<InboxScreen> {
             isStandalone: true,
             initialVideoId: (vidId != null && vidId > 0) ? vidId : null,
             openCommentsOnStart: true,
-            initialCommentReplyUser: item.actorUsername,
+            initialCommentReplyUser: commenterName,
             initialCommentUserAvatar: item.actorAvatarUrl,
             initialCommentText: item.subtitle,
           ),
@@ -1375,6 +1374,41 @@ class _InboxScreenState extends State<InboxScreen> {
     );
   }
 
+  String _resolveNotificationThumbnail(NotificationItem item) {
+    final vidId = int.tryParse(item.entityId ?? '0');
+    return FeedRemoteDataSource.instance.resolveVideoThumbnail(vidId);
+  }
+
+  Widget _buildNotificationThumbnailWidget(NotificationItem item) {
+    final thumb = _resolveNotificationThumbnail(item);
+    if (thumb.startsWith('assets/')) {
+      return Image.asset(
+        thumb,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Container(
+          color: const Color(0xFF1E1E22),
+          child: const Icon(
+            Icons.videocam_rounded,
+            color: Colors.white24,
+            size: 20,
+          ),
+        ),
+      );
+    }
+    return Image.network(
+      thumb,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => Container(
+        color: const Color(0xFF1E1E22),
+        child: const Icon(
+          Icons.videocam_rounded,
+          color: Colors.white24,
+          size: 20,
+        ),
+      ),
+    );
+  }
+
   Widget _buildNotificationTile(NotificationItem item) {
     final titleLower = item.title.toLowerCase();
     final subLower = item.subtitle.toLowerCase();
@@ -1702,6 +1736,7 @@ class _InboxScreenState extends State<InboxScreen> {
                   behavior: HitTestBehavior.opaque,
                   onTap: () {
                     final vidId = int.tryParse(item.entityId ?? '0') ?? 1;
+                    final actorName = item.actorDisplayName ?? item.actorUsername ?? (item.title.toLowerCase() != 'activity' && item.title.toLowerCase() != 'likes' && item.title.toLowerCase() != 'comments' ? item.title : null);
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => VideoFeedPage(
@@ -1709,9 +1744,12 @@ class _InboxScreenState extends State<InboxScreen> {
                           isStandalone: true,
                           initialVideoId: vidId > 0 ? vidId : null,
                           openCommentsOnStart: isComment,
-                          initialCommentReplyUser: item.actorUsername,
+                          openLikesOnStart: isLike,
+                          initialCommentReplyUser: actorName,
                           initialCommentUserAvatar: item.actorAvatarUrl,
                           initialCommentText: item.subtitle,
+                          initialLikeUserNames: isLike && actorName != null ? [actorName] : null,
+                          initialLikeUserAvatars: isLike && item.actorAvatarUrl != null ? [item.actorAvatarUrl!] : null,
                         ),
                       ),
                     );
@@ -1729,18 +1767,7 @@ class _InboxScreenState extends State<InboxScreen> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(6),
-                      child: Image.network(
-                        'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=200&auto=format&fit=crop&q=80',
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: const Color(0xFF1E1E22),
-                          child: const Icon(
-                            Icons.videocam_rounded,
-                            color: Colors.white24,
-                            size: 20,
-                          ),
-                        ),
-                      ),
+                      child: _buildNotificationThumbnailWidget(item),
                     ),
                   ),
                 )

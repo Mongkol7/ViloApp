@@ -165,6 +165,13 @@ class VideoModel {
       final list = resolvedMediaUrls;
       return list.isNotEmpty ? list.first : videoUrl;
     }
+    final raw = videoUrl.trim();
+    if (raw.startsWith('assets/videos/vid') && raw.endsWith('.mp4')) {
+      final numStr = RegExp(r'vid(\d+)\.mp4').firstMatch(raw)?.group(1);
+      if (numStr != null) {
+        return 'assets/video_thumbnails/vid$numStr.jpg';
+      }
+    }
     return null;
   }
 

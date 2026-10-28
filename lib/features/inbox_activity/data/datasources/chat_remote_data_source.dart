@@ -64,10 +64,11 @@ class ChatRemoteDataSource {
     } catch (_) {
       // Fallback to static threads only if demo user
     }
-    final isDemoUser = TokenStorage.instance.isDemoUserSync;
-    if (isDemoUser ||
-        TokenStorage.instance.currentUserIdSync == null ||
-        TokenStorage.instance.currentUserIdSync == 1) {
+    final isDemoUser = (TokenStorage.instance.isDemoUserSync ||
+            TokenStorage.instance.currentUserIdSync == null) &&
+        (TokenStorage.instance.currentUsernameSync == null ||
+            TokenStorage.instance.currentUsernameSync == 'mongkol');
+    if (isDemoUser) {
       return StaticInboxData.threads;
     }
     return const [];

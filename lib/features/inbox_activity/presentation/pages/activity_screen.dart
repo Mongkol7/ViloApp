@@ -4,7 +4,6 @@ import '../../../../core/constants/app_colors.dart';
 import '../../data/datasources/notification_remote_data_source.dart';
 import '../../domain/entities/inbox_item.dart';
 import '../../../feed/presentation/pages/video_feed_page.dart';
-import '../../../feed/presentation/widgets/video_likes_bottom_sheet.dart';
 import '../../../feed/presentation/widgets/comment_bottom_sheet.dart';
 import '../../../profile/presentation/screens/public_profile_screen.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
@@ -85,7 +84,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
       hasActiveStory: true,
       actionText: 'liked your video.',
       timeAgo: '2m',
-      mediaThumbnailUrl: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=200&auto=format&fit=crop&q=80',
+      mediaThumbnailUrl: 'assets/video_thumbnails/vid1.jpg',
       type: 'like_video',
       videoIndex: 0,
       videoId: 1,
@@ -102,7 +101,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
       hasActiveStory: true,
       actionText: 'commented: "Mechanical keyboard sound is so satisfying ⌨️"',
       timeAgo: '2h',
-      mediaThumbnailUrl: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=200&auto=format&fit=crop&q=80',
+      mediaThumbnailUrl: 'assets/video_thumbnails/vid1.jpg',
       type: 'comment',
       videoIndex: 0,
       videoId: 1,
@@ -120,7 +119,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
       hasActiveStory: true,
       actionText: 'commented: "That clutch play was insane 🎯"',
       timeAgo: '4h',
-      mediaThumbnailUrl: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=200&auto=format&fit=crop&q=80',
+      mediaThumbnailUrl: 'assets/video_thumbnails/vid1.jpg',
       type: 'comment',
       videoIndex: 0,
       videoId: 1,
@@ -138,7 +137,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
       hasActiveStory: true,
       actionText: 'liked your video.',
       timeAgo: '7h',
-      mediaThumbnailUrl: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=200&auto=format&fit=crop&q=80',
+      mediaThumbnailUrl: 'assets/video_thumbnails/vid1.jpg',
       type: 'like_video',
       videoIndex: 0,
       videoId: 1,
@@ -323,7 +322,11 @@ class _ActivityScreenState extends State<ActivityScreen> {
   @override
   void initState() {
     super.initState();
-    _activities = List.from(_demoActivities);
+    final isDemo = (TokenStorage.instance.isDemoUserSync ||
+            TokenStorage.instance.currentUserIdSync == null) &&
+        (TokenStorage.instance.currentUsernameSync == null ||
+            TokenStorage.instance.currentUsernameSync == 'mongkol');
+    _activities = isDemo ? List.from(_demoActivities) : [];
     _loadRealActivities();
   }
 
@@ -342,25 +345,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
   }
 
   String _resolveVideoThumbnail(int? videoId) {
-    if (videoId != null && videoId > 0) {
-      for (final type in ['foryou', 'following', 'trending']) {
-        final cached = FeedRemoteDataSource.instance.getCachedFeed(type);
-        if (cached != null) {
-          final found = cached.where((v) => v.id == videoId).firstOrNull;
-          if (found != null && found.thumbnailUrl != null && found.thumbnailUrl!.trim().isNotEmpty) {
-            return found.thumbnailUrl!.trim();
-          }
-        }
-      }
-      final thumbs = [
-        'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=200&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=200&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1518770660439-4636190af475?w=200&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=200&auto=format&fit=crop&q=80',
-      ];
-      return thumbs[(videoId - 1).abs() % thumbs.length];
-    }
-    return 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=200&auto=format&fit=crop&q=80';
+    return FeedRemoteDataSource.instance.resolveVideoThumbnail(videoId);
   }
 
   Future<void> _loadRealActivities() async {
@@ -461,7 +446,11 @@ class _ActivityScreenState extends State<ActivityScreen> {
               hasActiveStory: hasStory,
               type: actType,
               videoId: parsedVidId,
-              commentContent: first.subtitle,
+              commentContent: (actType == 'comment' || actType == 'like_comment')
+                  ? (CommentBottomSheet.extractCleanCommentText(first.subtitle).isNotEmpty
+                      ? CommentBottomSheet.extractCleanCommentText(first.subtitle)
+                      : first.subtitle)
+                  : first.subtitle,
               actorId: first.actorId,
               actorUsername: first.actorUsername,
               entityId: first.entityId,
@@ -535,14 +524,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
     }
 
     if (activity.type == 'like_video') {
-      final vidId = activity.videoId ?? (int.tryParse(activity.entityId ?? '0') ?? 0);
-      VideoLikesBottomSheet.show(
-        context,
-        videoId: vidId,
-        initialLikeCount: (activity.userNames.length + activity.othersCount).clamp(1, 99999),
-        initialUserNames: activity.userNames,
-        initialUserAvatars: activity.userAvatarUrls,
-      );
+      _navigateToVideo(activity, openComments: false, openLikes: true);
       return;
     }
 
@@ -568,7 +550,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
     );
   }
 
-  void _navigateToVideo(ActivityModel activity, {bool openComments = true}) {
+  void _navigateToVideo(ActivityModel activity, {bool openComments = true, bool openLikes = false}) {
     setState(() => activity.isRead = true);
 
     Navigator.of(context).push(
@@ -579,9 +561,12 @@ class _ActivityScreenState extends State<ActivityScreen> {
           initialVideoId: activity.videoId ?? (int.tryParse(activity.entityId ?? '0') ?? 0),
           initialPage: activity.videoIndex,
           openCommentsOnStart: openComments,
+          openLikesOnStart: openLikes,
           initialCommentReplyUser: activity.actorUsername ?? activity.userName,
           initialCommentUserAvatar: activity.userAvatarUrl,
           initialCommentText: activity.commentContent,
+          initialLikeUserNames: activity.userNames,
+          initialLikeUserAvatars: activity.userAvatarUrls,
         ),
       ),
     );
@@ -706,7 +691,13 @@ class _ActivityScreenState extends State<ActivityScreen> {
               top: 2,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => _openUserProfile(name1, item.actorId, av1),
+                onTap: () {
+                  if (item.type == 'comment' || item.type == 'like_comment' || item.commentContent != null) {
+                    _handleActivityTap(item);
+                  } else {
+                    _openUserProfile(name1, item.actorId, av1);
+                  }
+                },
                 child: Container(
                   width: 32,
                   height: 32,
@@ -733,7 +724,13 @@ class _ActivityScreenState extends State<ActivityScreen> {
               top: 8,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => _openUserProfile(name2, null, av2),
+                onTap: () {
+                  if (item.type == 'comment' || item.type == 'like_comment' || item.commentContent != null) {
+                    _handleActivityTap(item);
+                  } else {
+                    _openUserProfile(name2, null, av2);
+                  }
+                },
                 child: Container(
                   width: 32,
                   height: 32,
@@ -763,7 +760,13 @@ class _ActivityScreenState extends State<ActivityScreen> {
     final avatarUrl = item.userAvatarUrls.isNotEmpty ? item.userAvatarUrls[0] : '';
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => _openUserProfile(item.userName, item.actorId, avatarUrl),
+      onTap: () {
+        if (item.type == 'comment' || item.type == 'like_comment' || item.commentContent != null) {
+          _handleActivityTap(item);
+        } else {
+          _openUserProfile(item.userName, item.actorId, avatarUrl);
+        }
+      },
       child: SizedBox(
         width: 48,
         height: 44,
@@ -811,7 +814,14 @@ class _ActivityScreenState extends State<ActivityScreen> {
       spans.add(TextSpan(
         text: name0,
         style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 13.5),
-        recognizer: TapGestureRecognizer()..onTap = () => _openUserProfile(name0, item.actorId, av0),
+        recognizer: TapGestureRecognizer()
+          ..onTap = () {
+            if (item.type == 'comment' || item.type == 'like_comment' || item.commentContent != null) {
+              _handleActivityTap(item);
+            } else {
+              _openUserProfile(name0, item.actorId, av0);
+            }
+          },
       ));
       if (item.othersCount > 0) {
         spans.add(const TextSpan(text: ' and ', style: TextStyle(fontWeight: FontWeight.w400, color: Color(0xFFD1D1D6), fontSize: 13.5)));
@@ -830,7 +840,14 @@ class _ActivityScreenState extends State<ActivityScreen> {
       spans.add(TextSpan(
         text: name0,
         style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 13.5),
-        recognizer: TapGestureRecognizer()..onTap = () => _openUserProfile(name0, item.actorId, av0),
+        recognizer: TapGestureRecognizer()
+          ..onTap = () {
+            if (item.type == 'comment' || item.type == 'like_comment' || item.commentContent != null) {
+              _handleActivityTap(item);
+            } else {
+              _openUserProfile(name0, item.actorId, av0);
+            }
+          },
       ));
       spans.add(TextSpan(
         text: item.othersCount > 0 ? ', ' : ' and ',
@@ -839,7 +856,14 @@ class _ActivityScreenState extends State<ActivityScreen> {
       spans.add(TextSpan(
         text: name1,
         style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 13.5),
-        recognizer: TapGestureRecognizer()..onTap = () => _openUserProfile(name1, null, av1),
+        recognizer: TapGestureRecognizer()
+          ..onTap = () {
+            if (item.type == 'comment' || item.type == 'like_comment' || item.commentContent != null) {
+              _handleActivityTap(item);
+            } else {
+              _openUserProfile(name1, null, av1);
+            }
+          },
       ));
       if (item.othersCount > 0) {
         spans.add(const TextSpan(text: ' and ', style: TextStyle(fontWeight: FontWeight.w400, color: Color(0xFFD1D1D6), fontSize: 13.5)));
@@ -996,7 +1020,11 @@ class _ActivityScreenState extends State<ActivityScreen> {
                         // Right: Clean Video Thumbnail
                         GestureDetector(
                           behavior: HitTestBehavior.opaque,
-                          onTap: () => _navigateToVideo(item, openComments: item.type != 'like_video'),
+                          onTap: () => _navigateToVideo(
+                            item,
+                            openComments: item.type != 'like_video',
+                            openLikes: item.type == 'like_video',
+                          ),
                           child: Container(
                             width: 44,
                             height: 56,

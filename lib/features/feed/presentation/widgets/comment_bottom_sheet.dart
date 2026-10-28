@@ -12,6 +12,7 @@ class CommentBottomSheet extends StatefulWidget {
   final int? videoCreatorId;
   final String? videoCreatorUsername;
   final int initialCommentCount;
+  final int initialLikeCount;
   final ValueChanged<int>? onCommentCountChanged;
   final String? initialReplyTo;
   final String? initialCommentUserAvatar;
@@ -23,6 +24,7 @@ class CommentBottomSheet extends StatefulWidget {
     this.videoCreatorId,
     this.videoCreatorUsername,
     this.initialCommentCount = 0,
+    this.initialLikeCount = 0,
     this.onCommentCountChanged,
     this.initialReplyTo,
     this.initialCommentUserAvatar,
@@ -89,6 +91,7 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
   bool _isLoading = true;
   bool _isPosting = false;
   int _commentCount = 0;
+  late int _likeCount;
   int? _replyToParentId;
   String? _replyToUsername;
 
@@ -96,12 +99,28 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
   void initState() {
     super.initState();
     _commentCount = widget.initialCommentCount;
+    _likeCount = widget.initialLikeCount;
     if (widget.initialReplyTo != null && widget.initialReplyTo!.isNotEmpty) {
       _replyToUsername = widget.initialReplyTo;
       _commentController.text = '@${widget.initialReplyTo} ';
     }
     _loadComments();
+    _loadLikesCount();
     _ensureUserProfile();
+  }
+
+  Future<void> _loadLikesCount() async {
+    if (widget.videoId == null) return;
+    try {
+      final likes = await _dataSource.getVideoLikes(widget.videoId!);
+      if (mounted && likes.isNotEmpty) {
+        setState(() {
+          if (likes.length > _likeCount) {
+            _likeCount = likes.length;
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _ensureUserProfile() async {
@@ -174,6 +193,13 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
           createdAt: DateTime.now(),
         ),
       );
+    } else {
+      // Bring their comment directly to the top so the user immediately sees it
+      final hlIdx = _comments.indexWhere(_isCommentHighlighted);
+      if (hlIdx > 0) {
+        final hlComment = _comments.removeAt(hlIdx);
+        _comments.insert(0, hlComment);
+      }
     }
   }
 
@@ -196,7 +222,8 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
     if (widget.initialReplyTo != null && widget.initialReplyTo!.isNotEmpty) {
       final u = widget.initialReplyTo!.toLowerCase().replaceAll('@', '').trim();
       final cu = comment.username.toLowerCase().replaceAll('@', '').trim();
-      if (cu == u && content.isNotEmpty && target.contains(content)) {
+      final cdn = comment.displayName.toLowerCase().replaceAll('@', '').trim();
+      if ((cu == u || cdn == u) && (target.isEmpty || content.contains(target) || target.contains(content))) {
         return true;
       }
     }
@@ -206,12 +233,19 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
   void _scrollToHighlightedComment() {
     void tryScroll() {
       if (!mounted) return;
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
       if (_highlightKey.currentContext != null) {
         Scrollable.ensureVisible(
           _highlightKey.currentContext!,
           duration: const Duration(milliseconds: 350),
           curve: Curves.easeInOut,
-          alignment: 0.25,
+          alignment: 0.15,
         );
       }
     }
@@ -228,6 +262,42 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
       CommentModel(
         id: 1001,
         videoId: widget.videoId ?? 1,
+        userId: 201,
+        username: 'toki_beauty',
+        displayName: 'TOki ស្រីស្អាត',
+        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+        content: 'បងញុមសុំពែង1ញុមចង់ទិញស្គីនចង់មានស្គីនលេងដូចគេណាស់ 🥺',
+        attachmentUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&auto=format&fit=crop&q=80',
+        createdAt: DateTime.now().subtract(const Duration(minutes: 6)),
+        likesCount: 14,
+      ),
+      CommentModel(
+        id: 1002,
+        videoId: widget.videoId ?? 1,
+        userId: 202,
+        username: 'yueer',
+        displayName: 'Yue\'er',
+        avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
+        content: 'serj pin rk rg ke mg player grg muy jnun',
+        attachmentUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500&auto=format&fit=crop&q=80',
+        createdAt: DateTime.now().subtract(const Duration(minutes: 6)),
+        likesCount: 9,
+      ),
+      CommentModel(
+        id: 1003,
+        videoId: widget.videoId ?? 1,
+        userId: 203,
+        username: 'hokage',
+        displayName: 'hOkAGE',
+        avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+        content: '',
+        attachmentUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500&auto=format&fit=crop&q=80',
+        createdAt: DateTime.now().subtract(const Duration(minutes: 12)),
+        likesCount: 6,
+      ),
+      CommentModel(
+        id: 1004,
+        videoId: widget.videoId ?? 1,
         userId: 2,
         username: 'setkimliza',
         displayName: 'Set Kimliza',
@@ -237,18 +307,18 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
         likesCount: 12,
       ),
       CommentModel(
-        id: 1002,
+        id: 1005,
         videoId: widget.videoId ?? 1,
         userId: 5,
         username: 'trenmono',
         displayName: 'Tren Mono',
         avatarUrl: ProfileSyncService.getDefaultAvatarForUser('trenmono'),
-        content: 'That clutch play was insane 🎯',
+        content: 'That clutch play was insane 🎯 clutch 1v3',
         createdAt: DateTime.now().subtract(const Duration(hours: 4)),
         likesCount: 8,
       ),
       CommentModel(
-        id: 1003,
+        id: 1006,
         videoId: widget.videoId ?? 1,
         userId: 99,
         username: 's1',
@@ -259,7 +329,7 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
         likesCount: 15,
       ),
       CommentModel(
-        id: 1004,
+        id: 1007,
         videoId: widget.videoId ?? 1,
         userId: 7,
         username: 'sophia_art',
@@ -268,6 +338,28 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
         content: 'Fluid animation and 60fps feed 🚀',
         createdAt: DateTime.now().subtract(const Duration(hours: 9)),
         likesCount: 5,
+      ),
+      CommentModel(
+        id: 1008,
+        videoId: widget.videoId ?? 1,
+        userId: 3,
+        username: 'bunheng',
+        displayName: 'Bunheng',
+        avatarUrl: ProfileSyncService.getDefaultAvatarForUser('bunheng'),
+        content: 'Bro the reflex timing is crazy ✨',
+        createdAt: DateTime.now().subtract(const Duration(hours: 10)),
+        likesCount: 7,
+      ),
+      CommentModel(
+        id: 1009,
+        videoId: widget.videoId ?? 1,
+        userId: 4,
+        username: 'rithysak',
+        displayName: 'Rithysak',
+        avatarUrl: ProfileSyncService.getDefaultAvatarForUser('rithysak'),
+        content: 'Build item oy khnh som 1 tv idol 🥺🔥',
+        createdAt: DateTime.now().subtract(const Duration(hours: 11)),
+        likesCount: 11,
       ),
     ];
   }
@@ -487,24 +579,29 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                     ),
                   ],
                 ),
-                const SizedBox(width: 24),
+                const SizedBox(width: 20),
                 // Likes Tab (Tappable)
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () {
                     Navigator.pop(context);
                     if (widget.videoId != null) {
-                      VideoLikesBottomSheet.show(context, videoId: widget.videoId!);
+                      VideoLikesBottomSheet.show(
+                        context,
+                        videoId: widget.videoId!,
+                        initialLikeCount: _likeCount,
+                        initialCommentCount: _commentCount,
+                      );
                     }
                   },
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8.0),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
                         child: Text(
-                          'Likes',
-                          style: TextStyle(
+                          'Likes $_likeCount',
+                          style: const TextStyle(
                             fontFamily: 'Inter',
                             color: Color(0xFF8E8E93),
                             fontSize: 16,
@@ -523,7 +620,12 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                     ],
                   ),
                 ),
+
                 const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.tune_rounded, color: Colors.white70, size: 22),
+                  onPressed: () {},
+                ),
                 IconButton(
                   icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 24),
                   onPressed: () => Navigator.pop(context),
@@ -682,10 +784,28 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                             onSubmitted: (_) => _submitComment(),
                           ),
                         ),
-                        Icon(
-                          Icons.emoji_emotions_outlined,
-                          color: Colors.white.withValues(alpha: 0.8),
-                          size: 20,
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            _commentController.text += '😊';
+                          },
+                          child: Icon(
+                            Icons.emoji_emotions_outlined,
+                            color: Colors.white.withValues(alpha: 0.8),
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            _commentController.text += '@';
+                          },
+                          child: Icon(
+                            Icons.alternate_email_rounded,
+                            color: Colors.white.withValues(alpha: 0.8),
+                            size: 19,
+                          ),
                         ),
                       ],
                     ),
@@ -747,11 +867,14 @@ class _CommentCard extends StatefulWidget {
 class _CommentCardState extends State<_CommentCard> {
   bool _showReplies = false;
   bool _isLiked = false;
+  bool _isDisliked = false;
   int _likes = 0;
 
   @override
   void initState() {
     super.initState();
+    _likes = widget.comment.likesCount;
+    _isDisliked = widget.comment.isDisliked;
     _checkAndExpandReplies();
   }
 
@@ -901,15 +1024,35 @@ class _CommentCardState extends State<_CommentCard> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      comment.content,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        height: 1.3,
+                    if (comment.content.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        comment.content,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          height: 1.3,
+                        ),
                       ),
-                    ),
+                    ],
+                    if (comment.attachmentUrl != null && comment.attachmentUrl!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          constraints: const BoxConstraints(maxHeight: 180, maxWidth: 220),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.white12, width: 0.8),
+                          ),
+                          child: Image.network(
+                            comment.attachmentUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -949,32 +1092,56 @@ class _CommentCardState extends State<_CommentCard> {
                 ),
               ),
 
-              // Like Heart
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _isLiked = !_isLiked;
-                    _likes += _isLiked ? 1 : -1;
-                  });
-                },
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 8.0),
-                  child: Column(
-                    children: [
-                      Icon(
-                        _isLiked ? Icons.favorite : Icons.favorite_border,
-                        color: _isLiked ? Colors.red : Colors.white54,
-                        size: 16,
+              // Like Heart & Thumbs Down Dislike
+              Padding(
+                padding: const EdgeInsets.only(left: 8.0, top: 4.0),
+                child: Column(
+                  children: [
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        setState(() {
+                          _isLiked = !_isLiked;
+                          _likes += _isLiked ? 1 : -1;
+                          if (_isLiked) _isDisliked = false;
+                        });
+                      },
+                      child: Column(
+                        children: [
+                          Icon(
+                            _isLiked ? Icons.favorite : Icons.favorite_border,
+                            color: _isLiked ? const Color(0xFFFE2C55) : Colors.white54,
+                            size: 16,
+                          ),
+                          if (_likes > 0) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              '$_likes',
+                              style: const TextStyle(color: Colors.white54, fontSize: 11),
+                            ),
+                          ],
+                        ],
                       ),
-                      if (_likes > 0) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          '$_likes',
-                          style: const TextStyle(color: Colors.white54, fontSize: 11),
-                        ),
-                      ],
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        setState(() {
+                          _isDisliked = !_isDisliked;
+                          if (_isDisliked && _isLiked) {
+                            _isLiked = false;
+                            _likes = (_likes - 1).clamp(0, 999999);
+                          }
+                        });
+                      },
+                      child: Icon(
+                        _isDisliked ? Icons.thumb_down : Icons.thumb_down_outlined,
+                        color: _isDisliked ? Colors.white70 : Colors.white38,
+                        size: 15,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -1168,7 +1335,7 @@ class _CommentCardState extends State<_CommentCard> {
 
     if (widget.isHighlighted) {
       return Container(
-        key: hasMatchingReply ? null : widget.highlightKey,
+        key: widget.highlightKey,
         margin: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
         decoration: BoxDecoration(
           color: const Color(0x1F2F80ED),

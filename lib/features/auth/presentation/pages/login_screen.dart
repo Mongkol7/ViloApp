@@ -12,6 +12,8 @@ import '../../data/datasources/token_storage.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../../profile/data/datasources/profile_remote_data_source.dart';
 import '../../../inbox_activity/data/datasources/chat_manager.dart';
+import '../../../inbox_activity/data/datasources/thought_story_manager.dart';
+import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 
@@ -120,6 +122,10 @@ class _LoginScreenState extends State<LoginScreen>
         password: _passwordCtrl.text,
       );
 
+      ProfileSyncService.instance.clear();
+      ProfileSyncService.instance.clearSession();
+      FeedRemoteDataSource.instance.clearCache();
+      ThoughtStoryManager.instance.deleteStory();
       ProfileSyncService.instance.setCurrentUser(user);
       ChatManager.instance.switchUser(user.id);
 

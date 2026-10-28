@@ -7,7 +7,6 @@ import '../../data/datasources/feed_remote_data_source.dart';
 import '../../data/models/video_model.dart';
 import '../controllers/video_feed_manager.dart';
 import '../widgets/share_bottom_sheet.dart';
-import '../widgets/comment_bottom_sheet.dart';
 import '../widgets/video_likes_bottom_sheet.dart';
 import 'sound_detail_page.dart';
 import '../../../auth/data/models/user_model.dart';
@@ -25,6 +24,8 @@ class VideoFeedPage extends StatefulWidget {
   final String? initialCommentUserAvatar;
   final String? initialCommentText;
   final bool openLikesOnStart;
+  final List<String>? initialLikeUserNames;
+  final List<String>? initialLikeUserAvatars;
   final bool isStandalone;
   final String feedType; // 'FOR_YOU' or 'FOLLOWING'
   final int refreshToken;
@@ -43,6 +44,8 @@ class VideoFeedPage extends StatefulWidget {
     this.initialCommentUserAvatar,
     this.initialCommentText,
     this.openLikesOnStart = false,
+    this.initialLikeUserNames,
+    this.initialLikeUserAvatars,
     this.isStandalone = false,
     this.feedType = 'FOR_YOU',
     this.refreshToken = 0,
@@ -110,9 +113,26 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
       // Instant zero-latency display if feed is already in memory cache
       final cached = _dataSource.getCachedFeed(widget.feedType);
       if (cached != null && cached.isNotEmpty) {
-        _videos = cached;
+        _videos = List.from(cached);
         _addToForYouReplayPool(cached);
         _isLoading = false;
+      }
+
+      // If a specific video is requested, ensure it is in _videos immediately
+      if (widget.initialVideoId != null && !_videos.any((v) => v.id == widget.initialVideoId)) {
+        final allCached = _dataSource.getAllCachedVideos();
+        final match = allCached.where((v) => v.id == widget.initialVideoId).firstOrNull;
+        if (match != null) {
+          _videos.insert(0, match);
+          _isLoading = false;
+        } else {
+          final fallback = _dataSource.getFallbackVideos();
+          final matchFb = fallback.where((v) => v.id == widget.initialVideoId).firstOrNull;
+          if (matchFb != null) {
+            _videos.insert(0, matchFb);
+            _isLoading = false;
+          }
+        }
       }
 
       int matchIdx = -1;
@@ -138,20 +158,20 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
               )
             : currentVideo;
         final targetVidId = widget.initialVideoId ?? effectiveVideo?.id;
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (context) => CommentBottomSheet(
+        if (targetVidId != null) {
+          VideoLikesBottomSheet.show(
+            context,
             videoId: targetVidId,
             videoCreatorId: effectiveVideo?.creatorId,
             videoCreatorUsername: effectiveVideo?.username,
             initialCommentCount: effectiveVideo?.commentCount ?? 0,
+            initialLikeCount: effectiveVideo?.likeCount ?? 0,
+            initialTab: 0,
             initialReplyTo: widget.initialCommentReplyUser,
             initialCommentUserAvatar: widget.initialCommentUserAvatar,
             highlightCommentText: widget.initialCommentText,
-          ),
-        );
+          );
+        }
       });
     }
 
@@ -173,6 +193,10 @@ class _VideoFeedPageState extends State<VideoFeedPage> with AutomaticKeepAliveCl
             context,
             videoId: targetVidId,
             initialLikeCount: effectiveVideo?.likeCount ?? 0,
+            initialCommentCount: effectiveVideo?.commentCount ?? 0,
+            initialUserNames: widget.initialLikeUserNames,
+            initialUserAvatars: widget.initialLikeUserAvatars,
+            initialTab: 1,
           );
         }
       });
@@ -1808,11 +1832,15 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                   context,
                   videoId: video.id,
                   initialLikeCount: video.likeCount,
+                  initialCommentCount: video.commentCount,
+                  initialTab: 1,
                 ),
                 onLabelTap: () => VideoLikesBottomSheet.show(
                   context,
                   videoId: video.id,
                   initialLikeCount: video.likeCount,
+                  initialCommentCount: video.commentCount,
+                  initialTab: 1,
                 ),
               ),
 
@@ -1821,17 +1849,15 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                 icon: Icons.comment,
                 label: video.formattedComments,
                 onTap: () {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (context) => CommentBottomSheet(
-                      videoId: video.id,
-                      videoCreatorId: video.creatorId,
-                      videoCreatorUsername: video.username,
-                      initialCommentCount: video.commentCount,
-                      onCommentCountChanged: widget.onCommentCountChanged,
-                    ),
+                  VideoLikesBottomSheet.show(
+                    context,
+                    videoId: video.id,
+                    initialCommentCount: video.commentCount,
+                    initialLikeCount: video.likeCount,
+                    initialTab: 0,
+                    videoCreatorId: video.creatorId,
+                    videoCreatorUsername: video.username,
+                    onCommentCountChanged: widget.onCommentCountChanged,
                   );
                 },
               ),
