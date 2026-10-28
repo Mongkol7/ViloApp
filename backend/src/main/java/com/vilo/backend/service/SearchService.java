@@ -74,8 +74,21 @@ public class SearchService {
             List<User> users = userQuery.isEmpty()
                     ? userRepository.findAll(PageRequest.of(0, 10)).getContent()
                     : userRepository.searchUsers(userQuery, PageRequest.of(0, 10));
+            Set<Long> currentUserFollowingIds = Collections.emptySet();
+            if (username != null && !username.isBlank()) {
+                currentUserFollowingIds = userRepository.findByUsername(username)
+                        .map(user -> user.getFollowing().stream()
+                                .map(User::getId)
+                                .collect(Collectors.toSet()))
+                        .orElse(Collections.emptySet());
+            }
+            final Set<Long> followingIds = currentUserFollowingIds;
             List<UserResponse> userDtos = users.stream()
-                    .map(UserResponse::fromEntitySummary)
+                    .map(user -> {
+                        UserResponse responseUser = UserResponse.fromEntitySummary(user);
+                        responseUser.setIsFollowing(followingIds.contains(user.getId()));
+                        return responseUser;
+                    })
                     .collect(Collectors.toList());
             response.setUsers(userDtos);
 

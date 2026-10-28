@@ -17,6 +17,13 @@ public class ChatMessageRequest {
     private String orderReference;
     private String productPrice;
     private String imageUrl;
+    private String contentType;
+    private String linkUrl;
+    private Long sharedVideoId;
+    private String sharedVideoUrl;
+    private String sharedVideoThumbnailUrl;
+    private String sharedVideoCreator;
+    private String sharedVideoCaption;
 
     public ChatMessageRequest() {}
 
@@ -92,4 +99,25 @@ public class ChatMessageRequest {
     public void setImageUrl(String imageUrl) {
         this.imageUrl = imageUrl;
     }
+
+    public String getContentType() { return contentType; }
+    public void setContentType(String contentType) { this.contentType = contentType; }
+
+    public String getLinkUrl() { return linkUrl; }
+    public void setLinkUrl(String linkUrl) { this.linkUrl = linkUrl; }
+
+    public Long getSharedVideoId() { return sharedVideoId; }
+    public void setSharedVideoId(Long sharedVideoId) { this.sharedVideoId = sharedVideoId; }
+
+    public String getSharedVideoUrl() { return sharedVideoUrl; }
+    public void setSharedVideoUrl(String sharedVideoUrl) { this.sharedVideoUrl = sharedVideoUrl; }
+
+    public String getSharedVideoThumbnailUrl() { return sharedVideoThumbnailUrl; }
+    public void setSharedVideoThumbnailUrl(String sharedVideoThumbnailUrl) { this.sharedVideoThumbnailUrl = sharedVideoThumbnailUrl; }
+
+    public String getSharedVideoCreator() { return sharedVideoCreator; }
+    public void setSharedVideoCreator(String sharedVideoCreator) { this.sharedVideoCreator = sharedVideoCreator; }
+
+    public String getSharedVideoCaption() { return sharedVideoCaption; }
+    public void setSharedVideoCaption(String sharedVideoCaption) { this.sharedVideoCaption = sharedVideoCaption; }
 }

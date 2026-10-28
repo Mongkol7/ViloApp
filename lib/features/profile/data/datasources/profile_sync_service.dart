@@ -133,6 +133,8 @@ class ProfileSyncService {
         avatarUrl: user.avatarUrl,
         email: user.email,
         bio: user.bio,
+        followersCount: user.followersCount,
+        followingCount: user.followingCount,
       );
       profileUpdatedEvents.value = user;
     }
@@ -237,7 +239,20 @@ class ProfileSyncService {
     mockFollowingCount = (mockFollowingCount + delta).clamp(0, 999999999);
     if (cachedMyProfile != null) {
       final updatedFollowing = (cachedMyProfile!.followingCount + delta).clamp(0, 999999999);
-      cachedMyProfile = cachedMyProfile!.copyWith(followingCount: updatedFollowing);
+      // Keep the canonical cached value in sync without emitting
+      // profileUpdatedEvents. The follow event below is the single UI counter
+      // update; emitting both events would count one follow twice.
+      _cachedMyProfile = cachedMyProfile!.copyWith(followingCount: updatedFollowing);
+      TokenStorage.instance.saveUserData(
+        id: _cachedMyProfile!.id,
+        username: _cachedMyProfile!.username,
+        displayName: _cachedMyProfile!.displayName,
+        avatarUrl: _cachedMyProfile!.avatarUrl,
+        email: _cachedMyProfile!.email,
+        bio: _cachedMyProfile!.bio,
+        followersCount: _cachedMyProfile!.followersCount,
+        followingCount: _cachedMyProfile!.followingCount,
+      );
     }
 
     // Update cachedFollowing in place if available

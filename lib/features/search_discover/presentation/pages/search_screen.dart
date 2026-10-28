@@ -5,6 +5,7 @@ import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../../feed/presentation/pages/sound_detail_page.dart';
 import '../../../feed/presentation/pages/video_feed_page.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
+import '../../../profile/data/datasources/profile_remote_data_source.dart';
 import '../../../profile/presentation/screens/public_profile_screen.dart';
 import '../../data/datasources/search_remote_data_source.dart';
 import '../../data/datasources/static_search_data.dart';
@@ -191,16 +192,44 @@ class _SearchScreenState extends State<SearchScreen> {
     return score;
   }
 
-  void _toggleFollow(int index) {
-    setState(() {
-      final account = _accounts[index];
-      final newFollowState = !account.isFollowed;
-      _accounts[index] = account.copyWith(isFollowed: newFollowState);
-      ProfileSyncService.instance.notifyFollowChanged(
-        targetUserId: int.tryParse(account.id) ?? 0,
-        isFollowing: newFollowState,
+  Future<void> _toggleFollow(int index) async {
+    final account = _accounts[index];
+    final targetId = int.tryParse(account.id);
+    if (targetId == null || targetId <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This account is not available right now.')),
       );
+      return;
+    }
+
+    final newFollowState = !account.isFollowed;
+    setState(() {
+      _accounts[index] = account.copyWith(isFollowed: newFollowState);
     });
+
+    try {
+      final serverFollowState = newFollowState
+          ? await ProfileRemoteDataSource.instance.toggleFollow(targetId)
+          : await ProfileRemoteDataSource.instance.unfollow(targetId);
+      if (!mounted) return;
+      if (serverFollowState != newFollowState) {
+        setState(() {
+          _accounts[index] = account.copyWith(isFollowed: serverFollowState);
+        });
+      }
+      ProfileSyncService.instance.notifyFollowChanged(
+        targetUserId: targetId,
+        isFollowing: serverFollowState,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _accounts[index] = account;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update follow: $error')),
+      );
+    }
   }
 
   void _toggleBookmark(int index) {
@@ -730,6 +759,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     username: cleanUsername,
                     displayName: effectiveDisplayName,
                     avatarUrl: effectiveAvatarUrl,
+                    isFollowing: account.isFollowed,
                     initialVideos: cached,
                   ),
                 ),
@@ -774,6 +804,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       username: cleanUsername,
                       displayName: effectiveDisplayName,
                       avatarUrl: effectiveAvatarUrl,
+                      isFollowing: account.isFollowed,
                       initialVideos: cached,
                     ),
                   ),

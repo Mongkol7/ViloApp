@@ -44,7 +44,8 @@ class PublicProfileScreen extends StatefulWidget {
   State<PublicProfileScreen> createState() => _PublicProfileScreenState();
 }
 
-class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTickerProviderStateMixin {
+class _PublicProfileScreenState extends State<PublicProfileScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   late bool _isFollowing;
   int _followersCount = 0;
@@ -55,6 +56,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
   List<VideoFeedModel> _likedVideos = [];
   List<Product> _userProducts = [];
   bool _isLoading = false;
+  bool _isFollowUpdating = false;
   final Set<int> _loadingCategories = <int>{};
 
   @override
@@ -62,10 +64,16 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
     super.initState();
     _tabController = TabController(length: 5, vsync: this, initialIndex: 1);
     _isFollowing = widget.isFollowing;
-    ProfileSyncService.instance.videoInteractionEvents.addListener(_onVideoInteractionEvent);
+    ProfileSyncService.instance.videoInteractionEvents.addListener(
+      _onVideoInteractionEvent,
+    );
     ProfileSyncService.instance.videoDeletedEvents.addListener(_onVideoDeleted);
-    ProfileSyncService.instance.productUploadedEvents.addListener(_onProductUploaded);
-    ShopService.instance.publishedProductNotifier.addListener(_onProductUploaded);
+    ProfileSyncService.instance.productUploadedEvents.addListener(
+      _onProductUploaded,
+    );
+    ShopService.instance.publishedProductNotifier.addListener(
+      _onProductUploaded,
+    );
 
     // Zero-latency instant load: Check initialVideos or in-memory cache
     final identifier = (widget.username != null && widget.username!.isNotEmpty)
@@ -75,8 +83,8 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
     final cachedUser = identifier != null
         ? ProfileRemoteDataSource.instance.getCachedUser(identifier)
         : (widget.userId != null
-            ? ProfileRemoteDataSource.instance.getCachedUser(widget.userId)
-            : null);
+              ? ProfileRemoteDataSource.instance.getCachedUser(widget.userId)
+              : null);
 
     if (cachedUser != null) {
       _loadedUser = cachedUser;
@@ -84,18 +92,32 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
       _followersCount = cachedUser.followersCount;
     }
 
-    final cachedVideos = widget.initialVideos ??
-        (identifier != null ? FeedRemoteDataSource.instance.getCachedUserVideos(identifier) : null) ??
-        (widget.username != null ? FeedRemoteDataSource.instance.getCachedUserVideos(widget.username!) : null) ??
-        (widget.userId != null ? FeedRemoteDataSource.instance.getCachedUserVideos(widget.userId.toString()) : null);
+    final cachedVideos =
+        widget.initialVideos ??
+        (identifier != null
+            ? FeedRemoteDataSource.instance.getCachedUserVideos(identifier)
+            : null) ??
+        (widget.username != null
+            ? FeedRemoteDataSource.instance.getCachedUserVideos(
+                widget.username!,
+              )
+            : null) ??
+        (widget.userId != null
+            ? FeedRemoteDataSource.instance.getCachedUserVideos(
+                widget.userId.toString(),
+              )
+            : null);
 
     if (cachedVideos != null && cachedVideos.isNotEmpty) {
       _userVideos = List.from(cachedVideos);
     }
 
-    ProfileSyncService.instance.interactionEvents.addListener(_onInteractionEvent);
+    ProfileSyncService.instance.interactionEvents.addListener(
+      _onInteractionEvent,
+    );
 
-    if (widget.userId != null || (widget.username != null && widget.username!.isNotEmpty)) {
+    if (widget.userId != null ||
+        (widget.username != null && widget.username!.isNotEmpty)) {
       _fetchPublicProfile();
     }
   }
@@ -107,7 +129,8 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
   }
 
   void _onProductUploaded() {
-    final product = ProfileSyncService.instance.productUploadedEvents.value ??
+    final product =
+        ProfileSyncService.instance.productUploadedEvents.value ??
         ShopService.instance.publishedProductNotifier.value;
     if (!mounted || product == null) return;
 
@@ -115,7 +138,9 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
     final sellerName = (widget.username ?? _loadedUser?.username ?? '')
         .replaceAll('@', '')
         .toLowerCase();
-    final productSeller = (product.seller ?? '').replaceAll('@', '').toLowerCase();
+    final productSeller = (product.seller ?? '')
+        .replaceAll('@', '')
+        .toLowerCase();
     if (product.sellerId != sellerId &&
         (sellerName.isEmpty || productSeller != sellerName)) {
       return;
@@ -140,53 +165,77 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
     try {
       // Execute profile fetch, sounds, postings, saved, and liked concurrently
       await Future.wait([
-        ProfileRemoteDataSource.instance.getUser(identifier).then((user) {
-          if (mounted) {
-            setState(() {
-              _loadedUser = user;
-              _isFollowing = user.isFollowing;
-              _followersCount = user.followersCount;
-            });
-          }
-        }).catchError((_) {}),
-FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then((videos) {
-          if (mounted) {
-            setState(() {
-              _userVideos = videos.isNotEmpty ? videos : (widget.initialVideos ?? []);
-            });
-          }
-        }).catchError((_) {}),
-        FeedRemoteDataSource.instance.getUserSounds(identifier).then((sounds) {
-          if (mounted) {
-            setState(() => _userSounds = sounds);
-          }
-        }).catchError((_) {}),
-        FeedRemoteDataSource.instance.getUserSavedVideos(identifier).then((saved) {
-          if (mounted) {
-            setState(() => _savedVideos = saved);
-          }
-        }).catchError((_) {}),
-        FeedRemoteDataSource.instance.getUserLikedVideos(identifier).then((liked) {
-          if (mounted) {
-            setState(() => _likedVideos = liked);
-          }
-        }).catchError((_) {}),
+        ProfileRemoteDataSource.instance
+            .getUser(identifier)
+            .then((user) {
+              if (mounted) {
+                setState(() {
+                  _loadedUser = user;
+                  _isFollowing = user.isFollowing;
+                  _followersCount = user.followersCount;
+                });
+              }
+            })
+            .catchError((_) {}),
+        FeedRemoteDataSource.instance
+            .getUserVideos(identifier, forceRefresh: true)
+            .then((videos) {
+              if (mounted) {
+                setState(() {
+                  _userVideos = videos.isNotEmpty
+                      ? videos
+                      : (widget.initialVideos ?? []);
+                });
+              }
+            })
+            .catchError((_) {}),
+        FeedRemoteDataSource.instance
+            .getUserSounds(identifier)
+            .then((sounds) {
+              if (mounted) {
+                setState(() => _userSounds = sounds);
+              }
+            })
+            .catchError((_) {}),
+        FeedRemoteDataSource.instance
+            .getUserSavedVideos(identifier)
+            .then((saved) {
+              if (mounted) {
+                setState(() => _savedVideos = saved);
+              }
+            })
+            .catchError((_) {}),
+        FeedRemoteDataSource.instance
+            .getUserLikedVideos(identifier)
+            .then((liked) {
+              if (mounted) {
+                setState(() => _likedVideos = liked);
+              }
+            })
+            .catchError((_) {}),
       ]);
 
-      if (ProfileSyncService.instance.isCurrentUser(username: widget.username, id: widget.userId?.toString() ?? identifier)) {
-        FeedRemoteDataSource.instance.getSavedVideos().then((saved) {
-          if (mounted) {
-            setState(() {
-              _savedVideos = List.from(saved);
-            });
-          }
-        }).catchError((_) {});
+      if (ProfileSyncService.instance.isCurrentUser(
+        username: widget.username,
+        id: widget.userId?.toString() ?? identifier,
+      )) {
+        FeedRemoteDataSource.instance
+            .getSavedVideos()
+            .then((saved) {
+              if (mounted) {
+                setState(() {
+                  _savedVideos = List.from(saved);
+                });
+              }
+            })
+            .catchError((_) {});
       }
 
       final sellerId = _loadedUser?.id ?? widget.userId;
       if (sellerId != null && sellerId > 0) {
-        final products = await ShopService.instance
-            .getProductsForSeller(sellerId.toString());
+        final products = await ShopService.instance.getProductsForSeller(
+          sellerId.toString(),
+        );
         if (mounted) setState(() => _userProducts = products);
       }
     } finally {
@@ -195,7 +244,8 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
   }
 
   Future<void> _refreshCategory(int categoryIndex) async {
-    if (categoryIndex < 0 || categoryIndex > 4 ||
+    if (categoryIndex < 0 ||
+        categoryIndex > 4 ||
         _loadingCategories.contains(categoryIndex)) {
       return;
     }
@@ -205,7 +255,9 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
         : widget.userId?.toString();
     if (identifier == null) return;
 
-    final minimumAnimation = Future<void>.delayed(const Duration(milliseconds: 450));
+    final minimumAnimation = Future<void>.delayed(
+      const Duration(milliseconds: 450),
+    );
     setState(() => _loadingCategories.add(categoryIndex));
     try {
       switch (categoryIndex) {
@@ -219,8 +271,9 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
         case 2:
           final sellerId = _loadedUser?.id ?? widget.userId;
           if (sellerId != null && sellerId > 0) {
-            final products = await ShopService.instance
-                .getProductsForSeller(sellerId.toString());
+            final products = await ShopService.instance.getProductsForSeller(
+              sellerId.toString(),
+            );
             if (mounted) setState(() => _userProducts = products);
           }
           break;
@@ -234,7 +287,9 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
           }
           break;
         case 4:
-          final liked = await FeedRemoteDataSource.instance.getLikedVideos(userId: identifier);
+          final liked = await FeedRemoteDataSource.instance.getLikedVideos(
+            userId: identifier,
+          );
           if (mounted) setState(() => _likedVideos = List.from(liked));
           break;
       }
@@ -256,7 +311,10 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
           const ColoredBox(
             color: Color(0x66000000),
             child: Center(
-              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2.2,
+              ),
             ),
           ),
       ],
@@ -265,12 +323,22 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
 
   @override
   void dispose() {
-    ProfileSyncService.instance.videoInteractionEvents.removeListener(_onVideoInteractionEvent);
-    ProfileSyncService.instance.videoDeletedEvents.removeListener(_onVideoDeleted);
-    ProfileSyncService.instance.productUploadedEvents.removeListener(_onProductUploaded);
-    ShopService.instance.publishedProductNotifier.removeListener(_onProductUploaded);
+    ProfileSyncService.instance.videoInteractionEvents.removeListener(
+      _onVideoInteractionEvent,
+    );
+    ProfileSyncService.instance.videoDeletedEvents.removeListener(
+      _onVideoDeleted,
+    );
+    ProfileSyncService.instance.productUploadedEvents.removeListener(
+      _onProductUploaded,
+    );
+    ShopService.instance.publishedProductNotifier.removeListener(
+      _onProductUploaded,
+    );
     _tabController.dispose();
-    ProfileSyncService.instance.interactionEvents.removeListener(_onInteractionEvent);
+    ProfileSyncService.instance.interactionEvents.removeListener(
+      _onInteractionEvent,
+    );
     super.dispose();
   }
 
@@ -330,15 +398,58 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
       Navigator.of(context).pop();
     } else {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const MainNavigationShell(initialIndex: 0)),
+        MaterialPageRoute(
+          builder: (_) => const MainNavigationShell(initialIndex: 0),
+        ),
         (route) => false,
       );
     }
   }
 
   Future<void> _handleToggleFollow() async {
+    if (_isFollowUpdating || !mounted) return;
     HapticFeedback.lightImpact();
+
+    var targetUid = _loadedUser?.id ?? widget.userId;
+    if (targetUid == null || targetUid <= 0) {
+      final identifier = widget.username?.trim();
+      if (identifier == null || identifier.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to identify this account.')),
+        );
+        return;
+      }
+
+      setState(() => _isFollowUpdating = true);
+      try {
+        final user = await ProfileRemoteDataSource.instance.getUser(identifier);
+        targetUid = user.id;
+        if (targetUid <= 0) {
+          throw StateError('The account has no valid user ID.');
+        }
+        if (mounted) {
+          setState(() {
+            _loadedUser = user;
+            _followersCount = user.followersCount;
+            _isFollowing = user.isFollowing;
+          });
+        }
+      } catch (error) {
+        if (mounted) {
+          setState(() => _isFollowUpdating = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not load this account: $error')),
+          );
+        }
+        return;
+      }
+    }
+
+    final followTargetId = targetUid;
+    if (followTargetId <= 0) return;
+
     final newFollowState = !_isFollowing;
+    setState(() => _isFollowUpdating = true);
     setState(() {
       _isFollowing = newFollowState;
       if (newFollowState) {
@@ -348,44 +459,61 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
       }
     });
 
-    final targetUid = _loadedUser?.id ?? widget.userId;
     // Broadcast follow change immediately so own profile followingCount updates
     ProfileSyncService.instance.notifyFollowChanged(
-      targetUserId: targetUid ?? 0,
+      targetUserId: followTargetId,
       isFollowing: newFollowState,
     );
 
-    if (targetUid != null && targetUid > 0) {
-      try {
-        if (newFollowState) {
-          await ProfileRemoteDataSource.instance.toggleFollow(targetUid);
-        } else {
-          await ProfileRemoteDataSource.instance.unfollow(targetUid);
-        }
-      } catch (_) {
-        // Revert on error
-        if (mounted) {
-          setState(() {
-            _isFollowing = !newFollowState;
-            if (newFollowState) {
-              _followersCount--;
-            } else {
-              _followersCount++;
-            }
-          });
-          ProfileSyncService.instance.notifyFollowChanged(
-            targetUserId: targetUid,
-            isFollowing: !newFollowState,
-          );
-        }
+    try {
+      final serverFollowState = newFollowState
+          ? await ProfileRemoteDataSource.instance.toggleFollow(followTargetId)
+          : await ProfileRemoteDataSource.instance.unfollow(followTargetId);
+      if (mounted && serverFollowState != newFollowState) {
+        setState(() {
+          _isFollowing = serverFollowState;
+          if (serverFollowState && !newFollowState) {
+            _followersCount++;
+          } else if (!serverFollowState &&
+              newFollowState &&
+              _followersCount > 0) {
+            _followersCount--;
+          }
+        });
       }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _isFollowing = !newFollowState;
+          if (newFollowState) {
+            _followersCount--;
+          } else {
+            _followersCount++;
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not update follow: $error')),
+        );
+        ProfileSyncService.instance.notifyFollowChanged(
+          targetUserId: followTargetId,
+          isFollowing: !newFollowState,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isFollowUpdating = false);
     }
   }
 
-  void _openDirectMessage({required String username, required String avatarUrl}) {
+  void _openDirectMessage({
+    required String username,
+    required String avatarUrl,
+  }) {
     HapticFeedback.lightImpact();
-    final buyerUser = ProfileSyncService.instance.cachedMyProfile ?? TokenStorage.instance.getUserModel();
-    final rawBuyerHandle = (buyerUser?.username != null && buyerUser!.username.trim().isNotEmpty)
+    final buyerUser =
+        ProfileSyncService.instance.cachedMyProfile ??
+        TokenStorage.instance.getUserModel();
+    final rawBuyerHandle =
+        (buyerUser?.username != null && buyerUser!.username.trim().isNotEmpty)
         ? buyerUser.username.trim()
         : ProfileSyncService.instance.currentUsername;
     if (rawBuyerHandle.trim().isEmpty) {
@@ -397,15 +525,23 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
       );
       return;
     }
-    final buyerHandle = rawBuyerHandle.startsWith('@') ? rawBuyerHandle : '@$rawBuyerHandle';
-    final buyerAvatar = buyerUser?.avatarUrl ?? ProfileSyncService.instance.currentUserAvatar;
+    final buyerHandle = rawBuyerHandle.startsWith('@')
+        ? rawBuyerHandle
+        : '@$rawBuyerHandle';
+    final buyerAvatar =
+        buyerUser?.avatarUrl ?? ProfileSyncService.instance.currentUserAvatar;
     final peerHandle = username.startsWith('@') ? username : '@$username';
-    final peerAvatar = InboxMessageManager.resolveUserAvatar(peerHandle, candidateAvatar: avatarUrl);
+    final peerAvatar = InboxMessageManager.resolveUserAvatar(
+      peerHandle,
+      candidateAvatar: avatarUrl,
+    );
     final threadId = InboxMessageManager.buildThreadId(buyerHandle, peerHandle);
 
-    final existing = InboxMessageManager.instance.getThread(threadId) ??
+    final existing =
+        InboxMessageManager.instance.getThread(threadId) ??
         InboxMessageManager.instance.getThreadByUsername(peerHandle);
-    final thread = existing ??
+    final thread =
+        existing ??
         InboxMessageManager.instance.addOrUpdateThread(
           DirectMessageThread(
             id: threadId,
@@ -422,11 +558,9 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
           ),
         );
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChatDetailScreen(thread: thread),
-      ),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => ChatDetailScreen(thread: thread)));
   }
 
   String _formatCount(int count) {
@@ -440,17 +574,26 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
 
   @override
   Widget build(BuildContext context) {
-    final rawUsername = _loadedUser?.username ?? widget.username ?? ProfileMockData.username;
-    final cleanUsername = rawUsername.startsWith('@') ? rawUsername.substring(1) : rawUsername;
+    final rawUsername =
+        _loadedUser?.username ?? widget.username ?? ProfileMockData.username;
+    final cleanUsername = rawUsername.startsWith('@')
+        ? rawUsername.substring(1)
+        : rawUsername;
     final username = cleanUsername;
     final displayName = _loadedUser?.displayName.isNotEmpty == true
         ? _loadedUser!.displayName
-        : (widget.displayName?.isNotEmpty == true ? widget.displayName! : cleanUsername);
+        : (widget.displayName?.isNotEmpty == true
+              ? widget.displayName!
+              : cleanUsername);
     final avatarUrl = _loadedUser?.avatarUrl?.isNotEmpty == true
         ? _loadedUser!.avatarUrl!
-        : (widget.avatarUrl?.isNotEmpty == true ? widget.avatarUrl! : ProfileMockData.avatarUrl);
+        : (widget.avatarUrl?.isNotEmpty == true
+              ? widget.avatarUrl!
+              : ProfileMockData.avatarUrl);
     final bio = _loadedUser?.bio != null
-        ? (_loadedUser!.bio!.trim().isNotEmpty ? _loadedUser!.bio!.trim() : 'No bio yet.')
+        ? (_loadedUser!.bio!.trim().isNotEmpty
+              ? _loadedUser!.bio!.trim()
+              : 'No bio yet.')
         : (widget.bio?.isNotEmpty == true ? widget.bio! : 'No bio yet.');
     final isVerified = _loadedUser?.isVerified ?? false;
 
@@ -460,7 +603,10 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
         backgroundColor: PulseColors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: PulseColors.onSurface),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: PulseColors.onSurface,
+          ),
           onPressed: _handleBack,
         ),
         title: Row(
@@ -469,7 +615,11 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
             Text(displayName, style: PulseTypography.bodyLg),
             if (isVerified) ...[
               const SizedBox(width: 4),
-              const Icon(Icons.verified_rounded, color: Color(0xFF2F80ED), size: 16),
+              const Icon(
+                Icons.verified_rounded,
+                color: Color(0xFF2F80ED),
+                size: 16,
+              ),
             ],
           ],
         ),
@@ -486,7 +636,10 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
             : null,
         actions: [
           IconButton(
-            icon: const Icon(Icons.more_horiz_rounded, color: PulseColors.onSurface),
+            icon: const Icon(
+              Icons.more_horiz_rounded,
+              color: PulseColors.onSurface,
+            ),
             onPressed: () {},
           ),
         ],
@@ -502,18 +655,33 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
                     child: SizedBox(
                       width: 96,
                       height: 96,
-                      child: Image.network(
-                        avatarUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: PulseColors.surfaceContainer,
-                          child: const Icon(
-                            Icons.person_rounded,
-                            color: Colors.white70,
-                            size: 48,
-                          ),
-                        ),
-                      ),
+                      child: avatarUrl.startsWith('assets/')
+                          ? Image.asset(
+                              avatarUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(
+                                    color: PulseColors.surfaceContainer,
+                                    child: const Icon(
+                                      Icons.person_rounded,
+                                      color: Colors.white70,
+                                      size: 48,
+                                    ),
+                                  ),
+                            )
+                          : Image.network(
+                              avatarUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(
+                                    color: PulseColors.surfaceContainer,
+                                    child: const Icon(
+                                      Icons.person_rounded,
+                                      color: Colors.white70,
+                                      size: 48,
+                                    ),
+                                  ),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -534,8 +702,11 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
                                 userId: _loadedUser?.id ?? widget.userId,
                                 username: username,
                                 initialTabIndex: 1,
-                                initialFollowingCount: _loadedUser?.followingCount,
-                                initialFollowersCount: _loadedUser?.followersCount ?? _followersCount,
+                                initialFollowingCount:
+                                    _loadedUser?.followingCount,
+                                initialFollowersCount:
+                                    _loadedUser?.followersCount ??
+                                    _followersCount,
                               ),
                             ),
                           );
@@ -552,18 +723,29 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
                                 userId: _loadedUser?.id ?? widget.userId,
                                 username: username,
                                 initialTabIndex: 0,
-                                initialFollowersCount: _loadedUser?.followersCount ?? _followersCount,
-                                initialFollowingCount: _loadedUser?.followingCount,
+                                initialFollowersCount:
+                                    _loadedUser?.followersCount ??
+                                    _followersCount,
+                                initialFollowingCount:
+                                    _loadedUser?.followingCount,
                               ),
                             ),
                           );
                         },
                       ),
                       _buildDivider(),
-                      Builder(builder: (context) {
-                        final totalLikes = _userVideos.fold<int>(0, (sum, v) => sum + v.likeCount);
-                        return _buildStatItem('Likes', _formatCount(totalLikes));
-                      }),
+                      Builder(
+                        builder: (context) {
+                          final totalLikes = _userVideos.fold<int>(
+                            0,
+                            (sum, v) => sum + v.likeCount,
+                          );
+                          return _buildStatItem(
+                            'Likes',
+                            _formatCount(totalLikes),
+                          );
+                        },
+                      ),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -572,7 +754,9 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
                     builder: (context) {
                       final isMe = ProfileSyncService.instance.isCurrentUser(
                         username: username,
-                        id: _loadedUser?.id.toString() ?? widget.userId?.toString(),
+                        id:
+                            _loadedUser?.id.toString() ??
+                            widget.userId?.toString(),
                       );
 
                       if (isMe) {
@@ -583,29 +767,46 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
                               'Edit Profile',
                               isPrimary: false,
                               onTap: () {
-                                final userModel = _loadedUser ??
+                                final userModel =
+                                    _loadedUser ??
                                     UserModel(
-                                      id: widget.userId ?? ProfileSyncService.instance.cachedMyProfile?.id ?? 0,
+                                      id:
+                                          widget.userId ??
+                                          ProfileSyncService
+                                              .instance
+                                              .cachedMyProfile
+                                              ?.id ??
+                                          0,
                                       username: username,
-                                  email: _loadedUser?.email ?? ProfileSyncService.instance.cachedMyProfile?.email ?? '$username@vilo.app',
+                                      email:
+                                          _loadedUser?.email ??
+                                          ProfileSyncService
+                                              .instance
+                                              .cachedMyProfile
+                                              ?.email ??
+                                          '$username@vilo.app',
                                       displayName: displayName,
                                       bio: bio,
                                       avatarUrl: avatarUrl,
                                       isVerified: isVerified,
                                       followersCount: _followersCount,
-                                      followingCount: _loadedUser?.followingCount ?? 0,
+                                      followingCount:
+                                          _loadedUser?.followingCount ?? 0,
                                     );
-                                Navigator.of(context).push<UserModel>(
-                                  MaterialPageRoute(
-                                    builder: (_) => EditProfileScreen(user: userModel),
-                                  ),
-                                ).then((updated) {
-                                  if (updated != null && mounted) {
-                                    setState(() {
-                                      _loadedUser = updated;
+                                Navigator.of(context)
+                                    .push<UserModel>(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            EditProfileScreen(user: userModel),
+                                      ),
+                                    )
+                                    .then((updated) {
+                                      if (updated != null && mounted) {
+                                        setState(() {
+                                          _loadedUser = updated;
+                                        });
+                                      }
                                     });
-                                  }
-                                });
                               },
                             ),
                             const SizedBox(width: 8),
@@ -614,10 +815,16 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
                               isPrimary: false,
                               onTap: () {
                                 HapticFeedback.lightImpact();
-                                Clipboard.setData(ClipboardData(text: 'https://vilo.app/@$username'));
+                                Clipboard.setData(
+                                  ClipboardData(
+                                    text: 'https://vilo.app/@$username',
+                                  ),
+                                );
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text('Profile link copied to clipboard!'),
+                                    content: Text(
+                                      'Profile link copied to clipboard!',
+                                    ),
                                     backgroundColor: Color(0xFF2F80ED),
                                     duration: Duration(seconds: 2),
                                   ),
@@ -673,8 +880,10 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.grey,
                   tabs: const [
-                    Tab(icon: Icon(Icons.music_note_rounded)), // Music (Index 0)
-                    Tab(icon: Icon(Icons.grid_view_rounded)),  // Grid (Index 1)
+                    Tab(
+                      icon: Icon(Icons.music_note_rounded),
+                    ), // Music (Index 0)
+                    Tab(icon: Icon(Icons.grid_view_rounded)), // Grid (Index 1)
                     Tab(icon: Icon(Icons.shopping_bag_outlined)), // Shop
                     Tab(icon: Icon(Icons.bookmark_border_rounded)), // Saved
                     Tab(icon: Icon(Icons.favorite_border_rounded)), // Liked
@@ -689,7 +898,11 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
           children: [
             _buildCategoryPage(
               0,
-              buildProfileTabSlivers(0, userSounds: _userSounds, isLoading: _isLoading),
+              buildProfileTabSlivers(
+                0,
+                userSounds: _userSounds,
+                isLoading: _isLoading,
+              ),
             ), // Music (Index 0)
             _buildCategoryPage(
               1,
@@ -724,7 +937,9 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
                 ),
               ),
             ), // Shop
-            _buildCategoryPage(3, buildProfileTabSlivers(
+            _buildCategoryPage(
+              3,
+              buildProfileTabSlivers(
                 3,
                 savedVideos: _savedVideos,
                 isLoading: _isLoading || _loadingCategories.contains(3),
@@ -745,7 +960,9 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
                 },
               ),
             ), // Saved
-            _buildCategoryPage(4, buildProfileTabSlivers(
+            _buildCategoryPage(
+              4,
+              buildProfileTabSlivers(
                 4,
                 likedVideos: _likedVideos,
                 isLoading: _isLoading || _loadingCategories.contains(4),
@@ -776,9 +993,19 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
         padding: const EdgeInsets.symmetric(horizontal: 15),
         child: Column(
           children: [
-            Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
+            Text(
+              value,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: Colors.white,
+              ),
+            ),
             const SizedBox(height: 4),
-            Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.grey, fontSize: 13),
+            ),
           ],
         ),
       ),
@@ -786,10 +1013,18 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
   }
 
   Widget _buildDivider() {
-    return Container(height: 15, width: 1, color: Colors.grey.withValues(alpha: 0.3));
+    return Container(
+      height: 15,
+      width: 1,
+      color: Colors.grey.withValues(alpha: 0.3),
+    );
   }
 
-  Widget _buildPillButton(String label, {required bool isPrimary, required VoidCallback onTap}) {
+  Widget _buildPillButton(
+    String label, {
+    required bool isPrimary,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -821,7 +1056,11 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
   double get maxExtent => _tabBar.preferredSize.height;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     return Container(color: PulseColors.background, child: _tabBar);
   }
 

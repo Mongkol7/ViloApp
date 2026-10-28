@@ -44,7 +44,8 @@ class ShopProductCard extends StatelessWidget {
         final String? sellerId;
         Product? entity;
 
-        final String cleanSellerUsername = (sellerUsername != null && sellerUsername!.trim().isNotEmpty)
+        final String cleanSellerUsername =
+            (sellerUsername != null && sellerUsername!.trim().isNotEmpty)
             ? sellerUsername!.trim()
             : '';
 
@@ -70,8 +71,11 @@ class ShopProductCard extends StatelessWidget {
           originalPrice = null;
           discountPercent = null;
           imageUrl = p.imageUrl;
-          description = 'Product listing by ${cleanSellerUsername.isNotEmpty ? cleanSellerUsername : 'seller'}';
-          final String rawSeller = cleanSellerUsername.isNotEmpty ? cleanSellerUsername : '@seller';
+          description =
+              'Product listing by ${cleanSellerUsername.isNotEmpty ? cleanSellerUsername : 'seller'}';
+          final String rawSeller = cleanSellerUsername.isNotEmpty
+              ? cleanSellerUsername
+              : '@seller';
           seller = rawSeller.startsWith('@') ? rawSeller : '@$rawSeller';
           sellerAvatar = sellerAvatarUrl;
           sellerId = null;
@@ -83,34 +87,63 @@ class ShopProductCard extends StatelessWidget {
           discountPercent = null;
           imageUrl = '';
           description = '';
-          final String rawSeller = cleanSellerUsername.isNotEmpty ? cleanSellerUsername : '@seller';
+          final String rawSeller = cleanSellerUsername.isNotEmpty
+              ? cleanSellerUsername
+              : '@seller';
           seller = rawSeller.startsWith('@') ? rawSeller : '@$rawSeller';
           sellerAvatar = sellerAvatarUrl;
           sellerId = null;
           id = '0';
         }
 
-        final String resolvedSellerAvatar = InboxMessageManager.resolveUserAvatar(
-          seller,
-          candidateAvatar: sellerAvatar,
+        final String resolvedSellerAvatar =
+            InboxMessageManager.resolveUserAvatar(
+              seller,
+              candidateAvatar: sellerAvatar,
+            );
+
+        final overrides = Product.getProductDetailsOverride(
+          id,
+          productName: name,
+        );
+        final String resolvedName = overrides?['name'] ?? name;
+        final double resolvedPriceVal =
+            overrides?['price'] ??
+            (entity?.price ??
+                double.tryParse(price.replaceAll(RegExp(r'[^0-9.]'), '')) ??
+                0.0);
+        final String resolvedPrice = '\$${resolvedPriceVal.toStringAsFixed(2)}';
+        final double? resolvedOrigPriceVal =
+            overrides?['originalPrice'] ?? entity?.originalPrice;
+        final String? resolvedOriginalPrice = resolvedOrigPriceVal != null
+            ? '\$${resolvedOrigPriceVal.toStringAsFixed(2)}'
+            : originalPrice;
+        final int? resolvedDiscountPercent =
+            (resolvedOrigPriceVal != null &&
+                resolvedOrigPriceVal > resolvedPriceVal &&
+                resolvedOrigPriceVal > 0)
+            ? (((resolvedOrigPriceVal - resolvedPriceVal) /
+                          resolvedOrigPriceVal) *
+                      100)
+                  .round()
+            : discountPercent;
+        final String resolvedDescription =
+            overrides?['description'] ?? description;
+
+        final int effectiveStock = Product.getEffectiveStock(
+          id,
+          entity?.stock ?? 10,
+          productName: resolvedName,
+        );
+        final bool isOutOfStock = effectiveStock <= 0;
+        final int effectiveSold = Product.getEffectiveSoldCount(
+          id,
+          entity?.soldCount ?? 0,
+          productName: resolvedName,
         );
 
-        final overrides = Product.getProductDetailsOverride(id, productName: name);
-        final String resolvedName = overrides?['name'] ?? name;
-        final double resolvedPriceVal = overrides?['price'] ?? (entity?.price ?? double.tryParse(price.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0);
-        final String resolvedPrice = '\$${resolvedPriceVal.toStringAsFixed(2)}';
-        final double? resolvedOrigPriceVal = overrides?['originalPrice'] ?? entity?.originalPrice;
-        final String? resolvedOriginalPrice = resolvedOrigPriceVal != null ? '\$${resolvedOrigPriceVal.toStringAsFixed(2)}' : originalPrice;
-        final int? resolvedDiscountPercent = (resolvedOrigPriceVal != null && resolvedOrigPriceVal > resolvedPriceVal && resolvedOrigPriceVal > 0)
-            ? (((resolvedOrigPriceVal - resolvedPriceVal) / resolvedOrigPriceVal) * 100).round()
-            : discountPercent;
-        final String resolvedDescription = overrides?['description'] ?? description;
-
-        final int effectiveStock = Product.getEffectiveStock(id, entity?.stock ?? 10, productName: resolvedName);
-        final bool isOutOfStock = effectiveStock <= 0;
-        final int effectiveSold = Product.getEffectiveSoldCount(id, entity?.soldCount ?? 0, productName: resolvedName);
-
-        final bool isOwner = isCurrentUser ||
+        final bool isOwner =
+            isCurrentUser ||
             ProfileSyncService.instance.isCurrentUser(
               username: seller,
               id: sellerId,
@@ -151,7 +184,10 @@ class ShopProductCard extends StatelessWidget {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(PulseRadius.sm),
-                    child: _buildThumbnail(imageUrl, isOutOfStock: isOutOfStock),
+                    child: _buildThumbnail(
+                      imageUrl,
+                      isOutOfStock: isOutOfStock,
+                    ),
                   ),
                   const SizedBox(width: PulseSpacing.inlineGap),
                   Expanded(
@@ -171,7 +207,8 @@ class ShopProductCard extends StatelessWidget {
                           runSpacing: 2,
                           children: [
                             Text(resolvedPrice, style: PulseTypography.bodyMd),
-                            if (resolvedOriginalPrice != null && resolvedOriginalPrice.isNotEmpty)
+                            if (resolvedOriginalPrice != null &&
+                                resolvedOriginalPrice.isNotEmpty)
                               Text(
                                 resolvedOriginalPrice,
                                 style: const TextStyle(
@@ -182,9 +219,14 @@ class ShopProductCard extends StatelessWidget {
                               ),
                             if (resolvedDiscountPercent != null)
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFF3B30).withValues(alpha: 0.2),
+                                  color: const Color(
+                                    0xFFFF3B30,
+                                  ).withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
@@ -198,12 +240,19 @@ class ShopProductCard extends StatelessWidget {
                               ),
                             if (isOutOfStock)
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFEF4444).withValues(alpha: 0.2),
+                                  color: const Color(
+                                    0xFFEF4444,
+                                  ).withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(4),
                                   border: Border.all(
-                                    color: const Color(0xFFEF4444).withValues(alpha: 0.6),
+                                    color: const Color(
+                                      0xFFEF4444,
+                                    ).withValues(alpha: 0.6),
                                     width: 0.8,
                                   ),
                                 ),
@@ -232,12 +281,19 @@ class ShopProductCard extends StatelessWidget {
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1.5,
+                              ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
+                                color: const Color(
+                                  0xFF3B82F6,
+                                ).withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(4),
                                 border: Border.all(
-                                  color: const Color(0xFF3B82F6).withValues(alpha: 0.4),
+                                  color: const Color(
+                                    0xFF3B82F6,
+                                  ).withValues(alpha: 0.4),
                                   width: 0.8,
                                 ),
                               ),
@@ -251,23 +307,38 @@ class ShopProductCard extends StatelessWidget {
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1.5,
+                              ),
                               decoration: BoxDecoration(
                                 color: isOutOfStock
-                                    ? const Color(0xFFEF4444).withValues(alpha: 0.15)
-                                    : const Color(0xFF10B981).withValues(alpha: 0.15),
+                                    ? const Color(
+                                        0xFFEF4444,
+                                      ).withValues(alpha: 0.15)
+                                    : const Color(
+                                        0xFF10B981,
+                                      ).withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(4),
                                 border: Border.all(
                                   color: isOutOfStock
-                                      ? const Color(0xFFEF4444).withValues(alpha: 0.5)
-                                      : const Color(0xFF10B981).withValues(alpha: 0.4),
+                                      ? const Color(
+                                          0xFFEF4444,
+                                        ).withValues(alpha: 0.5)
+                                      : const Color(
+                                          0xFF10B981,
+                                        ).withValues(alpha: 0.4),
                                   width: 0.8,
                                 ),
                               ),
                               child: Text(
-                                isOutOfStock ? '0 in stock' : '$effectiveStock in stock',
+                                isOutOfStock
+                                    ? '0 in stock'
+                                    : '$effectiveStock in stock',
                                 style: TextStyle(
-                                  color: isOutOfStock ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+                                  color: isOutOfStock
+                                      ? const Color(0xFFEF4444)
+                                      : const Color(0xFF10B981),
                                   fontSize: 9.5,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -296,7 +367,10 @@ class ShopProductCard extends StatelessWidget {
                             currentDescription: resolvedDescription,
                           ),
                           child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 4,
+                            ),
                             child: Icon(
                               Icons.more_vert_rounded,
                               color: Colors.white70,
@@ -311,10 +385,14 @@ class ShopProductCard extends StatelessWidget {
                           color: const Color(0xFF222226),
                           borderRadius: BorderRadius.circular(PulseRadius.full),
                           child: InkWell(
-                            borderRadius: BorderRadius.circular(PulseRadius.full),
+                            borderRadius: BorderRadius.circular(
+                              PulseRadius.full,
+                            ),
                             onTap: () {
                               HapticFeedback.lightImpact();
-                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                              ScaffoldMessenger.of(
+                                context,
+                              ).hideCurrentSnackBar();
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   backgroundColor: const Color(0xFF1E1E22),
@@ -322,18 +400,27 @@ class ShopProductCard extends StatelessWidget {
                                   duration: const Duration(seconds: 2),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    side: const BorderSide(color: Colors.white12),
+                                    side: const BorderSide(
+                                      color: Colors.white12,
+                                    ),
                                   ),
                                   content: Row(
                                     children: [
-                                      const Icon(Icons.info_outline_rounded, color: Color(0xFF38BDF8), size: 18),
+                                      const Icon(
+                                        Icons.info_outline_rounded,
+                                        color: Color(0xFF38BDF8),
+                                        size: 18,
+                                      ),
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
                                           isOutOfStock
                                               ? 'This is your posted product (Currently Out of Stock).'
                                               : 'This is your posted product. You cannot send a message to yourself or add to cart.',
-                                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 13,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -342,11 +429,18 @@ class ShopProductCard extends StatelessWidget {
                               );
                             },
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 7,
+                              ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: const [
-                                  Icon(Icons.inventory_2_outlined, color: Colors.white70, size: 13),
+                                  Icon(
+                                    Icons.inventory_2_outlined,
+                                    color: Colors.white70,
+                                    size: 13,
+                                  ),
                                   SizedBox(width: 4),
                                   Text(
                                     'Your Product',
@@ -366,25 +460,38 @@ class ShopProductCard extends StatelessWidget {
                           color: const Color(0xFF1E1E22),
                           borderRadius: BorderRadius.circular(PulseRadius.full),
                           child: InkWell(
-                            borderRadius: BorderRadius.circular(PulseRadius.full),
+                            borderRadius: BorderRadius.circular(
+                              PulseRadius.full,
+                            ),
                             onTap: () {
                               HapticFeedback.lightImpact();
-                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                              ScaffoldMessenger.of(
+                                context,
+                              ).hideCurrentSnackBar();
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   backgroundColor: Color(0xFF1E1E22),
                                   behavior: SnackBarBehavior.floating,
-                                  content: Text('This product is currently out of stock and cannot be ordered.'),
+                                  content: Text(
+                                    'This product is currently out of stock and cannot be ordered.',
+                                  ),
                                   duration: Duration(seconds: 2),
                                 ),
                               );
                             },
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 7,
+                              ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: const [
-                                  Icon(Icons.block_rounded, color: Color(0xFFEF4444), size: 12),
+                                  Icon(
+                                    Icons.block_rounded,
+                                    color: Color(0xFFEF4444),
+                                    size: 12,
+                                  ),
                                   SizedBox(width: 4),
                                   Text(
                                     'Out of Stock',
@@ -404,32 +511,39 @@ class ShopProductCard extends StatelessWidget {
                           color: PulseColors.actionSecondary,
                           borderRadius: BorderRadius.circular(PulseRadius.full),
                           child: InkWell(
-                            borderRadius: BorderRadius.circular(PulseRadius.full),
+                            borderRadius: BorderRadius.circular(
+                              PulseRadius.full,
+                            ),
                             onTap: () {
                               if (isOutOfStock) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     backgroundColor: Color(0xFF1E1E22),
-                                    content: Text('This product is out of stock. Unable to send order message.'),
+                                    content: Text(
+                                      'This product is out of stock. Unable to send order message.',
+                                    ),
                                   ),
                                 );
                                 return;
                               }
 
-                              final cleanSeller = seller.startsWith('@') ? seller : '@$seller';
+                              final cleanSeller = seller.startsWith('@')
+                                  ? seller
+                                  : '@$seller';
                               final messageText =
                                   'Hi! I would like to order $resolvedName (Price: $resolvedPrice/unit). Is it available to ship?';
 
                               // This profile action creates an order inquiry. Keep its
                               // order reference unique so an older cancellation event
                               // cannot cancel this new inquiry by product title alone.
-                              final createdOrder = ShopRemoteDataSource.instance.recordChatOrder(
-                                productTitle: resolvedName,
-                                price: resolvedPriceVal,
-                                quantity: 1,
-                                imageUrl: imageUrl,
-                                sellerName: cleanSeller,
-                              );
+                              final createdOrder = ShopRemoteDataSource.instance
+                                  .recordChatOrder(
+                                    productTitle: resolvedName,
+                                    price: resolvedPriceVal,
+                                    quantity: 1,
+                                    imageUrl: imageUrl,
+                                    sellerName: cleanSeller,
+                                  );
 
                               Product.deductStock(
                                 id,
@@ -444,19 +558,38 @@ class ShopProductCard extends StatelessWidget {
                                 productName: resolvedName,
                               );
 
-                              final buyerUser = ProfileSyncService.instance.cachedMyProfile ?? TokenStorage.instance.getUserModel();
-                              final rawBuyerHandle = (buyerUser?.username != null && buyerUser!.username.trim().isNotEmpty)
+                              final buyerUser =
+                                  ProfileSyncService.instance.cachedMyProfile ??
+                                  TokenStorage.instance.getUserModel();
+                              final rawBuyerHandle =
+                                  (buyerUser?.username != null &&
+                                      buyerUser!.username.trim().isNotEmpty)
                                   ? buyerUser.username.trim()
                                   : ProfileSyncService.instance.currentUsername;
-                              final cleanBuyerHandle = rawBuyerHandle.startsWith('@') ? rawBuyerHandle : '@$rawBuyerHandle';
-                              final buyerAvatar = InboxMessageManager.resolveUserAvatar(
-                                cleanBuyerHandle,
-                                candidateAvatar: buyerUser?.avatarUrl ?? ProfileSyncService.instance.currentUserAvatar,
-                              );
+                              final cleanBuyerHandle =
+                                  rawBuyerHandle.startsWith('@')
+                                  ? rawBuyerHandle
+                                  : '@$rawBuyerHandle';
+                              final buyerAvatar =
+                                  InboxMessageManager.resolveUserAvatar(
+                                    cleanBuyerHandle,
+                                    candidateAvatar:
+                                        buyerUser?.avatarUrl ??
+                                        ProfileSyncService
+                                            .instance
+                                            .currentUserAvatar,
+                                  );
 
-                              final threadId = InboxMessageManager.buildThreadId(cleanBuyerHandle, cleanSeller);
-                              final String finalSellerAvatar = resolvedSellerAvatar;
-                              final resolvedImage = imageUrl.isNotEmpty ? imageUrl : null;
+                              final threadId =
+                                  InboxMessageManager.buildThreadId(
+                                    cleanBuyerHandle,
+                                    cleanSeller,
+                                  );
+                              final String finalSellerAvatar =
+                                  resolvedSellerAvatar;
+                              final resolvedImage = imageUrl.isNotEmpty
+                                  ? imageUrl
+                                  : null;
 
                               final orderMsg = ChatMessage(
                                 id: 'order_${createdOrder.orderNumber}',
@@ -466,9 +599,12 @@ class ShopProductCard extends StatelessWidget {
                                 timestamp: 'Just now',
                                 status: 'Sent',
                                 imageUrl: resolvedImage,
-                                imageUrls: resolvedImage != null ? [resolvedImage] : null,
+                                imageUrls: resolvedImage != null
+                                    ? [resolvedImage]
+                                    : null,
                                 isOrder: true,
-                                orderCreatedAtMs: DateTime.now().millisecondsSinceEpoch,
+                                orderCreatedAtMs:
+                                    DateTime.now().millisecondsSinceEpoch,
                                 orderStatus: 'Active',
                                 orderProductId: id,
                                 orderProductTitle: resolvedName,
@@ -476,15 +612,22 @@ class ShopProductCard extends StatelessWidget {
                                 orderQuantity: 1,
                               );
 
-                              final existingThread = InboxMessageManager.instance.getThread(threadId) ??
-                                  InboxMessageManager.instance.getThreadByUsername(cleanSeller);
+                              final existingThread =
+                                  InboxMessageManager.instance.getThread(
+                                    threadId,
+                                  ) ??
+                                  InboxMessageManager.instance
+                                      .getThreadByUsername(cleanSeller);
 
                               final DirectMessageThread threadToRegister;
                               if (existingThread != null) {
                                 threadToRegister = existingThread.copyWith(
                                   lastMessage: messageText,
                                   timeAgo: 'Just now',
-                                  messages: [...existingThread.messages, orderMsg],
+                                  messages: [
+                                    ...existingThread.messages,
+                                    orderMsg,
+                                  ],
                                 );
                               } else {
                                 threadToRegister = DirectMessageThread(
@@ -503,18 +646,32 @@ class ShopProductCard extends StatelessWidget {
                                 );
                               }
 
-                              InboxMessageManager.instance.addOrUpdateThread(threadToRegister);
+                              InboxMessageManager.instance.addOrUpdateThread(
+                                threadToRegister,
+                              );
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   backgroundColor: PulseColors.surfaceContainer,
-                                  content: Text('Message sent successfully to $cleanSeller.'),
+                                  content: Text(
+                                    'Message sent successfully to $cleanSeller.',
+                                  ),
                                   duration: const Duration(seconds: 2),
                                 ),
                               );
                             },
                             child: const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                              child: Text('Send Message', style: TextStyle(fontSize: 12.5, color: Colors.white, fontWeight: FontWeight.bold)),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 7,
+                              ),
+                              child: Text(
+                                'Send Message',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -539,11 +696,17 @@ class ShopProductCard extends StatelessWidget {
     required String currentDescription,
   }) {
     final titleController = TextEditingController(text: currentName);
-    final priceController = TextEditingController(text: currentPrice.toStringAsFixed(2));
-    final origPriceController = TextEditingController(
-      text: currentOriginalPrice != null ? currentOriginalPrice.toStringAsFixed(2) : '',
+    final priceController = TextEditingController(
+      text: currentPrice.toStringAsFixed(2),
     );
-    final stockController = TextEditingController(text: currentStock.toString());
+    final origPriceController = TextEditingController(
+      text: currentOriginalPrice != null
+          ? currentOriginalPrice.toStringAsFixed(2)
+          : '',
+    );
+    final stockController = TextEditingController(
+      text: currentStock.toString(),
+    );
     final descController = TextEditingController(text: currentDescription);
     final formKey = GlobalKey<FormState>();
 
@@ -584,7 +747,11 @@ class ShopProductCard extends StatelessWidget {
                       ),
                       Row(
                         children: [
-                          const Icon(Icons.edit_note_rounded, color: Color(0xFF38BDF8), size: 22),
+                          const Icon(
+                            Icons.edit_note_rounded,
+                            color: Color(0xFF38BDF8),
+                            size: 22,
+                          ),
                           const SizedBox(width: 8),
                           const Text(
                             'Edit Product',
@@ -596,7 +763,10 @@ class ShopProductCard extends StatelessWidget {
                           ),
                           const Spacer(),
                           IconButton(
-                            icon: const Icon(Icons.close_rounded, color: Colors.white54),
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              color: Colors.white54,
+                            ),
                             onPressed: () => Navigator.pop(ctx),
                           ),
                         ],
@@ -604,23 +774,46 @@ class ShopProductCard extends StatelessWidget {
                       const SizedBox(height: 16),
                       const Text(
                         'Product Title',
-                        style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: titleController,
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
                         decoration: InputDecoration(
                           hintText: 'e.g. Mac Book Pro',
                           hintStyle: const TextStyle(color: Colors.white24),
                           filled: true,
                           fillColor: const Color(0xFF1E1E22),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white12)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white12)),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF38BDF8))),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.white12),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.white12),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF38BDF8),
+                            ),
+                          ),
                         ),
-                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter a title' : null,
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Please enter a title'
+                            : null,
                       ),
                       const SizedBox(height: 14),
                       Row(
@@ -629,23 +822,60 @@ class ShopProductCard extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Price (\$)', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                                const Text(
+                                  'Price (\$)',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                                 const SizedBox(height: 6),
                                 TextFormField(
                                   controller: priceController,
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                  ),
                                   decoration: InputDecoration(
                                     hintText: '1100.00',
-                                    hintStyle: const TextStyle(color: Colors.white24),
+                                    hintStyle: const TextStyle(
+                                      color: Colors.white24,
+                                    ),
                                     filled: true,
                                     fillColor: const Color(0xFF1E1E22),
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white12)),
-                                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white12)),
-                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF38BDF8))),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 12,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(
+                                        color: Colors.white12,
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(
+                                        color: Colors.white12,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFF38BDF8),
+                                      ),
+                                    ),
                                   ),
-                                  validator: (v) => (v == null || double.tryParse(v.trim()) == null) ? 'Invalid price' : null,
+                                  validator: (v) =>
+                                      (v == null ||
+                                          double.tryParse(v.trim()) == null)
+                                      ? 'Invalid price'
+                                      : null,
                                 ),
                               ],
                             ),
@@ -655,21 +885,55 @@ class ShopProductCard extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Original Price (\$)', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                                const Text(
+                                  'Original Price (\$)',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                                 const SizedBox(height: 6),
                                 TextFormField(
                                   controller: origPriceController,
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                  ),
                                   decoration: InputDecoration(
                                     hintText: '1200.00 (Optional)',
-                                    hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
+                                    hintStyle: const TextStyle(
+                                      color: Colors.white24,
+                                      fontSize: 12,
+                                    ),
                                     filled: true,
                                     fillColor: const Color(0xFF1E1E22),
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white12)),
-                                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white12)),
-                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF38BDF8))),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 12,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(
+                                        color: Colors.white12,
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(
+                                        color: Colors.white12,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFF38BDF8),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -678,15 +942,30 @@ class ShopProductCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 14),
-                      const Text('Stock Quantity', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                      const Text(
+                        'Stock Quantity',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       const SizedBox(height: 6),
                       Row(
                         children: [
                           IconButton(
-                            style: IconButton.styleFrom(backgroundColor: const Color(0xFF1E1E22)),
-                            icon: const Icon(Icons.remove, color: Colors.white70, size: 18),
+                            style: IconButton.styleFrom(
+                              backgroundColor: const Color(0xFF1E1E22),
+                            ),
+                            icon: const Icon(
+                              Icons.remove,
+                              color: Colors.white70,
+                              size: 18,
+                            ),
                             onPressed: () {
-                              final cur = int.tryParse(stockController.text.trim()) ?? 0;
+                              final cur =
+                                  int.tryParse(stockController.text.trim()) ??
+                                  0;
                               if (cur > 0) {
                                 stockController.text = (cur - 1).toString();
                                 setModalState(() {});
@@ -699,24 +978,57 @@ class ShopProductCard extends StatelessWidget {
                               controller: stockController,
                               keyboardType: TextInputType.number,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
                               decoration: InputDecoration(
                                 filled: true,
                                 fillColor: const Color(0xFF1E1E22),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white12)),
-                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white12)),
-                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF38BDF8))),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(
+                                    color: Colors.white12,
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(
+                                    color: Colors.white12,
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFF38BDF8),
+                                  ),
+                                ),
                               ),
-                              validator: (v) => (v == null || int.tryParse(v.trim()) == null) ? 'Invalid stock' : null,
+                              validator: (v) =>
+                                  (v == null || int.tryParse(v.trim()) == null)
+                                  ? 'Invalid stock'
+                                  : null,
                             ),
                           ),
                           const SizedBox(width: 8),
                           IconButton(
-                            style: IconButton.styleFrom(backgroundColor: const Color(0xFF1E1E22)),
-                            icon: const Icon(Icons.add, color: Colors.white70, size: 18),
+                            style: IconButton.styleFrom(
+                              backgroundColor: const Color(0xFF1E1E22),
+                            ),
+                            icon: const Icon(
+                              Icons.add,
+                              color: Colors.white70,
+                              size: 18,
+                            ),
                             onPressed: () {
-                              final cur = int.tryParse(stockController.text.trim()) ?? 0;
+                              final cur =
+                                  int.tryParse(stockController.text.trim()) ??
+                                  0;
                               stockController.text = (cur + 1).toString();
                               setModalState(() {});
                             },
@@ -724,21 +1036,45 @@ class ShopProductCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 14),
-                      const Text('Description', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                      const Text(
+                        'Description',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: descController,
                         maxLines: 3,
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
                         decoration: InputDecoration(
                           hintText: 'Product specifications and details...',
                           hintStyle: const TextStyle(color: Colors.white24),
                           filled: true,
                           fillColor: const Color(0xFF1E1E22),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white12)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white12)),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF38BDF8))),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.white12),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.white12),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF38BDF8),
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -748,16 +1084,25 @@ class ShopProductCard extends StatelessWidget {
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF2563EB),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
                           ),
                           onPressed: () {
                             if (!formKey.currentState!.validate()) return;
                             final newName = titleController.text.trim();
-                            final newPrice = double.parse(priceController.text.trim());
-                            final newOrigPrice = origPriceController.text.trim().isNotEmpty
-                                ? double.tryParse(origPriceController.text.trim())
+                            final newPrice = double.parse(
+                              priceController.text.trim(),
+                            );
+                            final newOrigPrice =
+                                origPriceController.text.trim().isNotEmpty
+                                ? double.tryParse(
+                                    origPriceController.text.trim(),
+                                  )
                                 : null;
-                            final newStock = int.parse(stockController.text.trim());
+                            final newStock = int.parse(
+                              stockController.text.trim(),
+                            );
                             final newDesc = descController.text.trim();
 
                             Product.updateProductDetails(
@@ -773,14 +1118,20 @@ class ShopProductCard extends StatelessWidget {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 backgroundColor: const Color(0xFF1E1E22),
-                                content: Text('"$newName" updated successfully!'),
+                                content: Text(
+                                  '"$newName" updated successfully!',
+                                ),
                                 duration: const Duration(seconds: 2),
                               ),
                             );
                           },
                           child: const Text(
                             'Save Changes',
-                            style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
@@ -797,9 +1148,10 @@ class ShopProductCard extends StatelessWidget {
 
   Widget _buildThumbnail(String url, {bool isOutOfStock = false}) {
     Widget img;
-    if (url.startsWith('assets/')) {
+    final resolvedUrl = Product.resolveImageUrl(url);
+    if (resolvedUrl.startsWith('assets/')) {
       img = Image.asset(
-        url,
+        resolvedUrl,
         width: 52,
         height: 52,
         fit: BoxFit.cover,
@@ -807,12 +1159,17 @@ class ShopProductCard extends StatelessWidget {
           width: 52,
           height: 52,
           color: PulseColors.surfaceContainer,
-          child: const Icon(Icons.shopping_bag_outlined, color: Colors.white24, size: 24),
+          child: const Icon(
+            Icons.shopping_bag_outlined,
+            color: Colors.white24,
+            size: 24,
+          ),
         ),
       );
-    } else if (url.startsWith('http://') || url.startsWith('https://')) {
+    } else if (resolvedUrl.startsWith('http://') ||
+        resolvedUrl.startsWith('https://')) {
       img = Image.network(
-        url,
+        resolvedUrl,
         width: 52,
         height: 52,
         fit: BoxFit.cover,
@@ -820,7 +1177,11 @@ class ShopProductCard extends StatelessWidget {
           width: 52,
           height: 52,
           color: PulseColors.surfaceContainer,
-          child: const Icon(Icons.shopping_bag_outlined, color: Colors.white24, size: 24),
+          child: const Icon(
+            Icons.shopping_bag_outlined,
+            color: Colors.white24,
+            size: 24,
+          ),
         ),
       );
     } else {
@@ -828,7 +1189,11 @@ class ShopProductCard extends StatelessWidget {
         width: 52,
         height: 52,
         color: PulseColors.surfaceContainer,
-        child: const Icon(Icons.shopping_bag_outlined, color: Colors.white24, size: 24),
+        child: const Icon(
+          Icons.shopping_bag_outlined,
+          color: Colors.white24,
+          size: 24,
+        ),
       );
     }
 
@@ -836,7 +1201,10 @@ class ShopProductCard extends StatelessWidget {
       return Stack(
         children: [
           ColorFiltered(
-            colorFilter: const ColorFilter.mode(Colors.grey, BlendMode.saturation),
+            colorFilter: const ColorFilter.mode(
+              Colors.grey,
+              BlendMode.saturation,
+            ),
             child: img,
           ),
           Positioned.fill(
@@ -844,7 +1212,10 @@ class ShopProductCard extends StatelessWidget {
               color: Colors.black.withValues(alpha: 0.4),
               child: Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFEF4444).withValues(alpha: 0.85),
                     borderRadius: BorderRadius.circular(4),

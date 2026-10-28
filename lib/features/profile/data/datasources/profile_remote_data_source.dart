@@ -88,9 +88,10 @@ class ProfileRemoteDataSource {
     return user;
   }
 
-  /// Toggle follow state on target user (POST /api/v1/users/{id}/follow)
+  /// Follow target user idempotently (PUT /api/v1/users/{id}/follow).
+  /// Calling this when already followed leaves the relationship unchanged.
   Future<bool> toggleFollow(int id) async {
-    final response = await _client.post(
+    final response = await _client.put(
       '/users/$id/follow',
       requireAuth: true,
     );

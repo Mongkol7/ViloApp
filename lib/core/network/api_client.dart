@@ -50,7 +50,10 @@ class ApiClient {
         .get(url, headers: headers)
         .timeout(
           _timeout,
-          onTimeout: () => throw ApiResponseException('Connection timed out. Check your network or server.', 408),
+          onTimeout: () => throw ApiResponseException(
+            'Connection timed out. Check your network or server.',
+            408,
+          ),
         );
     return _handleResponse(
       response,
@@ -76,9 +79,14 @@ class ApiClient {
         )
         .timeout(
           _timeout,
-          onTimeout: () => throw ApiResponseException('Connection timed out. Check your network or server.', 408),
+          onTimeout: () => throw ApiResponseException(
+            'Connection timed out. Check your network or server.',
+            408,
+          ),
         );
-    debugPrint('[API] POST $endpoint => status=${response.statusCode}, bodyLen=${response.body.length}');
+    debugPrint(
+      '[API] POST $endpoint => status=${response.statusCode}, bodyLen=${response.body.length}',
+    );
     return _handleResponse(
       response,
       () => post(endpoint, body: body, requireAuth: requireAuth),
@@ -102,7 +110,10 @@ class ApiClient {
         )
         .timeout(
           _timeout,
-          onTimeout: () => throw ApiResponseException('Connection timed out. Check your network or server.', 408),
+          onTimeout: () => throw ApiResponseException(
+            'Connection timed out. Check your network or server.',
+            408,
+          ),
         );
     return _handleResponse(
       response,
@@ -119,11 +130,92 @@ class ApiClient {
         .delete(url, headers: headers)
         .timeout(
           _timeout,
-          onTimeout: () => throw ApiResponseException('Connection timed out. Check your network or server.', 408),
+          onTimeout: () => throw ApiResponseException(
+            'Connection timed out. Check your network or server.',
+            408,
+          ),
         );
     return _handleResponse(
       response,
       () => delete(endpoint, requireAuth: requireAuth),
+      requireAuth: requireAuth,
+      endpoint: endpoint,
+    );
+  }
+
+  Future<dynamic> patch(
+    String endpoint, {
+    Map<String, dynamic>? body,
+    bool requireAuth = true,
+  }) async {
+    final url = Uri.parse('$baseUrl$endpoint');
+    final headers = await _getHeaders(requireAuth: requireAuth);
+    final response = await http
+        .patch(
+          url,
+          headers: headers,
+          body: body != null ? jsonEncode(body) : null,
+        )
+        .timeout(
+          _timeout,
+          onTimeout: () => throw ApiResponseException(
+            'Connection timed out. Check your network or server.',
+            408,
+          ),
+        );
+    return _handleResponse(
+      response,
+      () => patch(endpoint, body: body, requireAuth: requireAuth),
+      requireAuth: requireAuth,
+      endpoint: endpoint,
+    );
+  }
+
+  Future<dynamic> postMultipart(
+    String endpoint, {
+    required String fieldName,
+    required String filename,
+    required List<int> bytes,
+    String? contentType,
+    bool requireAuth = true,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl$endpoint'),
+    );
+    request.headers['Accept'] = 'application/json';
+    final token = await TokenStorage.instance.getAccessToken();
+    if (token != null && token.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        fieldName,
+        bytes,
+        filename: filename,
+        contentType: contentType == null
+            ? null
+            : http.MediaType.parse(contentType),
+      ),
+    );
+    final streamed = await request.send().timeout(
+      _timeout,
+      onTimeout: () => throw ApiResponseException(
+        'Connection timed out. Check your network or server.',
+        408,
+      ),
+    );
+    final response = await http.Response.fromStream(streamed);
+    return _handleResponse(
+      response,
+      () => postMultipart(
+        endpoint,
+        fieldName: fieldName,
+        filename: filename,
+        bytes: bytes,
+        contentType: contentType,
+        requireAuth: requireAuth,
+      ),
       requireAuth: requireAuth,
       endpoint: endpoint,
     );
@@ -136,7 +228,9 @@ class ApiClient {
     String? endpoint,
   }) async {
     final statusCode = response.statusCode;
-    final responseBody = response.body.isNotEmpty ? jsonDecode(response.body) : {};
+    final responseBody = response.body.isNotEmpty
+        ? jsonDecode(response.body)
+        : {};
 
     if (statusCode >= 200 && statusCode < 300) {
       if (responseBody is Map && responseBody.containsKey('data')) {
@@ -145,7 +239,8 @@ class ApiClient {
       return responseBody;
     }
 
-    final isAuthEndpoint = endpoint != null &&
+    final isAuthEndpoint =
+        endpoint != null &&
         (endpoint.contains('/auth/login') ||
             endpoint.contains('/auth/register') ||
             endpoint.contains('/auth/refresh'));
@@ -159,7 +254,8 @@ class ApiClient {
       throw ApiResponseException('Session expired. Please log in again.', 401);
     }
 
-    final errorMessage = (responseBody is Map && responseBody['message'] != null)
+    final errorMessage =
+        (responseBody is Map && responseBody['message'] != null)
         ? responseBody['message'].toString()
         : 'Request failed with status $statusCode';
 
@@ -192,4 +288,3 @@ class ApiClient {
     return false;
   }
 }
-

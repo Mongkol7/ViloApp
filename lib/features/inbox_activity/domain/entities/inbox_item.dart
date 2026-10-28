@@ -16,18 +16,110 @@ class NotificationItem {
   final String id;
   final String title;
   final String subtitle;
-  final String iconType; // 'followers', 'activity', 'system'
+  final String iconType; // 'followers', 'activity', 'comment'
   final int? badgeCount;
   final bool hasDot;
+  final String type;
+  final int? actorId;
+  final String? actorUsername;
+  final String? actorDisplayName;
+  final String? actorAvatarUrl;
+  final int? videoId;
+  final int? commentId;
+  final int? targetUserId;
+  final String? commentExcerpt;
+  final bool isRead;
+  final DateTime? createdAt;
 
   const NotificationItem({
     required this.id,
-    required this.title,
-    required this.subtitle,
-    required this.iconType,
+    this.title = '',
+    this.subtitle = '',
+    this.iconType = 'system',
     this.badgeCount,
     this.hasDot = false,
+    this.type = 'SYSTEM',
+    this.actorId,
+    this.actorUsername,
+    this.actorDisplayName,
+    this.actorAvatarUrl,
+    this.videoId,
+    this.commentId,
+    this.targetUserId,
+    this.commentExcerpt,
+    this.isRead = false,
+    this.createdAt,
   });
+
+  factory NotificationItem.fromJson(Map<String, dynamic> json) {
+    final type = (json['type'] as String? ?? 'SYSTEM').toUpperCase();
+    final actorName = (json['actorDisplayName'] as String?)?.trim();
+    final actorUsername = (json['actorUsername'] as String?)?.trim();
+    final actor =
+        (actorName?.isNotEmpty == true ? actorName : actorUsername) ??
+        'Someone';
+    final excerpt = (json['commentExcerpt'] as String?)?.trim();
+    final title = switch (type) {
+      'LIKE' => 'Likes',
+      'COMMENT' => 'Comments',
+      'REPLY' => 'Replies',
+      'FOLLOW' => 'New followers',
+      _ => 'Activity',
+    };
+    final subtitle = switch (type) {
+      'LIKE' => '$actor liked your video',
+      'COMMENT' =>
+        excerpt?.isNotEmpty == true
+            ? '$actor commented: $excerpt'
+            : '$actor commented on your video',
+      'REPLY' =>
+        excerpt?.isNotEmpty == true
+            ? '$actor replied: $excerpt'
+            : '$actor replied to your comment',
+      'FOLLOW' => '$actor followed you',
+      _ => '$actor interacted with you',
+    };
+    return NotificationItem(
+      id: '${json['id']}',
+      title: title,
+      subtitle: subtitle,
+      iconType: type == 'FOLLOW'
+          ? 'followers'
+          : (type == 'LIKE' ? 'activity' : 'comment'),
+      hasDot: !(json['read'] as bool? ?? false),
+      type: type,
+      actorId: (json['actorId'] as num?)?.toInt(),
+      actorUsername: json['actorUsername'] as String?,
+      actorDisplayName: json['actorDisplayName'] as String?,
+      actorAvatarUrl: json['actorAvatarUrl'] as String?,
+      videoId: (json['videoId'] as num?)?.toInt(),
+      commentId: (json['commentId'] as num?)?.toInt(),
+      targetUserId: (json['targetUserId'] as num?)?.toInt(),
+      commentExcerpt: json['commentExcerpt'] as String?,
+      isRead: json['read'] as bool? ?? false,
+      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? ''),
+    );
+  }
+
+  NotificationItem copyWith({bool? isRead}) => NotificationItem(
+    id: id,
+    title: title,
+    subtitle: subtitle,
+    iconType: iconType,
+    badgeCount: badgeCount,
+    hasDot: !(isRead ?? this.isRead),
+    type: type,
+    actorId: actorId,
+    actorUsername: actorUsername,
+    actorDisplayName: actorDisplayName,
+    actorAvatarUrl: actorAvatarUrl,
+    videoId: videoId,
+    commentId: commentId,
+    targetUserId: targetUserId,
+    commentExcerpt: commentExcerpt,
+    isRead: isRead ?? this.isRead,
+    createdAt: createdAt,
+  );
 }
 
 class DirectMessageThread {
@@ -99,7 +191,9 @@ class DirectMessageThread {
       isVerified: json['isVerified'] as bool? ?? false,
       followersCount: json['followersCount'] as String? ?? '',
       messages: (json['messages'] as List<dynamic>? ?? const [])
-          .map((message) => ChatMessage.fromJson(message as Map<String, dynamic>))
+          .map(
+            (message) => ChatMessage.fromJson(message as Map<String, dynamic>),
+          )
           .toList(),
       senderHandle: json['senderHandle'] as String?,
       senderAvatar: json['senderAvatar'] as String?,
@@ -109,19 +203,19 @@ class DirectMessageThread {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'username': username,
-        'avatarUrl': avatarUrl,
-        'lastMessage': lastMessage,
-        'timeAgo': timeAgo,
-        'isVerified': isVerified,
-        'followersCount': followersCount,
-        'messages': messages.map((message) => message.toJson()).toList(),
-        'senderHandle': senderHandle,
-        'senderAvatar': senderAvatar,
-        'recipientHandle': recipientHandle,
-        'recipientAvatar': recipientAvatar,
-      };
+    'id': id,
+    'username': username,
+    'avatarUrl': avatarUrl,
+    'lastMessage': lastMessage,
+    'timeAgo': timeAgo,
+    'isVerified': isVerified,
+    'followersCount': followersCount,
+    'messages': messages.map((message) => message.toJson()).toList(),
+    'senderHandle': senderHandle,
+    'senderAvatar': senderAvatar,
+    'recipientHandle': recipientHandle,
+    'recipientAvatar': recipientAvatar,
+  };
 }
 
 class ChatMessage {
@@ -133,6 +227,15 @@ class ChatMessage {
   final String? imageUrl;
   final List<String>? imageUrls;
   final String? senderHandle;
+  final int? remoteId;
+  final String contentType;
+  final String? linkUrl;
+  final int? sharedVideoId;
+  final String? sharedVideoUrl;
+  final String? sharedVideoThumbnailUrl;
+  final String? sharedVideoCreator;
+  final String? sharedVideoCaption;
+  final bool deletedForEveryone;
   final bool isOrder;
   final int? orderCreatedAtMs;
   final String? orderStatus;
@@ -153,6 +256,15 @@ class ChatMessage {
     this.imageUrl,
     this.imageUrls,
     this.senderHandle,
+    this.remoteId,
+    this.contentType = 'TEXT',
+    this.linkUrl,
+    this.sharedVideoId,
+    this.sharedVideoUrl,
+    this.sharedVideoThumbnailUrl,
+    this.sharedVideoCreator,
+    this.sharedVideoCaption,
+    this.deletedForEveryone = false,
     this.isOrder = false,
     this.orderCreatedAtMs,
     this.orderStatus,
@@ -168,6 +280,14 @@ class ChatMessage {
   bool get hasImages =>
       (imageUrl != null && imageUrl!.trim().isNotEmpty) ||
       (imageUrls != null && imageUrls!.isNotEmpty);
+
+  bool get isVideoShare =>
+      contentType.toUpperCase() == 'VIDEO' ||
+      sharedVideoId != null ||
+      (sharedVideoUrl?.isNotEmpty ?? false);
+
+  bool get isLinkMessage =>
+      contentType.toUpperCase() == 'LINK' || (linkUrl?.isNotEmpty ?? false);
 
   List<String> get allImages {
     if (imageUrls != null && imageUrls!.isNotEmpty) {
@@ -198,7 +318,8 @@ class ChatMessage {
     return remaining > 0 ? remaining : 0;
   }
 
-  bool get canCancel => isOrderMessage && !isCancelled && cancelRemainingSeconds > 0;
+  bool get canCancel =>
+      isOrderMessage && !isCancelled && cancelRemainingSeconds > 0;
 
   ChatMessage copyWith({
     String? id,
@@ -209,6 +330,16 @@ class ChatMessage {
     String? imageUrl,
     List<String>? imageUrls,
     String? senderHandle,
+    int? remoteId,
+    String? contentType,
+    String? linkUrl,
+    int? sharedVideoId,
+    String? sharedVideoUrl,
+    String? sharedVideoThumbnailUrl,
+    String? sharedVideoCreator,
+    String? sharedVideoCaption,
+    bool? deletedForEveryone,
+    bool clearRichContent = false,
     bool? isOrder,
     int? orderCreatedAtMs,
     String? orderStatus,
@@ -226,9 +357,28 @@ class ChatMessage {
       isMe: isMe ?? this.isMe,
       timestamp: timestamp ?? this.timestamp,
       status: status ?? this.status,
-      imageUrl: imageUrl ?? this.imageUrl,
-      imageUrls: imageUrls ?? this.imageUrls,
+      imageUrl: clearRichContent ? null : (imageUrl ?? this.imageUrl),
+      imageUrls: clearRichContent ? null : (imageUrls ?? this.imageUrls),
       senderHandle: senderHandle ?? this.senderHandle,
+      remoteId: remoteId ?? this.remoteId,
+      contentType: contentType ?? this.contentType,
+      linkUrl: clearRichContent ? null : (linkUrl ?? this.linkUrl),
+      sharedVideoId: clearRichContent
+          ? null
+          : (sharedVideoId ?? this.sharedVideoId),
+      sharedVideoUrl: clearRichContent
+          ? null
+          : (sharedVideoUrl ?? this.sharedVideoUrl),
+      sharedVideoThumbnailUrl: clearRichContent
+          ? null
+          : (sharedVideoThumbnailUrl ?? this.sharedVideoThumbnailUrl),
+      sharedVideoCreator: clearRichContent
+          ? null
+          : (sharedVideoCreator ?? this.sharedVideoCreator),
+      sharedVideoCaption: clearRichContent
+          ? null
+          : (sharedVideoCaption ?? this.sharedVideoCaption),
+      deletedForEveryone: deletedForEveryone ?? this.deletedForEveryone,
       isOrder: isOrder ?? this.isOrder,
       orderCreatedAtMs: orderCreatedAtMs ?? this.orderCreatedAtMs,
       orderStatus: orderStatus ?? this.orderStatus,
@@ -242,47 +392,84 @@ class ChatMessage {
     );
   }
 
-  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
-        id: json['id'] as String,
-        text: json['text'] as String? ?? '',
-        isMe: json['isMe'] as bool? ?? false,
-        timestamp: json['timestamp'] as String? ?? '',
-        status: json['status'] as String?,
-        imageUrl: json['imageUrl'] as String?,
-        imageUrls: (json['imageUrls'] as List<dynamic>?)?.cast<String>(),
-        senderHandle: json['senderHandle'] as String?,
-        isOrder: json['isOrder'] as bool? ?? false,
-        orderCreatedAtMs: json['orderCreatedAtMs'] as int?,
-        orderStatus: json['orderStatus'] as String?,
-        orderProductId: json['orderProductId'] as String?,
-        orderProductTitle: json['orderProductTitle'] as String?,
-        orderReference: json['orderReference'] as String?,
-        orderQuantity: json['orderQuantity'] as int?,
-        orderItems: (json['orderItems'] as List<dynamic>?)
-            ?.map((e) => Map<String, dynamic>.from(e as Map))
-            .toList(),
-        cancelledBy: json['cancelledBy'] as String?,
-        cancellationTime: json['cancellationTime'] as String?,
-      );
+  factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    final rawImageUrl = json['imageUrl'];
+    final legacyImageUrls = rawImageUrl is List
+        ? rawImageUrl
+              .map((item) => item.toString())
+              .where((item) => item.isNotEmpty)
+              .toList()
+        : const <String>[];
+    final storedImageUrls = json['imageUrls'] is List
+        ? (json['imageUrls'] as List)
+              .map((item) => item.toString())
+              .where((item) => item.isNotEmpty)
+              .toList()
+        : const <String>[];
+    return ChatMessage(
+      id: json['id']?.toString() ?? '',
+      text: json['text'] as String? ?? '',
+      isMe: json['isMe'] as bool? ?? false,
+      timestamp: json['timestamp'] as String? ?? '',
+      status: json['status'] as String?,
+      imageUrl: rawImageUrl is String
+          ? rawImageUrl
+          : (legacyImageUrls.isNotEmpty ? legacyImageUrls.first : null),
+      imageUrls: storedImageUrls.isNotEmpty
+          ? storedImageUrls
+          : (legacyImageUrls.isNotEmpty ? legacyImageUrls : null),
+      senderHandle: json['senderHandle'] as String?,
+      remoteId: (json['remoteId'] as num?)?.toInt(),
+      contentType: json['contentType'] as String? ?? 'TEXT',
+      linkUrl: json['linkUrl'] as String?,
+      sharedVideoId: (json['sharedVideoId'] as num?)?.toInt(),
+      sharedVideoUrl: json['sharedVideoUrl'] as String?,
+      sharedVideoThumbnailUrl: json['sharedVideoThumbnailUrl'] as String?,
+      sharedVideoCreator: json['sharedVideoCreator'] as String?,
+      sharedVideoCaption: json['sharedVideoCaption'] as String?,
+      deletedForEveryone: json['deletedForEveryone'] as bool? ?? false,
+      isOrder: json['isOrder'] as bool? ?? false,
+      orderCreatedAtMs: json['orderCreatedAtMs'] as int?,
+      orderStatus: json['orderStatus'] as String?,
+      orderProductId: json['orderProductId'] as String?,
+      orderProductTitle: json['orderProductTitle'] as String?,
+      orderReference: json['orderReference'] as String?,
+      orderQuantity: (json['orderQuantity'] as num?)?.toInt(),
+      orderItems: (json['orderItems'] as List<dynamic>?)
+          ?.map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(),
+      cancelledBy: json['cancelledBy'] as String?,
+      cancellationTime: json['cancellationTime'] as String?,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'text': text,
-        'isMe': isMe,
-        'timestamp': timestamp,
-        'status': status,
-        'imageUrl': imageUrl,
-        'imageUrls': imageUrls,
-        'senderHandle': senderHandle,
-        'isOrder': isOrder,
-        'orderCreatedAtMs': orderCreatedAtMs,
-        'orderStatus': orderStatus,
-        'orderProductId': orderProductId,
-        'orderProductTitle': orderProductTitle,
-        'orderReference': orderReference,
-        'orderQuantity': orderQuantity,
-        'orderItems': orderItems,
-        'cancelledBy': cancelledBy,
-        'cancellationTime': cancellationTime,
-      };
+    'id': id,
+    'text': text,
+    'isMe': isMe,
+    'timestamp': timestamp,
+    'status': status,
+    'imageUrl': imageUrl,
+    'imageUrls': imageUrls,
+    'senderHandle': senderHandle,
+    'remoteId': remoteId,
+    'contentType': contentType,
+    'linkUrl': linkUrl,
+    'sharedVideoId': sharedVideoId,
+    'sharedVideoUrl': sharedVideoUrl,
+    'sharedVideoThumbnailUrl': sharedVideoThumbnailUrl,
+    'sharedVideoCreator': sharedVideoCreator,
+    'sharedVideoCaption': sharedVideoCaption,
+    'deletedForEveryone': deletedForEveryone,
+    'isOrder': isOrder,
+    'orderCreatedAtMs': orderCreatedAtMs,
+    'orderStatus': orderStatus,
+    'orderProductId': orderProductId,
+    'orderProductTitle': orderProductTitle,
+    'orderReference': orderReference,
+    'orderQuantity': orderQuantity,
+    'orderItems': orderItems,
+    'cancelledBy': cancelledBy,
+    'cancellationTime': cancellationTime,
+  };
 }

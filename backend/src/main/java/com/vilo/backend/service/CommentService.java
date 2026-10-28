@@ -16,10 +16,13 @@ public class CommentService {
 
     private final CommentRepository commentRepository;
     private final VideoRepository videoRepository;
+    private final NotificationService notificationService;
 
-    public CommentService(CommentRepository commentRepository, VideoRepository videoRepository) {
+    public CommentService(CommentRepository commentRepository, VideoRepository videoRepository,
+                          NotificationService notificationService) {
         this.commentRepository = commentRepository;
         this.videoRepository = videoRepository;
+        this.notificationService = notificationService;
     }
 
     public Page<Comment> getCommentsForVideo(Long videoId, Pageable pageable) {
@@ -41,6 +44,13 @@ public class CommentService {
         // Update comment count on video
         video.setCommentCount(video.getCommentCount() + 1);
         videoRepository.save(video);
+
+        Long parentAuthorId = parentId == null
+                ? null
+                : commentRepository.findById(parentId).map(Comment::getUserId).orElse(null);
+        Long videoOwnerId = video.getCreator() != null ? video.getCreator().getId() : null;
+        notificationService.createComment(
+                userId, videoOwnerId, parentAuthorId, videoId, savedComment.getId(), content);
 
         return savedComment;
     }

@@ -42,6 +42,8 @@ class AuthRemoteDataSource {
       avatarUrl: user.avatarUrl,
       email: user.email,
       bio: user.bio,
+      followersCount: user.followersCount,
+      followingCount: user.followingCount,
     );
 
     // Sync globally so identity immediately reflects active user
@@ -85,6 +87,8 @@ class AuthRemoteDataSource {
       avatarUrl: user.avatarUrl,
       email: user.email,
       bio: user.bio,
+      followersCount: user.followersCount,
+      followingCount: user.followingCount,
     );
 
     // Sync globally so identity immediately reflects active user
@@ -108,6 +112,8 @@ class AuthRemoteDataSource {
       avatarUrl: user.avatarUrl,
       email: user.email,
       bio: user.bio,
+      followersCount: user.followersCount,
+      followingCount: user.followingCount,
     );
     return user;
   }

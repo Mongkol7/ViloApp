@@ -36,6 +36,7 @@ public class VideoService {
     private final FileStorageService fileStorageService;
     private final com.vilo.backend.repository.SoundRepository soundRepository;
     private final HashtagRepository hashtagRepository;
+    private final NotificationService notificationService;
 
     public VideoService(VideoRepository videoRepository,
                         UserRepository userRepository,
@@ -44,7 +45,8 @@ public class VideoService {
                         CommentRepository commentRepository,
                         FileStorageService fileStorageService,
                         com.vilo.backend.repository.SoundRepository soundRepository,
-                        HashtagRepository hashtagRepository) {
+                        HashtagRepository hashtagRepository,
+                        NotificationService notificationService) {
         this.videoRepository = videoRepository;
         this.userRepository = userRepository;
         this.videoLikeRepository = videoLikeRepository;
@@ -53,6 +55,7 @@ public class VideoService {
         this.fileStorageService = fileStorageService;
         this.soundRepository = soundRepository;
         this.hashtagRepository = hashtagRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional(readOnly = true)
@@ -637,6 +640,7 @@ MultipartFile thumbnailFile, String thumbnailPath,
             videoLikeRepository.save(new VideoLike(userId, videoId));
             video.setLikeCount(video.getLikeCount() + 1);
             videoRepository.save(video);
+            notificationService.createLike(userId, video.getCreator().getId(), videoId);
             return true;
         }
     }

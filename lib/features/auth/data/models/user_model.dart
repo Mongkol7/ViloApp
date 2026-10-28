@@ -1,3 +1,5 @@
+import '../../../../core/network/media_url.dart';
+
 class UserModel {
   final int id;
   final String username;
@@ -24,6 +26,17 @@ class UserModel {
     required this.followersCount,
     required this.followingCount,
   });
+
+  static String? _resolveAvatarUrl(dynamic value) {
+    if (value == null || value.toString().trim().isEmpty) return null;
+    final clean = value.toString().trim();
+    if (clean.startsWith('assets/') ||
+        clean.startsWith('http://') ||
+        clean.startsWith('https://')) {
+      return clean;
+    }
+    return resolveBackendMediaUrl(clean);
+  }
 
   UserModel copyWith({
     int? id,
@@ -60,7 +73,7 @@ class UserModel {
       email: json['email'] as String? ?? '',
       displayName: json['displayName'] as String? ?? '',
       bio: json['bio'] as String?,
-      avatarUrl: json['avatarUrl'] as String?,
+      avatarUrl: _resolveAvatarUrl(json['avatarUrl']),
       isVerified: json['isVerified'] as bool? ?? false,
       isFollowing: json['isFollowing'] as bool? ?? false,
       followsYou: json['followsYou'] as bool? ?? false,

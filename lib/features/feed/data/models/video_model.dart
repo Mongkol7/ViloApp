@@ -67,16 +67,19 @@ class VideoModel {
     String? comments,
     String? saves,
     String? views,
-  })  : _thumbnailUrl = thumbnailUrl,
-        _formattedLikes = formattedLikes ?? likes,
-        _formattedComments = formattedComments ?? comments,
-        _formattedSaves = formattedSaves ?? saves,
-        _formattedViews = formattedViews ?? views;
+  }) : _thumbnailUrl = thumbnailUrl,
+       _formattedLikes = formattedLikes ?? likes,
+       _formattedComments = formattedComments ?? comments,
+       _formattedSaves = formattedSaves ?? saves,
+       _formattedViews = formattedViews ?? views;
 
   static bool isVideoUrl(String? url) {
     if (url == null || url.trim().isEmpty) return false;
     final lower = url.trim().toLowerCase();
-    return RegExp(r'\.(mp4|mov|mkv|webm|avi|m4v)($|\?)', caseSensitive: false).hasMatch(lower);
+    return RegExp(
+      r'\.(mp4|mov|mkv|webm|avi|m4v)($|\?)',
+      caseSensitive: false,
+    ).hasMatch(lower);
   }
 
   static bool isImageUrl(String? url) {
@@ -84,7 +87,10 @@ class VideoModel {
     final clean = url.trim().split('?')[0].toLowerCase();
     return clean.contains('/uploads/photos/') ||
         clean.contains('/uploads/images/') ||
-        RegExp(r'\.(jpg|jpeg|png|webp|gif|bmp)($|\?)', caseSensitive: false).hasMatch(clean);
+        RegExp(
+          r'\.(jpg|jpeg|png|webp|gif|bmp)($|\?)',
+          caseSensitive: false,
+        ).hasMatch(clean);
   }
 
   /// Returns true if the media represents an image post rather than a video.
@@ -94,8 +100,10 @@ class VideoModel {
     final hasVideoExt = isVideoUrl(lowerVideo) || isVideoUrl(lowerResolved);
 
     // If mediaUrls or imageUrls has multiple items and none is video, it is definitely a multi-image post
-    if (mediaUrls.length > 1 && mediaUrls.every((u) => !isVideoUrl(u))) return true;
-    if (imageUrls.length > 1 && imageUrls.every((u) => !isVideoUrl(u))) return true;
+    if (mediaUrls.length > 1 && mediaUrls.every((u) => !isVideoUrl(u)))
+      return true;
+    if (imageUrls.length > 1 && imageUrls.every((u) => !isVideoUrl(u)))
+      return true;
     if (videoUrl.contains(',') && !hasVideoExt) return true;
 
     // Filter genuine photos from imageUrls
@@ -120,11 +128,17 @@ class VideoModel {
   List<String> get resolvedMediaUrls {
     if (isImagePost) {
       if (imageUrls.isNotEmpty) {
-        final imgs = imageUrls.where((u) => !isVideoUrl(u)).map((u) => resolveMediaUrl(u)).toList();
+        final imgs = imageUrls
+            .where((u) => !isVideoUrl(u))
+            .map((u) => resolveMediaUrl(u))
+            .toList();
         if (imgs.isNotEmpty) return imgs;
       }
       if (mediaUrls.isNotEmpty) {
-        final imgs = mediaUrls.where((u) => !isVideoUrl(u)).map((u) => resolveMediaUrl(u)).toList();
+        final imgs = mediaUrls
+            .where((u) => !isVideoUrl(u))
+            .map((u) => resolveMediaUrl(u))
+            .toList();
         if (imgs.isNotEmpty) return imgs;
       }
       if (videoUrl.contains(',')) {
@@ -160,8 +174,12 @@ class VideoModel {
     if (isMe) return true;
     final currentUser = TokenStorage.instance.getUserModel();
     if (currentUser != null) {
-      if (currentUser.id > 0 && creatorId > 0 && currentUser.id == creatorId) return true;
-      final myName = currentUser.username.replaceAll('@', '').trim().toLowerCase();
+      if (currentUser.id > 0 && creatorId > 0 && currentUser.id == creatorId)
+        return true;
+      final myName = currentUser.username
+          .replaceAll('@', '')
+          .trim()
+          .toLowerCase();
       final postName = username.replaceAll('@', '').trim().toLowerCase();
       if (myName.isNotEmpty && myName == postName) return true;
     }
@@ -187,7 +205,9 @@ class VideoModel {
   static String resolveMediaUrl(String? url) {
     if (url == null || url.trim().isEmpty) return '';
     final clean = url.trim();
-    if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('assets/')) {
+    if (clean.startsWith('http://') ||
+        clean.startsWith('https://') ||
+        clean.startsWith('assets/')) {
       return clean;
     }
     final host = ApiClient.baseUrl.replaceAll('/api/v1', '');
@@ -227,7 +247,8 @@ class VideoModel {
           rawImageUrls.add(s);
         }
       }
-    } else if (json['imageUrls'] is String && json['imageUrls'].toString().trim().isNotEmpty) {
+    } else if (json['imageUrls'] is String &&
+        json['imageUrls'].toString().trim().isNotEmpty) {
       for (final s in json['imageUrls'].toString().split(',')) {
         final clean = s.trim();
         if (clean.isNotEmpty && !isVideoUrl(clean) && isImageUrl(clean)) {
@@ -252,7 +273,9 @@ class VideoModel {
       rawImageUrls.addAll(rawMediaUrls);
     }
 
-    if (rawMediaUrls.isEmpty && rawVideoUrl.contains(',') && !isVideoUrl(rawVideoUrl)) {
+    if (rawMediaUrls.isEmpty &&
+        rawVideoUrl.contains(',') &&
+        !isVideoUrl(rawVideoUrl)) {
       rawMediaUrls.addAll(
         rawVideoUrl
             .split(',')
@@ -265,16 +288,22 @@ class VideoModel {
     }
 
     final resolvedVideoUrl = resolveMediaUrl(rawVideoUrl);
-    String? resolvedThumbUrl = (rawThumbUrl != null && rawThumbUrl.trim().isNotEmpty)
+    String? resolvedThumbUrl =
+        (rawThumbUrl != null && rawThumbUrl.trim().isNotEmpty)
         ? resolveMediaUrl(rawThumbUrl)
         : null;
 
-    final isImg = !isVideoUrl(resolvedVideoUrl) &&
-        (isImageUrl(resolvedVideoUrl) || rawImageUrls.isNotEmpty || rawMediaUrls.isNotEmpty);
+    final isImg =
+        !isVideoUrl(resolvedVideoUrl) &&
+        (isImageUrl(resolvedVideoUrl) ||
+            rawImageUrls.isNotEmpty ||
+            rawMediaUrls.isNotEmpty);
     if (isImg && (resolvedThumbUrl == null || resolvedThumbUrl.isEmpty)) {
       resolvedThumbUrl = rawImageUrls.isNotEmpty
           ? resolveMediaUrl(rawImageUrls.first)
-          : (rawMediaUrls.isNotEmpty ? resolveMediaUrl(rawMediaUrls.first) : resolvedVideoUrl);
+          : (rawMediaUrls.isNotEmpty
+                ? resolveMediaUrl(rawMediaUrls.first)
+                : resolvedVideoUrl);
     }
 
     return VideoModel(
@@ -282,13 +311,18 @@ class VideoModel {
       creatorId: (json['creatorId'] as num?)?.toInt() ?? 0,
       username: json['username']?.toString() ?? '@user',
       displayName: json['displayName']?.toString() ?? 'User',
-      avatarUrl: json['avatarUrl']?.toString(),
+      avatarUrl: json['avatarUrl'] == null
+          ? null
+          : resolveMediaUrl(json['avatarUrl'].toString()),
       isVerified: json['isVerified'] == true,
       caption: json['caption']?.toString() ?? '',
       videoUrl: resolvedVideoUrl,
       thumbnailUrl: resolvedThumbUrl,
       soundId: (json['soundId'] as num?)?.toInt(),
-      musicTitle: json['musicName']?.toString() ?? json['musicTitle']?.toString() ?? 'Original Sound',
+      musicTitle:
+          json['musicName']?.toString() ??
+          json['musicTitle']?.toString() ??
+          'Original Sound',
       musicArtist: json['musicArtist']?.toString(),
       audioUrl: json['audioUrl']?.toString(),
       viewCount: (json['viewCount'] as num?)?.toInt() ?? 0,
@@ -411,10 +445,18 @@ class VideoModel {
       mediaUrls: mediaUrls ?? this.mediaUrls,
       imageUrls: imageUrls ?? this.imageUrls,
       createdAt: createdAt ?? this.createdAt,
-      formattedLikes: formattedLikes ?? (likeCount != null ? null : (likes ?? _formattedLikes)),
-      formattedComments: formattedComments ?? (commentCount != null ? null : (comments ?? _formattedComments)),
-      formattedSaves: formattedSaves ?? (saveCount != null ? null : (saves ?? _formattedSaves)),
-      formattedViews: formattedViews ?? (viewCount != null ? null : (views ?? _formattedViews)),
+      formattedLikes:
+          formattedLikes ??
+          (likeCount != null ? null : (likes ?? _formattedLikes)),
+      formattedComments:
+          formattedComments ??
+          (commentCount != null ? null : (comments ?? _formattedComments)),
+      formattedSaves:
+          formattedSaves ??
+          (saveCount != null ? null : (saves ?? _formattedSaves)),
+      formattedViews:
+          formattedViews ??
+          (viewCount != null ? null : (views ?? _formattedViews)),
     );
   }
 
@@ -425,10 +467,19 @@ class VideoModel {
   String get saves => formattedSaves;
   String get views => formattedViews;
 
-  String get formattedLikes => (likeCount > 0 || _formattedLikes == null) ? _formatCount(likeCount) : _formattedLikes;
-  String get formattedComments => (commentCount > 0 || _formattedComments == null) ? _formatCount(commentCount) : _formattedComments;
-  String get formattedSaves => (saveCount > 0 || _formattedSaves == null) ? _formatCount(saveCount) : _formattedSaves;
-  String get formattedViews => (viewCount > 0 || _formattedViews == null) ? _formatCount(viewCount) : _formattedViews;
+  String get formattedLikes => (likeCount > 0 || _formattedLikes == null)
+      ? _formatCount(likeCount)
+      : _formattedLikes;
+  String get formattedComments =>
+      (commentCount > 0 || _formattedComments == null)
+      ? _formatCount(commentCount)
+      : _formattedComments;
+  String get formattedSaves => (saveCount > 0 || _formattedSaves == null)
+      ? _formatCount(saveCount)
+      : _formattedSaves;
+  String get formattedViews => (viewCount > 0 || _formattedViews == null)
+      ? _formatCount(viewCount)
+      : _formattedViews;
 
   static String _formatCount(int count) {
     if (count >= 1000000) {

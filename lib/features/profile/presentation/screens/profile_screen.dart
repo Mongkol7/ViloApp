@@ -64,15 +64,29 @@ class _ProfileScreenState extends State<ProfileScreen>
           followingCount: 0,
         );
     ProfileSyncService.instance.followEvents.addListener(_onFollowEvent);
-    ProfileSyncService.instance.videoUploadedEvents.addListener(_onVideoUploaded);
-    ProfileSyncService.instance.videoInteractionEvents.addListener(_onVideoInteractionEvent);
+    ProfileSyncService.instance.videoUploadedEvents.addListener(
+      _onVideoUploaded,
+    );
+    ProfileSyncService.instance.videoInteractionEvents.addListener(
+      _onVideoInteractionEvent,
+    );
     ProfileSyncService.instance.videoDeletedEvents.addListener(_onVideoDeleted);
-    ProfileSyncService.instance.soundUploadedEvents.addListener(_onSoundUploaded);
+    ProfileSyncService.instance.soundUploadedEvents.addListener(
+      _onSoundUploaded,
+    );
     ProfileSyncService.instance.soundDeletedEvents.addListener(_onSoundDeleted);
-    ProfileSyncService.instance.interactionEvents.addListener(_onInteractionEvent);
-    ProfileSyncService.instance.profileUpdatedEvents.addListener(_onProfileUpdated);
-    ProfileSyncService.instance.productUploadedEvents.addListener(_onProductUploaded);
-    ShopService.instance.publishedProductNotifier.addListener(_onProductUploaded);
+    ProfileSyncService.instance.interactionEvents.addListener(
+      _onInteractionEvent,
+    );
+    ProfileSyncService.instance.profileUpdatedEvents.addListener(
+      _onProfileUpdated,
+    );
+    ProfileSyncService.instance.productUploadedEvents.addListener(
+      _onProductUploaded,
+    );
+    ShopService.instance.publishedProductNotifier.addListener(
+      _onProductUploaded,
+    );
 
     // Instant zero-latency seed from cache if available
     final cached = (_user != null && _user!.id > 0)
@@ -95,11 +109,13 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   void _onProductUploaded() {
-    final product = ProfileSyncService.instance.productUploadedEvents.value ??
+    final product =
+        ProfileSyncService.instance.productUploadedEvents.value ??
         ShopService.instance.publishedProductNotifier.value;
     if (!mounted || product == null) return;
 
-    final isMine = ProfileSyncService.instance.isCurrentUser(
+    final isMine =
+        ProfileSyncService.instance.isCurrentUser(
           username: product.seller,
           id: product.sellerId,
         ) ||
@@ -130,7 +146,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-void _onVideoUploaded() {
+  void _onVideoUploaded() {
     final video = ProfileSyncService.instance.videoUploadedEvents.value;
     if (video != null && mounted) {
       setState(() {
@@ -283,8 +299,9 @@ void _onVideoUploaded() {
     // catalog here because it contains products from other accounts.
     if (_user != null && _user!.id > 0) {
       try {
-        final products = await ShopService.instance
-            .getProductsForSeller(_user!.id.toString());
+        final products = await ShopService.instance.getProductsForSeller(
+          _user!.id.toString(),
+        );
         if (mounted) setState(() => _myProducts = products);
       } catch (e) {
         debugPrint('[ProfileScreen] get seller products notice: $e');
@@ -300,7 +317,8 @@ void _onVideoUploaded() {
     } catch (_) {
       try {
         if (_user != null && _user!.id > 0) {
-          final fallbackSounds = await FeedRemoteDataSource.instance.getUserSounds(_user!.id);
+          final fallbackSounds = await FeedRemoteDataSource.instance
+              .getUserSounds(_user!.id);
           if (mounted) {
             setState(() => _mySounds = fallbackSounds);
           }
@@ -354,22 +372,31 @@ void _onVideoUploaded() {
     // Pre-warm following & followers cache in background for zero-latency instant listing
     final targetId = _user?.id ?? 1;
     if (targetId > 0) {
-      ProfileRemoteDataSource.instance.getFollowing(targetId).then((fl) {
-        ProfileSyncService.instance.cachedFollowing = List.from(fl);
-      }).catchError((_) {});
-      ProfileRemoteDataSource.instance.getFollowers(targetId).then((f) {
-        ProfileSyncService.instance.cachedFollowers = List.from(f);
-      }).catchError((_) {});
+      ProfileRemoteDataSource.instance
+          .getFollowing(targetId)
+          .then((fl) {
+            ProfileSyncService.instance.cachedFollowing = List.from(fl);
+          })
+          .catchError((_) {});
+      ProfileRemoteDataSource.instance
+          .getFollowers(targetId)
+          .then((f) {
+            ProfileSyncService.instance.cachedFollowers = List.from(f);
+          })
+          .catchError((_) {});
     }
   }
 
   Future<void> _refreshCategory(int categoryIndex) async {
-    if (categoryIndex < 0 || categoryIndex > 4 ||
+    if (categoryIndex < 0 ||
+        categoryIndex > 4 ||
         _loadingCategories.contains(categoryIndex)) {
       return;
     }
 
-    final minimumAnimation = Future<void>.delayed(const Duration(milliseconds: 450));
+    final minimumAnimation = Future<void>.delayed(
+      const Duration(milliseconds: 450),
+    );
     setState(() => _loadingCategories.add(categoryIndex));
     try {
       final identifier = (_user?.id != null && _user!.id > 0)
@@ -383,7 +410,8 @@ void _onVideoUploaded() {
             if (mounted) setState(() => _mySounds = sounds);
           } catch (_) {
             if (_user != null && _user!.id > 0) {
-              final fallback = await FeedRemoteDataSource.instance.getUserSounds(_user!.id);
+              final fallback = await FeedRemoteDataSource.instance
+                  .getUserSounds(_user!.id);
               if (mounted) setState(() => _mySounds = fallback);
             }
           }
@@ -397,8 +425,9 @@ void _onVideoUploaded() {
           break;
         case 2:
           if (_user != null && _user!.id > 0) {
-            final products = await ShopService.instance
-                .getProductsForSeller(_user!.id.toString());
+            final products = await ShopService.instance.getProductsForSeller(
+              _user!.id.toString(),
+            );
             if (mounted) setState(() => _myProducts = products);
           }
           break;
@@ -498,7 +527,7 @@ void _onVideoUploaded() {
     return '$count';
   }
 
-void _confirmDeleteProfileVideo(VideoFeedModel video) async {
+  void _confirmDeleteProfileVideo(VideoFeedModel video) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -583,15 +612,33 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
   void dispose() {
     _tabController.dispose();
     ProfileSyncService.instance.followEvents.removeListener(_onFollowEvent);
-    ProfileSyncService.instance.videoUploadedEvents.removeListener(_onVideoUploaded);
-    ProfileSyncService.instance.videoInteractionEvents.removeListener(_onVideoInteractionEvent);
-    ProfileSyncService.instance.videoDeletedEvents.removeListener(_onVideoDeleted);
-    ProfileSyncService.instance.soundUploadedEvents.removeListener(_onSoundUploaded);
-    ProfileSyncService.instance.soundDeletedEvents.removeListener(_onSoundDeleted);
-    ProfileSyncService.instance.interactionEvents.removeListener(_onInteractionEvent);
-    ProfileSyncService.instance.profileUpdatedEvents.removeListener(_onProfileUpdated);
-    ProfileSyncService.instance.productUploadedEvents.removeListener(_onProductUploaded);
-    ShopService.instance.publishedProductNotifier.removeListener(_onProductUploaded);
+    ProfileSyncService.instance.videoUploadedEvents.removeListener(
+      _onVideoUploaded,
+    );
+    ProfileSyncService.instance.videoInteractionEvents.removeListener(
+      _onVideoInteractionEvent,
+    );
+    ProfileSyncService.instance.videoDeletedEvents.removeListener(
+      _onVideoDeleted,
+    );
+    ProfileSyncService.instance.soundUploadedEvents.removeListener(
+      _onSoundUploaded,
+    );
+    ProfileSyncService.instance.soundDeletedEvents.removeListener(
+      _onSoundDeleted,
+    );
+    ProfileSyncService.instance.interactionEvents.removeListener(
+      _onInteractionEvent,
+    );
+    ProfileSyncService.instance.profileUpdatedEvents.removeListener(
+      _onProfileUpdated,
+    );
+    ProfileSyncService.instance.productUploadedEvents.removeListener(
+      _onProductUploaded,
+    );
+    ShopService.instance.publishedProductNotifier.removeListener(
+      _onProductUploaded,
+    );
     super.dispose();
   }
 
@@ -805,21 +852,46 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
                                         child: SizedBox(
                                           width: 96,
                                           height: 96,
-                                          child: Image.network(
-                                            currentAvatarUrl,
-                                            fit: BoxFit.cover,
-                                            errorBuilder:
-                                                (context, error, stackTrace) =>
-                                                    Container(
-                                                      color: PulseColors
-                                                          .surfaceContainer,
-                                                      child: const Icon(
-                                                        Icons.person_rounded,
-                                                        color: Colors.white70,
-                                                        size: 48,
+                                          child:
+                                              currentAvatarUrl.startsWith(
+                                                'assets/',
+                                              )
+                                              ? Image.asset(
+                                                  currentAvatarUrl,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder:
+                                                      (
+                                                        context,
+                                                        error,
+                                                        stackTrace,
+                                                      ) => Container(
+                                                        color: PulseColors
+                                                            .surfaceContainer,
+                                                        child: const Icon(
+                                                          Icons.person_rounded,
+                                                          color: Colors.white70,
+                                                          size: 48,
+                                                        ),
                                                       ),
-                                                    ),
-                                          ),
+                                                )
+                                              : Image.network(
+                                                  currentAvatarUrl,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder:
+                                                      (
+                                                        context,
+                                                        error,
+                                                        stackTrace,
+                                                      ) => Container(
+                                                        color: PulseColors
+                                                            .surfaceContainer,
+                                                        child: const Icon(
+                                                          Icons.person_rounded,
+                                                          color: Colors.white70,
+                                                          size: 48,
+                                                        ),
+                                                      ),
+                                                ),
                                         ),
                                       ),
                                       if (!isStoryActive)
@@ -945,7 +1017,9 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
                   isLoading: _isCategoryLoading(0),
                   onSoundUpdated: (updatedSound) {
                     setState(() {
-                      final idx = _mySounds.indexWhere((s) => s.id == updatedSound.id);
+                      final idx = _mySounds.indexWhere(
+                        (s) => s.id == updatedSound.id,
+                      );
                       if (idx != -1) {
                         _mySounds[idx] = updatedSound;
                       }
@@ -987,7 +1061,9 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
                   2,
                   userProducts: _myProducts,
                   username: _user?.username,
-                  userAvatar: _user?.avatarUrl ?? ProfileSyncService.instance.currentUserAvatar,
+                  userAvatar:
+                      _user?.avatarUrl ??
+                      ProfileSyncService.instance.currentUserAvatar,
                   isCurrentUser: true,
                 ),
               ), // Shop

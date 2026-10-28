@@ -23,6 +23,8 @@ class TokenStorage {
   static const String _keyAvatarUrl = 'vilo_auth_avatar_url';
   static const String _keyEmail = 'vilo_auth_email';
   static const String _keyBio = 'vilo_auth_bio';
+  static const String _keyFollowersCount = 'vilo_auth_followers_count';
+  static const String _keyFollowingCount = 'vilo_auth_following_count';
 
   String? _accessToken;
   String? _refreshToken;
@@ -32,6 +34,8 @@ class TokenStorage {
   String? _avatarUrl;
   String? _email;
   String? _bio;
+  int? _followersCount;
+  int? _followingCount;
   bool _initialized = false;
 
   File? _getFile() {
@@ -69,6 +73,8 @@ class TokenStorage {
           _avatarUrl = map['avatarUrl'] as String?;
           _email = map['email'] as String?;
           _bio = map['bio'] as String?;
+          _followersCount = map['followersCount'] as int?;
+          _followingCount = map['followingCount'] as int?;
         }
       } catch (_) {}
     }
@@ -90,6 +96,8 @@ class TokenStorage {
       _avatarUrl = prefs.getString(_keyAvatarUrl);
       _email = prefs.getString(_keyEmail);
       _bio = prefs.getString(_keyBio);
+      _followersCount = prefs.getInt(_keyFollowersCount);
+      _followingCount = prefs.getInt(_keyFollowingCount);
       _initialized = true;
     } catch (_) {}
   }
@@ -108,6 +116,8 @@ class TokenStorage {
             'avatarUrl': _avatarUrl,
             'email': _email,
             'bio': _bio,
+            'followersCount': _followersCount,
+            'followingCount': _followingCount,
           };
           file.writeAsStringSync(jsonEncode(data));
         }
@@ -122,6 +132,8 @@ class TokenStorage {
         if (_avatarUrl != null) prefs.setString(_keyAvatarUrl, _avatarUrl!);
         if (_email != null) prefs.setString(_keyEmail, _email!);
         if (_bio != null) prefs.setString(_keyBio, _bio!);
+        if (_followersCount != null) prefs.setInt(_keyFollowersCount, _followersCount!);
+        if (_followingCount != null) prefs.setInt(_keyFollowingCount, _followingCount!);
       }).catchError((_) {});
     }
   }
@@ -142,6 +154,8 @@ class TokenStorage {
     String? avatarUrl,
     String? email,
     String? bio,
+    int? followersCount,
+    int? followingCount,
   }) async {
     _userId = id;
     _username = username;
@@ -149,6 +163,8 @@ class TokenStorage {
     if (avatarUrl != null) _avatarUrl = avatarUrl;
     if (email != null) _email = email;
     if (bio != null) _bio = bio;
+    if (followersCount != null) _followersCount = followersCount;
+    if (followingCount != null) _followingCount = followingCount;
     _persist();
   }
 
@@ -210,8 +226,8 @@ class TokenStorage {
       avatarUrl: _avatarUrl,
       email: _email ?? '',
       isVerified: false,
-      followersCount: 0,
-      followingCount: 0,
+      followersCount: _followersCount ?? 0,
+      followingCount: _followingCount ?? 0,
     );
   }
 
@@ -229,6 +245,8 @@ class TokenStorage {
     _avatarUrl = null;
     _email = null;
     _bio = null;
+    _followersCount = null;
+    _followingCount = null;
 
     if (!kIsWeb) {
       try {

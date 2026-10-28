@@ -1,213 +1,251 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../data/models/video_model.dart';
+import '../../../inbox_activity/data/datasources/inbox_message_manager.dart';
+import '../../../inbox_activity/domain/entities/inbox_item.dart';
+import '../../../search_discover/data/datasources/search_remote_data_source.dart';
+import '../../../search_discover/domain/entities/search_results.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
+import '../../../auth/data/datasources/token_storage.dart';
 
-class ShareBottomSheet extends StatelessWidget {
-  const ShareBottomSheet({super.key});
+class ShareBottomSheet extends StatefulWidget {
+  final VideoModel video;
+
+  const ShareBottomSheet({super.key, required this.video});
+
+  @override
+  State<ShareBottomSheet> createState() => _ShareBottomSheetState();
+}
+
+class _ShareBottomSheetState extends State<ShareBottomSheet> {
+  final TextEditingController _searchController = TextEditingController();
+  List<SearchAccount> _searchResults = [];
+  bool _isSearching = false;
+  bool _isSending = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<DirectMessageThread> get _threads => InboxMessageManager.instance.threads;
+
+  Future<void> _searchUsers(String value) async {
+    final query = value.trim();
+    if (query.isEmpty) {
+      setState(() => _searchResults = []);
+      return;
+    }
+    setState(() => _isSearching = true);
+    try {
+      final result = await SearchRemoteDataSource.instance.search(query, type: 'USERS');
+      if (!mounted) return;
+      setState(() {
+        _searchResults = (result['accounts'] as List?)?.whereType<SearchAccount>().toList() ?? [];
+      });
+    } catch (_) {
+      if (mounted) setState(() => _searchResults = []);
+    } finally {
+      if (mounted) setState(() => _isSearching = false);
+    }
+  }
+
+  Future<void> _shareToThread(DirectMessageThread thread) async {
+    await _shareToUser(
+      username: thread.username,
+      displayName: thread.username,
+      avatarUrl: thread.avatarUrl,
+      threadId: thread.id,
+    );
+  }
+
+  Future<void> _shareToAccount(SearchAccount account) async {
+    final cleanUsername = account.username.replaceAll('@', '').trim();
+    if (cleanUsername.isEmpty) return;
+    await _shareToUser(
+      username: cleanUsername,
+      displayName: account.displayName,
+      avatarUrl: account.avatarUrl,
+      threadId: InboxMessageManager.buildThreadId(_myHandle(), cleanUsername),
+    );
+  }
+
+  String _myHandle() {
+    final profile = ProfileSyncService.instance.cachedMyProfile ?? TokenStorage.instance.getUserModel();
+    return profile?.username ?? ProfileSyncService.instance.currentUsername;
+  }
+
+  Future<void> _shareToUser({
+    required String username,
+    required String displayName,
+    required String avatarUrl,
+    required String threadId,
+  }) async {
+    if (_isSending) return;
+    setState(() => _isSending = true);
+    final message = ChatMessage(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      text: 'Shared a video',
+      isMe: true,
+      senderHandle: _myHandle(),
+      timestamp: 'Just now',
+      contentType: 'VIDEO',
+      sharedVideoId: widget.video.id > 0 ? widget.video.id : null,
+      sharedVideoUrl: widget.video.resolvedVideoUrl,
+      sharedVideoThumbnailUrl: widget.video.thumbnailUrl,
+      sharedVideoCreator: widget.video.username,
+      sharedVideoCaption: widget.video.caption,
+    );
+    try {
+      final manager = InboxMessageManager.instance;
+      manager.addOrUpdateThread(DirectMessageThread(
+        id: threadId,
+        username: username,
+        avatarUrl: avatarUrl,
+        lastMessage: message.text,
+        timeAgo: 'Just now',
+        isVerified: false,
+        recipientHandle: username,
+        messages: const [],
+      ));
+      await manager.addMessageToThread(threadId, message);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Video shared with @$displayName')),
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(() => _isSending = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not share video: $error')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Mock Users
-    final List<Map<String, dynamic>> users = [
-      {'name': 's.k.liza', 'avatar': 'https://i.pravatar.cc/150?img=1', 'badge': '5'},
-      {'name': 'Hengg', 'avatar': 'https://i.pravatar.cc/150?img=11', 'badge': '29'},
-      {'name': 'T.S.MK', 'avatar': 'https://i.pravatar.cc/150?img=12', 'badge': '523'},
-      {'name': 'Jinx Mo', 'avatar': 'https://i.pravatar.cc/150?img=13', 'badge': '208'},
-      {'name': 'Ractz', 'avatar': 'https://i.pravatar.cc/150?img=14', 'badge': '349'},
-    ];
-
-    // Mock Share Actions
-    final List<Map<String, dynamic>> shareActions = [
-      {'icon': Icons.repeat, 'label': 'Repost', 'color': Colors.amber},
-      {'icon': Icons.link, 'label': 'Copy link', 'color': Colors.blue},
-      {'icon': Icons.chat_bubble, 'label': 'Messenger', 'color': Colors.lightBlue},
-      {'icon': Icons.facebook, 'label': 'Facebook', 'color': Colors.blueAccent},
-      {'icon': Icons.send, 'label': 'Telegram', 'color': Colors.lightBlueAccent},
-    ];
-
-    // Mock Other Actions
-    final List<Map<String, dynamic>> otherActions = [
-      {'icon': Icons.flag, 'label': 'Report'},
-      {'icon': Icons.heart_broken, 'label': 'Not interested'},
-      {'icon': Icons.add_circle_outline, 'label': 'Add to Story'},
-      {'icon': Icons.download, 'label': 'Download'},
-      {'icon': Icons.local_fire_department, 'label': 'Promote'},
-    ];
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 20.0),
-      decoration: const BoxDecoration(
-        color: Color(0xFF2E2E2E), // Dark grey background matching screenshot
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+        decoration: const BoxDecoration(
+          color: Color(0xFF1E1E22),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                const Icon(Icons.search, color: Colors.white, size: 28),
-                const Text(
-                  'Send to',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                const Expanded(
+                  child: Text('Share video', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: const Icon(Icons.close, color: Colors.white, size: 28),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close, color: Colors.white),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 24),
-          
-          // Users List
-          SizedBox(
-            height: 110,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: users.length,
-              itemBuilder: (context, index) {
-                return _UserItem(data: users[index]);
-              },
-            ),
-          ),
-          
-          const Divider(color: Colors.white24, height: 24, thickness: 1),
-          
-          // Share Actions
-          SizedBox(
-            height: 100,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: shareActions.length,
-              itemBuilder: (context, index) {
-                return _ActionItem(
-                  data: shareActions[index],
-                  isSquare: true,
-                );
-              },
-            ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Other Actions
-          SizedBox(
-            height: 100,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: otherActions.length,
-              itemBuilder: (context, index) {
-                return _ActionItem(
-                  data: otherActions[index],
-                  isSquare: false,
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-}
-
-class _UserItem extends StatelessWidget {
-  final Map<String, dynamic> data;
-
-  const _UserItem({required this.data});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: Column(
-        children: [
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: 32,
-                backgroundImage: NetworkImage(data['avatar']),
-              ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.black87,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF2E2E2E), width: 2),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.local_fire_department, color: Colors.blueAccent, size: 10),
-                      const SizedBox(width: 2),
-                      Text(
-                        data['badge'],
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
+            TextField(
+              controller: _searchController,
+              onSubmitted: _searchUsers,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Search people',
+                hintStyle: const TextStyle(color: Colors.white54),
+                prefixIcon: const Icon(Icons.search, color: Colors.white70),
+                suffixIcon: IconButton(
+                  onPressed: () => _searchUsers(_searchController.text),
+                  icon: const Icon(Icons.arrow_forward, color: Colors.white70),
                 ),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.08),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            data['name'],
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-          ),
-        ],
+            ),
+            const SizedBox(height: 12),
+            if (_isSearching)
+              const Center(child: Padding(padding: EdgeInsets.all(14), child: CircularProgressIndicator(color: Colors.white)))
+            else if (_searchResults.isNotEmpty)
+              SizedBox(
+                height: 78,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _searchResults.length,
+                  itemBuilder: (_, index) {
+                    final account = _searchResults[index];
+                    return _RecipientAvatar(
+                      label: account.username,
+                      avatarUrl: account.avatarUrl,
+                      onTap: () => _shareToAccount(account),
+                    );
+                  },
+                ),
+              )
+            else if (_threads.isNotEmpty)
+              SizedBox(
+                height: 78,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _threads.length,
+                  itemBuilder: (_, index) {
+                    final thread = _threads[index];
+                    return _RecipientAvatar(
+                      label: thread.username,
+                      avatarUrl: thread.avatarUrl,
+                      onTap: () => _shareToThread(thread),
+                    );
+                  },
+                ),
+              )
+            else
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text('Search for a user to share this video.', style: TextStyle(color: Colors.white60)),
+              ),
+            const Divider(color: Colors.white24),
+            ListTile(
+              leading: const CircleAvatar(backgroundColor: Color(0xFF2F80ED), child: Icon(Icons.link, color: Colors.white)),
+              title: const Text('Copy video link', style: TextStyle(color: Colors.white)),
+              onTap: () async {
+                await Clipboard.setData(ClipboardData(text: widget.video.resolvedVideoUrl));
+                if (context.mounted) Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _ActionItem extends StatelessWidget {
-  final Map<String, dynamic> data;
-  final bool isSquare;
+class _RecipientAvatar extends StatelessWidget {
+  final String label;
+  final String avatarUrl;
+  final VoidCallback onTap;
 
-  const _ActionItem({required this.data, required this.isSquare});
+  const _RecipientAvatar({required this.label, required this.avatarUrl, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final bgColor = data['color'] ?? const Color(0xFF3F3F3F);
-    
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: Column(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(isSquare ? 16 : 28),
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 72,
+        child: Column(
+          children: [
+            CircleAvatar(
+              radius: 25,
+              backgroundImage: avatarUrl.startsWith('http') ? NetworkImage(avatarUrl) : null,
+              child: avatarUrl.startsWith('http') ? null : const Icon(Icons.person, color: Colors.white),
             ),
-            child: Icon(data['icon'], color: Colors.white, size: 28),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: 70,
-            child: Text(
-              data['label'],
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              style: const TextStyle(color: Colors.white70, fontSize: 11),
-            ),
-          ),
-        ],
+            const SizedBox(height: 5),
+            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+          ],
+        ),
       ),
     );
   }

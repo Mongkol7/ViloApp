@@ -30,28 +30,5 @@ class StaticInboxData {
     ),
   ];
 
-  static const List<NotificationItem> notifications = [
-    NotificationItem(
-      id: 'n1',
-      title: 'New followers',
-      subtitle: 'R.DRR and 12 others followed you',
-      iconType: 'followers',
-    ),
-    NotificationItem(
-      id: 'n2',
-      title: 'Activity',
-      subtitle: 'Junta liked your photos',
-      iconType: 'activity',
-      badgeCount: 1,
-    ),
-    NotificationItem(
-      id: 'n3',
-      title: 'System notifications',
-      subtitle: 'Screen time: You spent 17% m...',
-      iconType: 'system',
-      hasDot: true,
-    ),
-  ];
-
   static const List<DirectMessageThread> threads = [];
 }

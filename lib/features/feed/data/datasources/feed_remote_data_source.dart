@@ -320,13 +320,18 @@ class FeedRemoteDataSource {
   }
 
   /// Toggle follow creator
-  Future<bool> toggleFollow(dynamic creatorId, {bool skipNotify = false}) async {
+  Future<bool> toggleFollow(
+    dynamic creatorId, {
+    bool skipNotify = false,
+    bool? desiredState,
+  }) async {
     try {
       final clean = creatorId.toString().replaceAll('@', '').trim();
-      final response = await _client.post(
-        '/users/$clean/follow',
-        requireAuth: true,
-      );
+      final response = desiredState == true
+          ? await _client.put('/users/$clean/follow', requireAuth: true)
+          : desiredState == false
+          ? await _client.delete('/users/$clean/follow', requireAuth: true)
+          : await _client.post('/users/$clean/follow', requireAuth: true);
       bool isFollowing = false;
       if (response is Map && response['following'] != null) {
         isFollowing = response['following'] == true;

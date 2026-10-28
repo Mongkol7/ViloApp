@@ -92,6 +92,17 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok(actionMessage, Map.of("following", isFollowing, "userId", id)));
     }
 
+    @PutMapping("/{identifier}/follow")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> follow(
+            @AuthenticationPrincipal User currentUser,
+            @PathVariable String identifier
+    ) {
+        Long id = userService.resolveUserId(identifier);
+        boolean isFollowing = userService.follow(currentUser, id);
+        return ResponseEntity.ok(ApiResponse.ok("Followed successfully",
+                Map.of("following", isFollowing, "userId", id)));
+    }
+
     @DeleteMapping("/{identifier}/follow")
     public ResponseEntity<ApiResponse<Map<String, Object>>> unfollow(
             @AuthenticationPrincipal User currentUser,

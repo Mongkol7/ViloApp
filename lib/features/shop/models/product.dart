@@ -37,6 +37,20 @@ class Product {
     required this.imageUrl,
   });
 
+  /// Converts backend-relative product media paths into URLs reachable by
+  /// the current Flutter target while preserving bundled asset paths.
+  static String resolveImageUrl(String? value) {
+    if (value == null || value.trim().isEmpty) return '';
+    final clean = value.trim();
+    if (clean.startsWith('assets/') ||
+        clean.startsWith('http://') ||
+        clean.startsWith('https://')) {
+      return clean;
+    }
+    final host = ApiClient.baseUrl.replaceAll('/api/v1', '');
+    return clean.startsWith('/') ? '$host$clean' : '$host/$clean';
+  }
+
   String get formattedPrice => '\$${price.toStringAsFixed(2)}';
 
   String? get formattedOriginalPrice =>
@@ -79,14 +93,15 @@ class Product {
     String? sellerId;
     if (json['seller'] is Map) {
       final sellerMap = json['seller'] as Map<String, dynamic>;
-      sellerName = (sellerMap['username'] ?? sellerMap['displayName']) as String?;
-      sellerAvatar = sellerMap['avatarUrl'] as String?;
+      sellerName =
+          (sellerMap['username'] ?? sellerMap['displayName']) as String?;
+      sellerAvatar = resolveImageUrl(sellerMap['avatarUrl'] as String?);
       sellerId = sellerMap['id']?.toString();
     } else if (json['seller'] is String) {
       sellerName = json['seller'] as String;
     }
     if (sellerAvatar == null && json['sellerAvatar'] != null) {
-      sellerAvatar = json['sellerAvatar'] as String?;
+      sellerAvatar = resolveImageUrl(json['sellerAvatar'] as String?);
     }
     if (sellerId == null && json['sellerId'] != null) {
       sellerId = json['sellerId']?.toString();
@@ -99,6 +114,7 @@ class Product {
     } else if (json['images'] is List && (json['images'] as List).isNotEmpty) {
       resolvedImage = (json['images'] as List).first.toString();
     }
+    resolvedImage = resolveImageUrl(resolvedImage);
 
     // Badge mapping
     String? badgeText = json['badge'] as String?;
@@ -117,7 +133,8 @@ class Product {
       price: priceVal,
       originalPrice: origPriceVal,
       rating: (json['rating'] as num?)?.toDouble() ?? 4.8,
-      soldCount: (json['soldCount'] as num?)?.toInt() ??
+      soldCount:
+          (json['soldCount'] as num?)?.toInt() ??
           (json['salesCount'] as num?)?.toInt() ??
           0,
       stock: json['stock'] != null ? (json['stock'] as num).toInt() : 10,
@@ -202,7 +219,10 @@ class Product {
   static final Map<String, int> _soldOverrides = {};
   static final Map<String, Map<String, dynamic>> _productDetailsOverrides = {};
 
-  static Map<String, dynamic>? getProductDetailsOverride(String productId, {String? productName}) {
+  static Map<String, dynamic>? getProductDetailsOverride(
+    String productId, {
+    String? productName,
+  }) {
     final cleanId = productId.trim();
     if (_productDetailsOverrides.containsKey(cleanId)) {
       return _productDetailsOverrides[cleanId];
@@ -226,7 +246,9 @@ class Product {
     String? category,
   }) {
     final cleanId = productId.trim();
-    final details = Map<String, dynamic>.from(_productDetailsOverrides[cleanId] ?? {});
+    final details = Map<String, dynamic>.from(
+      _productDetailsOverrides[cleanId] ?? {},
+    );
     if (name != null) details['name'] = name;
     if (price != null) details['price'] = price;
     if (originalPrice != null) details['originalPrice'] = originalPrice;
@@ -252,10 +274,12 @@ class Product {
       ...screenshotFeedProducts,
       ...screenshotTopSellers,
     ]) {
-      final isIdMatch = p.id == cleanId ||
+      final isIdMatch =
+          p.id == cleanId ||
           p.id.hashCode.abs().toString() == cleanId ||
           p.id.hashCode.toString() == cleanId;
-      final isNameMatch = name != null &&
+      final isNameMatch =
+          name != null &&
           p.name.toLowerCase().trim() == name.toLowerCase().trim();
       if (isIdMatch || isNameMatch) {
         _productDetailsOverrides[p.id] = details;
@@ -272,8 +296,11 @@ class Product {
 
     for (int i = 0; i < userAddedProducts.length; i++) {
       final p = userAddedProducts[i];
-      final isIdMatch = p.id == cleanId || p.id.hashCode.abs().toString() == cleanId;
-      final isNameMatch = name != null && p.name.toLowerCase().trim() == name.toLowerCase().trim();
+      final isIdMatch =
+          p.id == cleanId || p.id.hashCode.abs().toString() == cleanId;
+      final isNameMatch =
+          name != null &&
+          p.name.toLowerCase().trim() == name.toLowerCase().trim();
       if (isIdMatch || isNameMatch) {
         userAddedProducts[i] = userAddedProducts[i].copyWith(
           name: name ?? p.name,
@@ -288,7 +315,11 @@ class Product {
     stockUpdateNotifier.value++;
   }
 
-  static int getEffectiveSoldCount(String productId, int initialSold, {String? productName}) {
+  static int getEffectiveSoldCount(
+    String productId,
+    int initialSold, {
+    String? productName,
+  }) {
     final cleanId = productId.trim();
     if (_soldOverrides.containsKey(cleanId)) {
       return _soldOverrides[cleanId]!;
@@ -307,10 +338,12 @@ class Product {
       ...screenshotFeedProducts,
       ...screenshotTopSellers,
     ]) {
-      final isIdMatch = p.id == cleanId ||
+      final isIdMatch =
+          p.id == cleanId ||
           p.id.hashCode.abs().toString() == cleanId ||
           p.id.hashCode.toString() == cleanId;
-      final isNameMatch = productName != null &&
+      final isNameMatch =
+          productName != null &&
           p.name.toLowerCase().trim() == productName.toLowerCase().trim();
 
       if (isIdMatch || isNameMatch) {
@@ -319,7 +352,8 @@ class Product {
           return _soldOverrides[p.name.toLowerCase().trim()]!;
         }
         final hashStr = p.id.hashCode.abs().toString();
-        if (_soldOverrides.containsKey(hashStr)) return _soldOverrides[hashStr]!;
+        if (_soldOverrides.containsKey(hashStr))
+          return _soldOverrides[hashStr]!;
         return p.soldCount;
       }
     }
@@ -332,10 +366,19 @@ class Product {
     return initialSold;
   }
 
-  static bool incrementSoldCount(String productId, int quantity, {int initialSold = 0, String? productName}) {
+  static bool incrementSoldCount(
+    String productId,
+    int quantity, {
+    int initialSold = 0,
+    String? productName,
+  }) {
     if (quantity <= 0) return false;
     final cleanId = productId.trim();
-    final current = getEffectiveSoldCount(cleanId, initialSold, productName: productName);
+    final current = getEffectiveSoldCount(
+      cleanId,
+      initialSold,
+      productName: productName,
+    );
     final updated = current + quantity;
     _soldOverrides[cleanId] = updated;
 
@@ -349,10 +392,12 @@ class Product {
       ...screenshotFeedProducts,
       ...screenshotTopSellers,
     ]) {
-      final isIdMatch = p.id == cleanId ||
+      final isIdMatch =
+          p.id == cleanId ||
           p.id.hashCode.abs().toString() == cleanId ||
           p.id.hashCode.toString() == cleanId;
-      final isNameMatch = productName != null &&
+      final isNameMatch =
+          productName != null &&
           p.name.toLowerCase().trim() == productName.toLowerCase().trim();
 
       if (isIdMatch || isNameMatch) {
@@ -365,21 +410,34 @@ class Product {
 
     for (int i = 0; i < userAddedProducts.length; i++) {
       final p = userAddedProducts[i];
-      final isIdMatch = p.id == cleanId || p.id.hashCode.abs().toString() == cleanId;
-      final isNameMatch = productName != null &&
+      final isIdMatch =
+          p.id == cleanId || p.id.hashCode.abs().toString() == cleanId;
+      final isNameMatch =
+          productName != null &&
           p.name.toLowerCase().trim() == productName.toLowerCase().trim();
       if (isIdMatch || isNameMatch) {
-        userAddedProducts[i] = userAddedProducts[i].copyWith(soldCount: updated);
+        userAddedProducts[i] = userAddedProducts[i].copyWith(
+          soldCount: updated,
+        );
       }
     }
     stockUpdateNotifier.value++;
     return true;
   }
 
-  static bool deductSoldCount(String productId, int quantity, {int initialSold = 0, String? productName}) {
+  static bool deductSoldCount(
+    String productId,
+    int quantity, {
+    int initialSold = 0,
+    String? productName,
+  }) {
     if (quantity <= 0) return false;
     final cleanId = productId.trim();
-    final current = getEffectiveSoldCount(cleanId, initialSold, productName: productName);
+    final current = getEffectiveSoldCount(
+      cleanId,
+      initialSold,
+      productName: productName,
+    );
     final updated = (current - quantity).clamp(0, 999999);
     _soldOverrides[cleanId] = updated;
 
@@ -393,10 +451,12 @@ class Product {
       ...screenshotFeedProducts,
       ...screenshotTopSellers,
     ]) {
-      final isIdMatch = p.id == cleanId ||
+      final isIdMatch =
+          p.id == cleanId ||
           p.id.hashCode.abs().toString() == cleanId ||
           p.id.hashCode.toString() == cleanId;
-      final isNameMatch = productName != null &&
+      final isNameMatch =
+          productName != null &&
           p.name.toLowerCase().trim() == productName.toLowerCase().trim();
 
       if (isIdMatch || isNameMatch) {
@@ -409,18 +469,26 @@ class Product {
 
     for (int i = 0; i < userAddedProducts.length; i++) {
       final p = userAddedProducts[i];
-      final isIdMatch = p.id == cleanId || p.id.hashCode.abs().toString() == cleanId;
-      final isNameMatch = productName != null &&
+      final isIdMatch =
+          p.id == cleanId || p.id.hashCode.abs().toString() == cleanId;
+      final isNameMatch =
+          productName != null &&
           p.name.toLowerCase().trim() == productName.toLowerCase().trim();
       if (isIdMatch || isNameMatch) {
-        userAddedProducts[i] = userAddedProducts[i].copyWith(soldCount: updated);
+        userAddedProducts[i] = userAddedProducts[i].copyWith(
+          soldCount: updated,
+        );
       }
     }
     stockUpdateNotifier.value++;
     return true;
   }
 
-  static int getEffectiveStock(String productId, int initialStock, {String? productName}) {
+  static int getEffectiveStock(
+    String productId,
+    int initialStock, {
+    String? productName,
+  }) {
     final cleanId = productId.trim();
     if (_stockOverrides.containsKey(cleanId)) {
       return _stockOverrides[cleanId]!;
@@ -440,10 +508,12 @@ class Product {
       ...screenshotFeedProducts,
       ...screenshotTopSellers,
     ]) {
-      final isIdMatch = p.id == cleanId ||
+      final isIdMatch =
+          p.id == cleanId ||
           p.id.hashCode.abs().toString() == cleanId ||
           p.id.hashCode.toString() == cleanId;
-      final isNameMatch = productName != null &&
+      final isNameMatch =
+          productName != null &&
           p.name.toLowerCase().trim() == productName.toLowerCase().trim();
 
       if (isIdMatch || isNameMatch) {
@@ -452,7 +522,8 @@ class Product {
           return _stockOverrides[p.name.toLowerCase().trim()]!;
         }
         final hashStr = p.id.hashCode.abs().toString();
-        if (_stockOverrides.containsKey(hashStr)) return _stockOverrides[hashStr]!;
+        if (_stockOverrides.containsKey(hashStr))
+          return _stockOverrides[hashStr]!;
       }
     }
 
@@ -464,10 +535,19 @@ class Product {
     return initialStock;
   }
 
-  static bool deductStock(String productId, int quantity, {int initialStock = 10, String? productName}) {
+  static bool deductStock(
+    String productId,
+    int quantity, {
+    int initialStock = 10,
+    String? productName,
+  }) {
     if (quantity <= 0) return false;
     final cleanId = productId.trim();
-    final current = getEffectiveStock(cleanId, initialStock, productName: productName);
+    final current = getEffectiveStock(
+      cleanId,
+      initialStock,
+      productName: productName,
+    );
     final updated = (current - quantity).clamp(0, 999999);
     _stockOverrides[cleanId] = updated;
 
@@ -482,10 +562,12 @@ class Product {
       ...screenshotFeedProducts,
       ...screenshotTopSellers,
     ]) {
-      final isIdMatch = p.id == cleanId ||
+      final isIdMatch =
+          p.id == cleanId ||
           p.id.hashCode.abs().toString() == cleanId ||
           p.id.hashCode.toString() == cleanId;
-      final isNameMatch = productName != null &&
+      final isNameMatch =
+          productName != null &&
           p.name.toLowerCase().trim() == productName.toLowerCase().trim();
 
       if (isIdMatch || isNameMatch) {
@@ -498,8 +580,10 @@ class Product {
 
     for (int i = 0; i < userAddedProducts.length; i++) {
       final p = userAddedProducts[i];
-      final isIdMatch = p.id == cleanId || p.id.hashCode.abs().toString() == cleanId;
-      final isNameMatch = productName != null &&
+      final isIdMatch =
+          p.id == cleanId || p.id.hashCode.abs().toString() == cleanId;
+      final isNameMatch =
+          productName != null &&
           p.name.toLowerCase().trim() == productName.toLowerCase().trim();
       if (isIdMatch || isNameMatch) {
         userAddedProducts[i] = userAddedProducts[i].copyWith(stock: updated);
@@ -516,10 +600,19 @@ class Product {
     return true;
   }
 
-  static bool restoreStock(String productId, int quantity, {int initialStock = 10, String? productName}) {
+  static bool restoreStock(
+    String productId,
+    int quantity, {
+    int initialStock = 10,
+    String? productName,
+  }) {
     if (quantity <= 0) return false;
     final cleanId = productId.trim();
-    final current = getEffectiveStock(cleanId, initialStock, productName: productName);
+    final current = getEffectiveStock(
+      cleanId,
+      initialStock,
+      productName: productName,
+    );
     final updated = (current + quantity).clamp(0, 999999);
     _stockOverrides[cleanId] = updated;
 
@@ -533,10 +626,12 @@ class Product {
       ...screenshotFeedProducts,
       ...screenshotTopSellers,
     ]) {
-      final isIdMatch = p.id == cleanId ||
+      final isIdMatch =
+          p.id == cleanId ||
           p.id.hashCode.abs().toString() == cleanId ||
           p.id.hashCode.toString() == cleanId;
-      final isNameMatch = productName != null &&
+      final isNameMatch =
+          productName != null &&
           p.name.toLowerCase().trim() == productName.toLowerCase().trim();
 
       if (isIdMatch || isNameMatch) {
@@ -549,8 +644,10 @@ class Product {
 
     for (int i = 0; i < userAddedProducts.length; i++) {
       final p = userAddedProducts[i];
-      final isIdMatch = p.id == cleanId || p.id.hashCode.abs().toString() == cleanId;
-      final isNameMatch = productName != null &&
+      final isIdMatch =
+          p.id == cleanId || p.id.hashCode.abs().toString() == cleanId;
+      final isNameMatch =
+          productName != null &&
           p.name.toLowerCase().trim() == productName.toLowerCase().trim();
       if (isIdMatch || isNameMatch) {
         userAddedProducts[i] = userAddedProducts[i].copyWith(stock: updated);
@@ -656,7 +753,8 @@ class Product {
       seller: '@vilo_deals',
       rating: 4.9,
       soldCount: 12000,
-      description: 'Smart fuzzy logic electric rice cooker and food steamer with non-stick ceramic pot.',
+      description:
+          'Smart fuzzy logic electric rice cooker and food steamer with non-stick ceramic pot.',
       imageUrl: 'assets/images/mini_rice_cooker.jpg',
     ),
     Product(
@@ -670,7 +768,8 @@ class Product {
       seller: '@vilo_deals',
       rating: 4.8,
       soldCount: 8500,
-      description: 'Anodized aluminum compact power bank with 65W fast charge USB-C PD.',
+      description:
+          'Anodized aluminum compact power bank with 65W fast charge USB-C PD.',
       imageUrl: 'assets/images/power_bank.jpg',
     ),
     Product(
@@ -684,7 +783,8 @@ class Product {
       seller: '@vilo_deals',
       rating: 4.9,
       soldCount: 6700,
-      description: 'Compact 60% RGB mechanical keyboard with smooth hot-swappable red switches.',
+      description:
+          'Compact 60% RGB mechanical keyboard with smooth hot-swappable red switches.',
       imageUrl: 'assets/images/keyboard.jpg',
     ),
     Product(
@@ -698,7 +798,8 @@ class Product {
       seller: '@vilo_deals',
       rating: 5.0,
       soldCount: 4300,
-      description: 'Brand new in box flagship smartphone with titanium finish and charger.',
+      description:
+          'Brand new in box flagship smartphone with titanium finish and charger.',
       imageUrl: 'assets/images/iphone_deal.jpg',
     ),
   ];
@@ -716,7 +817,8 @@ class Product {
       seller: 'TechPro Official',
       rating: 4.8,
       soldCount: 1400,
-      description: 'Titanium flagship smartphone case and housing featuring Super Retina XDR display protection.',
+      description:
+          'Titanium flagship smartphone case and housing featuring Super Retina XDR display protection.',
       imageUrl: 'assets/images/iphone_17_pro_max_case.jpg',
     ),
     Product(
@@ -730,7 +832,8 @@ class Product {
       seller: 'Titan Monitoring',
       rating: 4.9,
       soldCount: 4200,
-      description: 'Outdoor titanium GPS smartwatch with sapphire glass, heart rate ECG, and dive-ready water resistance.',
+      description:
+          'Outdoor titanium GPS smartwatch with sapphire glass, heart rate ECG, and dive-ready water resistance.',
       imageUrl: 'assets/images/v_watch_ultra.jpg',
     ),
     Product(
@@ -744,7 +847,8 @@ class Product {
       seller: 'GLOW Beauty',
       rating: 4.7,
       soldCount: 12000,
-      description: 'Intense overnight barrier repair serum formulated with multi-weight hyaluronic acid and niacinamide.',
+      description:
+          'Intense overnight barrier repair serum formulated with multi-weight hyaluronic acid and niacinamide.',
       imageUrl: 'assets/images/midnight_hydration_serum.jpg',
     ),
     Product(
@@ -758,7 +862,8 @@ class Product {
       seller: 'AudioPro Official',
       rating: 5.0,
       soldCount: 850,
-      description: 'Studio grade wireless headphones with high-res audio codec, plush memory foam, and hybrid ANC.',
+      description:
+          'Studio grade wireless headphones with high-res audio codec, plush memory foam, and hybrid ANC.',
       imageUrl: 'assets/images/v_series_headphones.jpg',
     ),
   ];
@@ -776,7 +881,8 @@ class Product {
       soldCount: 2400,
       badge: '👍 2.8K',
       seller: 'Vilo Studio Pro',
-      description: '12-inch dimmable LED ring light with tripod stand and smartphone holder for crisp streaming.',
+      description:
+          '12-inch dimmable LED ring light with tripod stand and smartphone holder for crisp streaming.',
       imageUrl: 'assets/images/ring_light.jpg',
     ),
     Product(
@@ -790,7 +896,8 @@ class Product {
       soldCount: 3100,
       badge: '👍 1.5K',
       seller: 'AudioTech Lab',
-      description: 'Plug-and-play wireless lapel mic with active DSP noise reduction for mobile vlogging.',
+      description:
+          'Plug-and-play wireless lapel mic with active DSP noise reduction for mobile vlogging.',
       imageUrl: 'assets/images/lavalier_mic.jpg',
     ),
     Product(
@@ -804,7 +911,8 @@ class Product {
       soldCount: 5200,
       badge: '👍 4.2K',
       seller: 'Obsidian Apparel',
-      description: '450 GSM French Terry cotton hoodie with custom drop-shoulder fit and Obsidian dark aesthetic.',
+      description:
+          '450 GSM French Terry cotton hoodie with custom drop-shoulder fit and Obsidian dark aesthetic.',
       imageUrl: 'assets/images/obsidian_hoodie.jpg',
     ),
     Product(
@@ -818,7 +926,8 @@ class Product {
       soldCount: 1800,
       badge: '👍 950',
       seller: 'AeroMount Studio',
-      description: 'CNC machined aerospace aluminum magnetic stand with 360-degree rotation for hands-free live streams.',
+      description:
+          'CNC machined aerospace aluminum magnetic stand with 360-degree rotation for hands-free live streams.',
       imageUrl: 'assets/images/magsafe_mount.jpg',
     ),
     Product(
@@ -832,7 +941,8 @@ class Product {
       soldCount: 4100,
       badge: '👍 3.1K',
       seller: 'GlowRGB Lab',
-      description: 'Smart ambient light bars with real-time sound sync, app control, and 16M color dynamics.',
+      description:
+          'Smart ambient light bars with real-time sound sync, app control, and 16M color dynamics.',
       imageUrl: 'assets/images/rgb_light_bars.jpg',
     ),
     Product(
@@ -846,7 +956,8 @@ class Product {
       soldCount: 2200,
       badge: '👍 1.1K',
       seller: 'Vilo Lifestyle',
-      description: 'Heavyweight organic canvas bag with internal laptop sleeve and reinforced stitching.',
+      description:
+          'Heavyweight organic canvas bag with internal laptop sleeve and reinforced stitching.',
       imageUrl: 'assets/images/canvas_tote.jpg',
     ),
     Product(
@@ -860,7 +971,8 @@ class Product {
       soldCount: 1600,
       badge: '👍 820',
       seller: 'FlexiShoot',
-      description: 'Rubber-coated bendable legs that wrap around poles and uneven surfaces for outdoor shooting.',
+      description:
+          'Rubber-coated bendable legs that wrap around poles and uneven surfaces for outdoor shooting.',
       imageUrl: 'assets/images/octopus_tripod.jpg',
     ),
     Product(
@@ -874,7 +986,8 @@ class Product {
       soldCount: 2900,
       badge: '👍 1.4K',
       seller: 'UltraGrip Official',
-      description: 'Ultra-thin foldable zinc-alloy kickstand and finger grip with strong adhesive.',
+      description:
+          'Ultra-thin foldable zinc-alloy kickstand and finger grip with strong adhesive.',
       imageUrl: 'assets/images/phone_grip.jpg',
     ),
     Product(
@@ -888,7 +1001,8 @@ class Product {
       soldCount: 1750,
       badge: '👍 980',
       seller: 'LumiPocket Lab',
-      description: 'Pocket-sized biometric LED panel with adjustable color temperature (2500K-9000K) and built-in battery.',
+      description:
+          'Pocket-sized biometric LED panel with adjustable color temperature (2500K-9000K) and built-in battery.',
       imageUrl: 'assets/images/pocket_fill_light.jpg',
     ),
     Product(
@@ -902,7 +1016,8 @@ class Product {
       soldCount: 6400,
       badge: '👍 5.5K',
       seller: 'Vilo Merch',
-      description: 'Pack of 12 weatherproof, scratch-resistant vinyl stickers designed for creator setups and laptops.',
+      description:
+          'Pack of 12 weatherproof, scratch-resistant vinyl stickers designed for creator setups and laptops.',
       imageUrl: 'assets/images/sticker_pack.jpg',
     ),
   ];

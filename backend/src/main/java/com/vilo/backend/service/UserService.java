@@ -8,17 +8,23 @@ import com.vilo.backend.exception.ResourceNotFoundException;
 import com.vilo.backend.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
 public class UserService {
+    private static final Logger log = LoggerFactory.getLogger(UserService.class);
+
 
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, NotificationService notificationService) {
         this.userRepository = userRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional(readOnly = true)
@@ -104,6 +110,35 @@ public class UserService {
     }
 
     @Transactional
+    public boolean follow(User currentUser, Long targetUserId) {
+        if (currentUser.getId().equals(targetUserId)) {
+            throw new BadRequestException("You cannot follow yourself");
+        }
+
+        User user = userRepository.findById(currentUser.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Current user not found"));
+        User targetUser = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Target user not found with id: " + targetUserId));
+
+        boolean alreadyFollowing = targetUser.getFollowers().stream()
+                .anyMatch(f -> f.getId().equals(user.getId()));
+        if (!alreadyFollowing) {
+            targetUser.getFollowers().add(user);
+            user.getFollowing().add(targetUser);
+            userRepository.save(targetUser);
+            userRepository.save(user);
+            try {
+                notificationService.createFollow(user.getId(), targetUser.getId());
+            } catch (RuntimeException notificationError) {
+                // Following must not fail just because an existing notification
+                // table/schema is unavailable or contains legacy bad data.
+                log.warn("Follow saved but follow notification could not be created", notificationError);
+            }
+        }
+        return true;
+    }
+
+    @Transactional
     public boolean toggleFollow(User currentUser, Long targetUserId) {
         if (currentUser.getId().equals(targetUserId)) {
             throw new BadRequestException("You cannot follow yourself");
@@ -128,6 +163,7 @@ public class UserService {
             user.getFollowing().add(targetUser);
             userRepository.save(targetUser);
             userRepository.save(user);
+            notificationService.createFollow(user.getId(), targetUser.getId());
             return true; // followed
         }
     }

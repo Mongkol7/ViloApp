@@ -3,7 +3,6 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../search_discover/presentation/pages/search_screen.dart';
 import '../../data/datasources/profile_remote_data_source.dart';
 import '../../data/datasources/profile_sync_service.dart';
-import '../../data/datasources/static_people_data.dart';
 import '../../domain/entities/person_suggestion.dart';
 import '../widgets/person_card.dart';
 
@@ -17,6 +16,7 @@ class PeopleScreen extends StatefulWidget {
 class _PeopleScreenState extends State<PeopleScreen> {
   List<PersonSuggestion> _peopleList = [];
   bool _isLoading = true;
+  String? _loadError;
 
   @override
   void initState() {
@@ -69,25 +69,24 @@ class _PeopleScreenState extends State<PeopleScreen> {
                 isFollowed: u.isFollowing,
               );
             }).toList();
+            _loadError = null;
             _isLoading = false;
           });
         } else {
-          // If empty list returned from DB, use static fallback
           setState(() {
-            _peopleList = List.from(StaticPeopleData.suggestions);
+            _peopleList = [];
+            _loadError = null;
             _isLoading = false;
           });
         }
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        // Fallback to static data on network error
-        if (_peopleList.isEmpty) {
-          setState(() {
-            _peopleList = List.from(StaticPeopleData.suggestions);
-            _isLoading = false;
-          });
-        }
+        setState(() {
+          _peopleList = [];
+          _loadError = error.toString();
+          _isLoading = false;
+        });
       }
     }
   }
@@ -112,9 +111,21 @@ class _PeopleScreenState extends State<PeopleScreen> {
     if (targetId != null && targetId > 0) {
       try {
         if (newStatus) {
-          await ProfileRemoteDataSource.instance.toggleFollow(targetId);
+          final serverStatus =
+              await ProfileRemoteDataSource.instance.toggleFollow(targetId);
+          if (mounted && serverStatus != newStatus) {
+            setState(() {
+              _peopleList[index] = person.copyWith(isFollowed: serverStatus);
+            });
+          }
         } else {
-          await ProfileRemoteDataSource.instance.unfollow(targetId);
+          final serverStatus =
+              await ProfileRemoteDataSource.instance.unfollow(targetId);
+          if (mounted && serverStatus != newStatus) {
+            setState(() {
+              _peopleList[index] = person.copyWith(isFollowed: serverStatus);
+            });
+          }
         }
       } catch (_) {
         // Revert on error
@@ -229,8 +240,10 @@ class _PeopleScreenState extends State<PeopleScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 60),
                 alignment: Alignment.center,
-                child: const Text(
-                  'No more suggestions right now',
+                child: Text(
+                  _loadError == null
+                      ? 'No more suggestions right now'
+                      : 'Could not load friends. Pull to retry.',
                   style: TextStyle(color: AppColors.outline, fontSize: 14),
                 ),
               )
