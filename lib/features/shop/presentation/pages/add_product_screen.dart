@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../auth/data/datasources/token_storage.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../models/product.dart';
 import '../../services/shop_service.dart';
 
@@ -46,6 +48,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
     super.initState();
     _selectedCategoryId = _categories.first['id']!;
     _selectedCategoryName = _categories.first['name']!;
+    final myProfile = ProfileSyncService.instance.cachedMyProfile ?? TokenStorage.instance.getUserModel();
+    final myUsername = (myProfile?.username != null && myProfile!.username.trim().isNotEmpty)
+        ? myProfile.username.trim()
+        : ProfileSyncService.instance.currentUsername;
+    if (_sellerController.text.trim().isEmpty && myUsername.isNotEmpty) {
+      _sellerController.text = myUsername.startsWith('@') ? myUsername : '@$myUsername';
+    }
   }
 
   @override
@@ -76,8 +85,19 @@ class _AddProductScreenState extends State<AddProductScreen> {
     final double? origPrice = origPriceText.isNotEmpty ? double.tryParse(origPriceText) : null;
     final stock = int.tryParse(_stockController.text.trim()) ?? 10;
     final desc = _descController.text.trim();
+    final myProfile = ProfileSyncService.instance.cachedMyProfile ?? TokenStorage.instance.getUserModel();
+    final myUsername = (myProfile?.username != null && myProfile!.username.trim().isNotEmpty)
+        ? myProfile.username.trim()
+        : ProfileSyncService.instance.currentUsername;
+    final myAvatar = (myProfile?.avatarUrl != null && myProfile!.avatarUrl!.trim().isNotEmpty)
+        ? myProfile.avatarUrl!.trim()
+        : ProfileSyncService.instance.currentUserAvatar;
+    final myId = myProfile?.id.toString() ?? TokenStorage.instance.getUserModel()?.id.toString() ?? '1';
+
     var seller = _sellerController.text.trim();
-    if (seller.isEmpty) seller = '@ViloCreator';
+    if (seller.isEmpty) {
+      seller = myUsername.isNotEmpty ? (myUsername.startsWith('@') ? myUsername : '@$myUsername') : '@ViloCreator';
+    }
     if (!seller.startsWith('@')) seller = '@$seller';
 
     final imageUrl = _imageUrlController.text.trim();
@@ -92,6 +112,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
       description: desc,
       imageUrl: imageUrl,
       seller: seller,
+      sellerAvatar: myAvatar,
+      sellerId: myId,
       rating: 5.0,
       soldCount: 0,
       stock: stock,
@@ -127,6 +149,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
           ),
         ),
       );
+      ProfileSyncService.instance.productUploadedEvents.value = publishedProduct;
       setState(() => _isSubmitting = false);
       Navigator.pop(context, publishedProduct);
     } catch (error) {
@@ -585,7 +608,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     ? Image.asset(
                         url,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _buildImageErrorWidget(),
+                        errorBuilder: (context, error, stackTrace) => _buildImageErrorWidget(),
                       )
                     : Image.network(
                         url,
@@ -599,7 +622,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                             ),
                           );
                         },
-                        errorBuilder: (_, __, ___) => _buildImageErrorWidget(),
+                        errorBuilder: (context, error, stackTrace) => _buildImageErrorWidget(),
                       ),
                 Positioned(
                   bottom: 8,

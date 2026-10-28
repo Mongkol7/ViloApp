@@ -63,6 +63,60 @@ class OrderModel {
 
   String get formattedTotal => '\$${totalAmount.toStringAsFixed(2)}';
 
+  String get dynamicStatus {
+    final s = status.toUpperCase();
+    if (s == 'CANCELLED' || s == 'CANCELED') {
+      return 'CANCELLED';
+    }
+
+    DateTime? createdDate;
+    if (createdAt != null && createdAt!.isNotEmpty) {
+      createdDate = DateTime.tryParse(createdAt!);
+    }
+    if (createdDate == null && id > 1000000000000) {
+      createdDate = DateTime.fromMillisecondsSinceEpoch(id);
+    }
+
+    if (createdDate != null) {
+      final elapsed = DateTime.now().difference(createdDate);
+      if (elapsed.inSeconds >= 4 * 3600) {
+        return 'SUCCESS';
+      } else {
+        return 'PENDING';
+      }
+    }
+
+    return (status.toUpperCase() == 'DELIVERED' || status.toUpperCase() == 'PAID')
+        ? 'SUCCESS'
+        : status;
+  }
+
+  OrderModel copyWith({
+    int? id,
+    String? orderNumber,
+    double? totalAmount,
+    String? status,
+    String? shippingAddress,
+    String? paymentMethod,
+    String? notes,
+    List<OrderItemModel>? items,
+    int? itemCount,
+    String? createdAt,
+  }) {
+    return OrderModel(
+      id: id ?? this.id,
+      orderNumber: orderNumber ?? this.orderNumber,
+      totalAmount: totalAmount ?? this.totalAmount,
+      status: status ?? this.status,
+      shippingAddress: shippingAddress ?? this.shippingAddress,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      notes: notes ?? this.notes,
+      items: items ?? this.items,
+      itemCount: itemCount ?? this.itemCount,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
   factory OrderModel.fromJson(Map<String, dynamic> json) {
     List<OrderItemModel> parsedItems = [];
     if (json['items'] is List) {

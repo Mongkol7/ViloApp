@@ -1,15 +1,19 @@
+import 'package:flutter/foundation.dart';
 import '../../../../core/network/api_client.dart';
 import '../models/category_model.dart';
 import '../models/product_model.dart';
 import '../models/cart_model.dart';
 import '../models/cart_item_model.dart';
 import '../models/order_model.dart';
+import '../../../auth/data/datasources/token_storage.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
 
 class ShopRemoteDataSource {
   static ShopRemoteDataSource? _instance;
   static ShopRemoteDataSource get instance => _instance ??= ShopRemoteDataSource._();
 
   final ApiClient _client;
+  int _lastLocalOrderId = 0;
 
   ShopRemoteDataSource._([ApiClient? client]) : _client = client ?? ApiClient.instance;
 
@@ -140,16 +144,128 @@ class ShopRemoteDataSource {
   }
 
   final List<OrderModel> _localOrderHistory = [];
+  final Map<String, List<OrderModel>> _userScopedOrders = {};
 
-  List<OrderModel> get localOrders => List.unmodifiable(_localOrderHistory);
+  String get _activeUserKey {
+    final active = ProfileSyncService.instance.cachedMyProfile ?? TokenStorage.instance.getUserModel();
+    final raw = (active?.username ?? ProfileSyncService.instance.currentUsername).trim().toLowerCase();
+    return raw.replaceAll('@', '');
+  }
+
+  final ValueNotifier<int> pendingOrdersCountNotifier = ValueNotifier<int>(0);
+
+  int get pendingOrdersCount {
+    final orders = localOrders;
+    return orders.where((o) => o.dynamicStatus == 'PENDING').fold<int>(
+      0,
+      (sum, o) => sum + (o.itemCount > 0 ? o.itemCount : (o.items.isNotEmpty ? o.items.length : 1)),
+    );
+  }
+
+  void updatePendingCount() {
+    pendingOrdersCountNotifier.value = pendingOrdersCount;
+  }
+
+  int _nextLocalOrderId() {
+    final current = DateTime.now().millisecondsSinceEpoch;
+    _lastLocalOrderId = current > _lastLocalOrderId ? current : _lastLocalOrderId + 1;
+    return _lastLocalOrderId;
+  }
+
+  String _localOrderNumber({required String seller, required int orderId}) {
+    final cleanSeller = seller.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+    final now = DateTime.fromMillisecondsSinceEpoch(orderId);
+    // Keep the complete monotonic local id in the reference. Using only the
+    // last few timestamp digits allowed a later order to reuse an older
+    // reference and inherit that order's cancellation status.
+    return 'ORD-${cleanSeller.isNotEmpty ? cleanSeller : 'VILO'}-'
+        '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-$orderId';
+  }
+
+  List<OrderModel> get localOrders {
+    final key = _activeUserKey;
+    if (key.isNotEmpty && _userScopedOrders.containsKey(key)) {
+      return List.unmodifiable(_userScopedOrders[key]!);
+    }
+    return List.unmodifiable(_localOrderHistory);
+  }
 
   void addOrder(OrderModel order) {
-    _localOrderHistory.removeWhere((o) => o.id == order.id);
+    final key = _activeUserKey;
+    if (key.isNotEmpty) {
+      final list = _userScopedOrders.putIfAbsent(key, () => []);
+      list.removeWhere((o) => o.id == order.id || o.orderNumber == order.orderNumber);
+      list.insert(0, order);
+    }
+    _localOrderHistory.removeWhere((o) => o.id == order.id || o.orderNumber == order.orderNumber);
     _localOrderHistory.insert(0, order);
+    updatePendingCount();
+  }
+
+  void updateOrderStatus(String orderNumberOrTitle, String newStatus) {
+    for (final list in _userScopedOrders.values) {
+      for (int i = 0; i < list.length; i++) {
+        final match = list[i].orderNumber == orderNumberOrTitle ||
+            list[i].id.toString() == orderNumberOrTitle ||
+            list[i].items.any((it) => it.productTitle.toLowerCase() == orderNumberOrTitle.toLowerCase());
+        if (match) {
+          list[i] = list[i].copyWith(status: newStatus);
+        }
+      }
+    }
+    for (int i = 0; i < _localOrderHistory.length; i++) {
+      final match = _localOrderHistory[i].orderNumber == orderNumberOrTitle ||
+          _localOrderHistory[i].id.toString() == orderNumberOrTitle ||
+          _localOrderHistory[i].items.any((it) => it.productTitle.toLowerCase() == orderNumberOrTitle.toLowerCase());
+      if (match) {
+        _localOrderHistory[i] = _localOrderHistory[i].copyWith(status: newStatus);
+      }
+    }
+    updatePendingCount();
+  }
+
+  OrderModel recordChatOrder({
+    required String productTitle,
+    required double price,
+    required int quantity,
+    required String imageUrl,
+    String? sellerName,
+  }) {
+    final orderId = _nextLocalOrderId();
+    final now = DateTime.fromMillisecondsSinceEpoch(orderId);
+    final orderNum = _localOrderNumber(seller: sellerName ?? 'VILO', orderId: orderId);
+    final subtotal = price * quantity;
+    final item = OrderItemModel(
+      id: orderId,
+      productTitle: productTitle,
+      productImageUrl: imageUrl,
+      price: price,
+      quantity: quantity,
+      subtotal: subtotal,
+    );
+    final order = OrderModel(
+      id: orderId,
+      orderNumber: orderNum,
+      totalAmount: subtotal,
+      status: 'PENDING',
+      shippingAddress: 'Direct Seller Inquiry',
+      paymentMethod: 'Inquiry / Direct Chat',
+      notes: sellerName != null ? 'Seller: $sellerName' : null,
+      items: [item],
+      itemCount: quantity,
+      createdAt: now.toIso8601String(),
+    );
+    addOrder(order);
+    return order;
   }
 
   void clearLocalOrders() {
+    final key = _activeUserKey;
+    if (key.isNotEmpty && _userScopedOrders.containsKey(key)) {
+      _userScopedOrders[key]!.clear();
+    }
     _localOrderHistory.clear();
+    updatePendingCount();
   }
 
   OrderModel createOrderFromCartItems({
@@ -158,7 +274,7 @@ class ShopRemoteDataSource {
     String? customNote,
   }) {
     final now = DateTime.now();
-    final orderId = now.millisecondsSinceEpoch;
+    final orderId = _nextLocalOrderId();
     final totalAmount = items.fold<double>(0.0, (sum, i) => sum + i.subtotal);
     final orderItems = items.map((item) {
       return OrderItemModel(
@@ -173,14 +289,9 @@ class ShopRemoteDataSource {
       );
     }).toList();
 
-    final cleanSeller = sellerName.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
-    final suffix = orderId.toString().length >= 4
-        ? orderId.toString().substring(orderId.toString().length - 4)
-        : orderId.toString();
-
     return OrderModel(
       id: orderId,
-      orderNumber: 'ORD-${cleanSeller.isNotEmpty ? cleanSeller : "VILO"}-$suffix',
+      orderNumber: _localOrderNumber(seller: sellerName, orderId: orderId),
       totalAmount: totalAmount,
       status: 'PENDING',
       shippingAddress: 'Direct In-App Merchant Inquiry',
@@ -212,15 +323,11 @@ class ShopRemoteDataSource {
       // Create completed PAID order locally for offline / resilient persistence
       final orderItemsList = items ?? const <CartItemModel>[];
       final now = DateTime.now();
-      final orderId = now.millisecondsSinceEpoch;
+      final orderId = _nextLocalOrderId();
       final totalAmount = orderItemsList.fold<double>(0.0, (sum, i) => sum + i.subtotal);
-      final suffix = orderId.toString().length >= 4
-          ? orderId.toString().substring(orderId.toString().length - 4)
-          : orderId.toString();
-
       final order = OrderModel(
         id: orderId,
-        orderNumber: 'ORD-PAID-$suffix',
+        orderNumber: _localOrderNumber(seller: 'PAID', orderId: orderId),
         totalAmount: totalAmount,
         status: 'PAID',
         shippingAddress: shippingAddress,
@@ -247,6 +354,11 @@ class ShopRemoteDataSource {
   }
 
   Future<List<OrderModel>> getOrderHistory() async {
+    final key = _activeUserKey;
+    final userLocalList = (key.isNotEmpty && _userScopedOrders.containsKey(key))
+        ? _userScopedOrders[key]!
+        : _localOrderHistory;
+
     try {
       final data = await _client.get('/orders/history', requireAuth: true);
       List<OrderModel> remoteOrders = [];
@@ -255,12 +367,12 @@ class ShopRemoteDataSource {
       }
       final Set<int> existingIds = remoteOrders.map((o) => o.id).toSet();
       final combined = [
-        ..._localOrderHistory.where((o) => !existingIds.contains(o.id)),
+        ...userLocalList.where((o) => !existingIds.contains(o.id)),
         ...remoteOrders,
       ];
       return combined;
     } catch (_) {
-      return List<OrderModel>.from(_localOrderHistory);
+      return List<OrderModel>.from(userLocalList);
     }
   }
 

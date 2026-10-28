@@ -27,6 +27,12 @@ class ProfileRemoteDataSource {
     if (user.id > 0) {
       _userCache[user.id.toString()] = user;
     }
+    final displayClean = user.displayName.trim().replaceAll('@', '').toLowerCase();
+    if (displayClean.isNotEmpty) {
+      _userCache[displayClean] = user;
+      _userCache[displayClean.replaceAll(' ', '_')] = user;
+      _userCache[displayClean.replaceAll('_', ' ')] = user;
+    }
   }
 
   /// Retrieve authenticated user profile (GET /api/v1/users/me)

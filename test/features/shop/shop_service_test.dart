@@ -5,6 +5,8 @@ import 'package:http/testing.dart';
 import 'package:viloapp/features/shop/services/shop_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('ShopService Network & Fallback Tests', () {
     test('getProducts decodes Spring Boot Page ApiResponse successfully', () async {
       final mockPayload = {

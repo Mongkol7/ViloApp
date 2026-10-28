@@ -27,6 +27,7 @@ void main() {
   group('CreateActionSheet - Upload Music / Sound Option', () {
     testWidgets('renders Upload Music / Sound button and responds to tap', (WidgetTester tester) async {
       bool soundSelected = false;
+      bool productSelected = false;
 
       await tester.pumpWidget(
         _buildTestApp(
@@ -34,22 +35,29 @@ void main() {
             onCameraSelected: () {},
             onUploadSelected: () {},
             onUploadSoundSelected: () => soundSelected = true,
+            onPostProductSelected: () => productSelected = true,
           ),
         ),
       );
 
-      // Verify all 3 options are rendered
+      // Verify all 4 options are rendered
       expect(find.byKey(const Key('create_camera_option_button')), findsOneWidget);
       expect(find.byKey(const Key('create_upload_option_button')), findsOneWidget);
       expect(find.byKey(const Key('create_upload_sound_option_button')), findsOneWidget);
+      expect(find.byKey(const Key('create_post_product_option_button')), findsOneWidget);
 
       expect(find.text('Upload Music / Sound'), findsOneWidget);
       expect(find.byIcon(Icons.library_music_rounded), findsOneWidget);
+      expect(find.text('Post Product'), findsOneWidget);
+      expect(find.byIcon(Icons.storefront_rounded), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('create_upload_sound_option_button')));
       await tester.pump();
-
       expect(soundSelected, isTrue);
+
+      await tester.tap(find.byKey(const Key('create_post_product_option_button')));
+      await tester.pump();
+      expect(productSelected, isTrue);
     });
   });
 

@@ -378,7 +378,7 @@ class MerchantCard extends StatelessWidget {
                     final messageText = text.isNotEmpty
                         ? text
                         : (specificProduct != null
-                            ? 'Hi ${merchant.handle}, I am interested in ${specificProduct.title} (${specificProduct.formattedPrice}). Is it available?'
+                            ? 'Hi ${merchant.handle}, I am interested in ${specificProduct.title} (Price: ${specificProduct.formattedPrice}/unit). Is it available?'
                             : 'Hi ${merchant.handle}, I would like to inquire about items from your store!');
                     final threadId = 'merchant_chat_${merchant.handle.hashCode.abs()}';
                     final thread = DirectMessageThread(

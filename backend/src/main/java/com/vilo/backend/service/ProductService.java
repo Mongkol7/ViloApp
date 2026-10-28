@@ -34,7 +34,11 @@ public class ProductService {
 
     public Page<ProductResponse> getProducts(Long categoryId, BigDecimal minPrice, BigDecimal maxPrice, String query, Pageable pageable) {
         String trimmedQuery = (query != null && !query.trim().isEmpty()) ? query.trim() : null;
-        Page<Product> productPage = productRepository.filterProducts(categoryId, minPrice, maxPrice, trimmedQuery, pageable);
+        if (categoryId == null && minPrice == null && maxPrice == null && trimmedQuery == null) {
+            return productRepository.findAll(pageable).map(ProductResponse::fromEntity);
+        }
+        String queryPattern = (trimmedQuery != null) ? "%" + trimmedQuery.toLowerCase() + "%" : null;
+        Page<Product> productPage = productRepository.filterProducts(categoryId, minPrice, maxPrice, queryPattern, pageable);
         return productPage.map(ProductResponse::fromEntity);
     }
 
@@ -104,5 +108,15 @@ public class ProductService {
         return productRepository.findByCategoryId(categoryId).stream()
                 .map(ProductResponse::fromEntity)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public ProductResponse deductStock(Long id, int quantity) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + id));
+        int updated = Math.max(0, product.getStock() - quantity);
+        product.setStock(updated);
+        product.setSalesCount(product.getSalesCount() + quantity);
+        return ProductResponse.fromEntity(productRepository.save(product));
     }
 }

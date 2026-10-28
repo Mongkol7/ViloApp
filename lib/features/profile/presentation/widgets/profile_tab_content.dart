@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../auth/data/datasources/token_storage.dart';
 import '../../../feed/data/models/video_feed_model.dart';
+import '../../../shop/models/product.dart';
+import '../../../shop/presentation/pages/add_product_screen.dart';
+import '../../data/datasources/profile_sync_service.dart';
 import '../mock/profile_mock_data.dart';
 import '../style/pulse_tokens.dart';
 import 'shop_product_card.dart';
@@ -11,7 +15,7 @@ import 'video_grid_item.dart';
 ///
 /// Tab 0: Sounds (user-specific uploaded/created sounds)
 /// Tab 1: Postings (user-specific uploaded videos/photos)
-/// Tab 2: Shop (untouched product showcase)
+/// Tab 2: Shop (user-specific product showcase)
 /// Tab 3: Saved (user's bookmarked videos)
 /// Tab 4: Liked (user's liked videos)
 List<Widget> buildProfileTabSlivers(
@@ -20,6 +24,9 @@ List<Widget> buildProfileTabSlivers(
   List<VideoFeedModel>? userVideos,
   List<VideoFeedModel>? savedVideos,
   List<VideoFeedModel>? likedVideos,
+  List<Product>? userProducts,
+  String? username,
+  String? userAvatar,
   bool isLoading = false,
   bool isCurrentUser = true,
   void Function(VideoFeedModel video, int index)? onVideoTap,
@@ -186,19 +193,73 @@ List<Widget> buildProfileTabSlivers(
         ),
       ];
 
-    case 2: // Shop (Untouched)
+    case 2: // Shop
+      final productsToShow = userProducts ?? _getProductsForProfile(username, isCurrentUser: isCurrentUser);
+
+      if (productsToShow.isNotEmpty) {
+        return [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              PulseSpacing.edgeMargin,
+              PulseSpacing.stackGap,
+              PulseSpacing.edgeMargin,
+              PulseSpacing.sectionMargin,
+            ),
+            sliver: SliverList.builder(
+              itemCount: productsToShow.length,
+              itemBuilder: (context, i) =>
+                  ShopProductCard(
+                    product: productsToShow[i],
+                    sellerUsername: username,
+                    sellerAvatarUrl: userAvatar,
+                    isCurrentUser: isCurrentUser,
+                  ),
+            ),
+          ),
+        ];
+      }
+
       return [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            PulseSpacing.edgeMargin,
-            PulseSpacing.stackGap,
-            PulseSpacing.edgeMargin,
-            PulseSpacing.sectionMargin,
-          ),
-          sliver: SliverList.builder(
-            itemCount: ProfileMockData.products.length,
-            itemBuilder: (context, i) =>
-                ShopProductCard(product: ProfileMockData.products[i]),
+          padding: const EdgeInsets.symmetric(vertical: 48),
+          sliver: SliverToBoxAdapter(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.storefront_outlined, color: Colors.white24, size: 48),
+                  const SizedBox(height: 12),
+                  Text(
+                    isCurrentUser ? 'You haven’t listed any products yet' : 'No products listed yet',
+                    style: const TextStyle(color: Colors.white60, fontSize: 14),
+                  ),
+                  if (isCurrentUser) ...[
+                    const SizedBox(height: 16),
+                    Builder(
+                      builder: (ctx) => ElevatedButton.icon(
+                        onPressed: () async {
+                          final result = await Navigator.push(
+                            ctx,
+                            MaterialPageRoute(builder: (_) => const AddProductScreen()),
+                          );
+                          if (result is Product) {
+                            Product.addCreatorProduct(result);
+                            ProfileSyncService.instance.productUploadedEvents.value = result;
+                          }
+                        },
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('Post a Product'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
       ];
@@ -428,3 +489,62 @@ List<Widget> buildProfileTabSlivers(
       ];
   }
 }
+
+List<Product> _getProductsForProfile(String? username, {bool isCurrentUser = false}) {
+  String cleanUser = (username != null && username.trim().isNotEmpty)
+      ? username.replaceAll('@', '').toLowerCase().trim()
+      : ProfileSyncService.instance.currentUsername.replaceAll('@', '').toLowerCase().trim();
+  if (cleanUser.isEmpty) {
+    final tokenUser = TokenStorage.instance.getUserModel()?.username ?? '';
+    cleanUser = tokenUser.replaceAll('@', '').toLowerCase().trim();
+  }
+  final myId = ProfileSyncService.instance.cachedMyProfile?.id.toString() ?? TokenStorage.instance.getUserModel()?.id.toString();
+  final list = <Product>[];
+
+  for (final p in Product.userAddedProducts) {
+    final sellerClean = (p.seller ?? '').replaceAll('@', '').toLowerCase().trim();
+    final sellerId = p.sellerId?.toString().trim();
+
+    if (isCurrentUser) {
+      // In current user's profile, only show products created by this user
+      final bool isMine = ProfileSyncService.instance.isCurrentUser(username: p.seller, id: p.sellerId) ||
+          (cleanUser.isNotEmpty && (sellerClean == cleanUser || sellerClean.contains(cleanUser) || cleanUser.contains(sellerClean))) ||
+          (myId != null && myId.isNotEmpty && sellerId == myId);
+      if (isMine) {
+        list.add(p);
+      }
+    } else {
+      // In another creator's profile, match by creator's username or id
+      final bool matchesCreator = (cleanUser.isNotEmpty &&
+              (sellerClean == cleanUser ||
+                  sellerClean.contains(cleanUser) ||
+                  cleanUser.contains(sellerClean))) ||
+          (sellerId != null && sellerId.isNotEmpty && sellerId == cleanUser);
+      if (matchesCreator) {
+        list.add(p);
+      }
+    }
+  }
+
+  // Also include matching preset products from catalog if viewing a creator profile
+  if (!isCurrentUser && cleanUser.isNotEmpty) {
+    final presets = [
+      ...Product.creatorProducts,
+      ...Product.screenshotFeedProducts,
+      ...Product.screenshotTopSellers,
+    ];
+    for (final p in presets) {
+      final sellerClean = (p.seller ?? '').replaceAll('@', '').toLowerCase().trim();
+      if (sellerClean == cleanUser ||
+          sellerClean.contains(cleanUser) ||
+          cleanUser.contains(sellerClean)) {
+        if (!list.any((existing) => existing.id == p.id)) {
+          list.add(p);
+        }
+      }
+    }
+  }
+
+  return list;
+}
+

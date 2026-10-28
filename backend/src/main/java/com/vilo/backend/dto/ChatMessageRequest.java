@@ -14,7 +14,9 @@ public class ChatMessageRequest {
     private String messageText;
 
     private String productTitle;
+    private String orderReference;
     private String productPrice;
+    private String imageUrl;
 
     public ChatMessageRequest() {}
 
@@ -24,6 +26,15 @@ public class ChatMessageRequest {
         this.messageText = messageText;
         this.productTitle = productTitle;
         this.productPrice = productPrice;
+    }
+
+    public ChatMessageRequest(String threadId, String recipientHandle, String messageText, String productTitle, String productPrice, String imageUrl) {
+        this.threadId = threadId;
+        this.recipientHandle = recipientHandle;
+        this.messageText = messageText;
+        this.productTitle = productTitle;
+        this.productPrice = productPrice;
+        this.imageUrl = imageUrl;
     }
 
     public String getThreadId() {
@@ -58,11 +69,27 @@ public class ChatMessageRequest {
         this.productTitle = productTitle;
     }
 
+    public String getOrderReference() {
+        return orderReference;
+    }
+
+    public void setOrderReference(String orderReference) {
+        this.orderReference = orderReference;
+    }
+
     public String getProductPrice() {
         return productPrice;
     }
 
     public void setProductPrice(String productPrice) {
         this.productPrice = productPrice;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
 }

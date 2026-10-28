@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../auth/data/datasources/token_storage.dart';
 import '../../../auth/data/models/user_model.dart';
+import '../../../inbox_activity/data/datasources/inbox_message_manager.dart';
+import '../../../inbox_activity/domain/entities/inbox_item.dart';
+import '../../../inbox_activity/presentation/pages/chat_detail_screen.dart';
 import '../../../bottom_nav/presentation/pages/main_navigation_shell.dart';
 import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../../feed/data/models/video_feed_model.dart';
 import '../../../feed/presentation/pages/video_feed_page.dart';
+import '../../../shop/models/product.dart';
+import '../../../shop/services/shop_service.dart';
 import '../../data/datasources/profile_remote_data_source.dart';
 import '../../data/datasources/profile_sync_service.dart';
 import '../mock/profile_mock_data.dart';
@@ -47,6 +53,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
   List<VideoFeedModel> _userVideos = [];
   List<VideoFeedModel> _savedVideos = [];
   List<VideoFeedModel> _likedVideos = [];
+  List<Product> _userProducts = [];
   bool _isLoading = false;
   final Set<int> _loadingCategories = <int>{};
 
@@ -57,6 +64,8 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
     _isFollowing = widget.isFollowing;
     ProfileSyncService.instance.videoInteractionEvents.addListener(_onVideoInteractionEvent);
     ProfileSyncService.instance.videoDeletedEvents.addListener(_onVideoDeleted);
+    ProfileSyncService.instance.productUploadedEvents.addListener(_onProductUploaded);
+    ShopService.instance.publishedProductNotifier.addListener(_onProductUploaded);
 
     // Zero-latency instant load: Check initialVideos or in-memory cache
     final identifier = (widget.username != null && widget.username!.isNotEmpty)
@@ -95,6 +104,27 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> with SingleTi
     if (mounted) {
       _fetchPublicProfile();
     }
+  }
+
+  void _onProductUploaded() {
+    final product = ProfileSyncService.instance.productUploadedEvents.value ??
+        ShopService.instance.publishedProductNotifier.value;
+    if (!mounted || product == null) return;
+
+    final sellerId = _loadedUser?.id.toString() ?? widget.userId?.toString();
+    final sellerName = (widget.username ?? _loadedUser?.username ?? '')
+        .replaceAll('@', '')
+        .toLowerCase();
+    final productSeller = (product.seller ?? '').replaceAll('@', '').toLowerCase();
+    if (product.sellerId != sellerId &&
+        (sellerName.isEmpty || productSeller != sellerName)) {
+      return;
+    }
+
+    setState(() {
+      _userProducts.removeWhere((item) => item.id == product.id);
+      _userProducts.insert(0, product);
+    });
   }
 
   Future<void> _fetchPublicProfile() async {
@@ -152,6 +182,13 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
           }
         }).catchError((_) {});
       }
+
+      final sellerId = _loadedUser?.id ?? widget.userId;
+      if (sellerId != null && sellerId > 0) {
+        final products = await ShopService.instance
+            .getProductsForSeller(sellerId.toString());
+        if (mounted) setState(() => _userProducts = products);
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -178,6 +215,14 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
             forceRefresh: true,
           );
           if (mounted) setState(() => _userVideos = List.from(videos));
+          break;
+        case 2:
+          final sellerId = _loadedUser?.id ?? widget.userId;
+          if (sellerId != null && sellerId > 0) {
+            final products = await ShopService.instance
+                .getProductsForSeller(sellerId.toString());
+            if (mounted) setState(() => _userProducts = products);
+          }
           break;
         case 3:
           if (ProfileSyncService.instance.isCurrentUser(
@@ -222,6 +267,8 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
   void dispose() {
     ProfileSyncService.instance.videoInteractionEvents.removeListener(_onVideoInteractionEvent);
     ProfileSyncService.instance.videoDeletedEvents.removeListener(_onVideoDeleted);
+    ProfileSyncService.instance.productUploadedEvents.removeListener(_onProductUploaded);
+    ShopService.instance.publishedProductNotifier.removeListener(_onProductUploaded);
     _tabController.dispose();
     ProfileSyncService.instance.interactionEvents.removeListener(_onInteractionEvent);
     super.dispose();
@@ -333,6 +380,53 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
         }
       }
     }
+  }
+
+  void _openDirectMessage({required String username, required String avatarUrl}) {
+    HapticFeedback.lightImpact();
+    final buyerUser = ProfileSyncService.instance.cachedMyProfile ?? TokenStorage.instance.getUserModel();
+    final rawBuyerHandle = (buyerUser?.username != null && buyerUser!.username.trim().isNotEmpty)
+        ? buyerUser.username.trim()
+        : ProfileSyncService.instance.currentUsername;
+    if (rawBuyerHandle.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sign in to send a message.'),
+          backgroundColor: Color(0xFF2A2A30),
+        ),
+      );
+      return;
+    }
+    final buyerHandle = rawBuyerHandle.startsWith('@') ? rawBuyerHandle : '@$rawBuyerHandle';
+    final buyerAvatar = buyerUser?.avatarUrl ?? ProfileSyncService.instance.currentUserAvatar;
+    final peerHandle = username.startsWith('@') ? username : '@$username';
+    final peerAvatar = InboxMessageManager.resolveUserAvatar(peerHandle, candidateAvatar: avatarUrl);
+    final threadId = InboxMessageManager.buildThreadId(buyerHandle, peerHandle);
+
+    final existing = InboxMessageManager.instance.getThread(threadId) ??
+        InboxMessageManager.instance.getThreadByUsername(peerHandle);
+    final thread = existing ??
+        InboxMessageManager.instance.addOrUpdateThread(
+          DirectMessageThread(
+            id: threadId,
+            username: peerHandle,
+            avatarUrl: peerAvatar,
+            senderHandle: buyerHandle,
+            senderAvatar: buyerAvatar,
+            recipientHandle: peerHandle,
+            recipientAvatar: peerAvatar,
+            lastMessage: '',
+            timeAgo: 'Just now',
+            isVerified: _loadedUser?.isVerified ?? false,
+            messages: const [],
+          ),
+        );
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatDetailScreen(thread: thread),
+      ),
+    );
   }
 
   String _formatCount(int count) {
@@ -546,15 +640,10 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
                           _buildPillButton(
                             'Message',
                             isPrimary: false,
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Direct message with @$username coming soon!'),
-                                  backgroundColor: const Color(0xFF2A2A30),
-                                  duration: const Duration(seconds: 2),
-                                ),
-                              );
-                            },
+                            onTap: () => _openDirectMessage(
+                              username: username,
+                              avatarUrl: avatarUrl,
+                            ),
                           ),
                         ],
                       );
@@ -622,7 +711,19 @@ FeedRemoteDataSource.instance.getUserVideos(identifier, forceRefresh: true).then
                 },
               ),
             ), // Grid (Index 1)
-            _buildCategoryPage(2, buildProfileTabSlivers(2)), // Shop
+            _buildCategoryPage(
+              2,
+              buildProfileTabSlivers(
+                2,
+                userProducts: _userProducts,
+                username: username,
+                userAvatar: avatarUrl,
+                isCurrentUser: ProfileSyncService.instance.isCurrentUser(
+                  username: username,
+                  id: _loadedUser?.id.toString() ?? widget.userId?.toString(),
+                ),
+              ),
+            ), // Shop
             _buildCategoryPage(3, buildProfileTabSlivers(
                 3,
                 savedVideos: _savedVideos,

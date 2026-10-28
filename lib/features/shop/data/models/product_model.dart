@@ -1,4 +1,5 @@
 import 'category_model.dart';
+import '../../models/product.dart';
 
 class ProductModel {
   final int id;
@@ -14,6 +15,7 @@ class ProductModel {
   final CategoryModel? category;
   final int? sellerId;
   final String? sellerName;
+  final String? sellerUsername;
   final String? sellerAvatar;
   final List<String> images;
   final List<int> videoIds;
@@ -32,6 +34,7 @@ class ProductModel {
     this.category,
     this.sellerId,
     this.sellerName,
+    this.sellerUsername,
     this.sellerAvatar,
     this.images = const [],
     this.videoIds = const [],
@@ -43,6 +46,9 @@ class ProductModel {
   String get formattedPrice => '\$${price.toStringAsFixed(2)}';
   String? get formattedOriginalPrice =>
       originalPrice != null ? '\$${originalPrice!.toStringAsFixed(2)}' : null;
+
+  int get effectiveStock => Product.getEffectiveStock(id.toString(), stock);
+  bool get isOutOfStock => effectiveStock <= 0;
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
     List<String> parsedImages = [];
@@ -64,7 +70,7 @@ class ProductModel {
       price: (json['price'] as num?)?.toDouble() ?? 0.0,
       originalPrice: (json['originalPrice'] as num?)?.toDouble(),
       discountPercentage: (json['discountPercentage'] as num?)?.toInt(),
-      stock: (json['stock'] as num?)?.toInt() ?? 0,
+      stock: json['stock'] != null ? (json['stock'] as num).toInt() : 10,
       rating: (json['rating'] as num?)?.toDouble() ?? 4.8,
       reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
       salesCount: (json['salesCount'] as num?)?.toInt() ?? 0,
@@ -72,8 +78,9 @@ class ProductModel {
           ? CategoryModel.fromJson(json['category'] as Map<String, dynamic>)
           : null,
       sellerId: sellerJson != null ? (sellerJson['id'] as num?)?.toInt() : null,
+      sellerUsername: sellerJson != null ? sellerJson['username'] as String? : null,
       sellerName: sellerJson != null
-          ? (sellerJson['displayName'] ?? sellerJson['username']) as String?
+          ? (sellerJson['username'] ?? sellerJson['displayName']) as String?
           : null,
       sellerAvatar: sellerJson != null ? sellerJson['avatarUrl'] as String? : null,
       images: parsedImages,

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../auth/data/datasources/token_storage.dart';
+import '../../profile/data/datasources/profile_sync_service.dart';
 import '../models/product.dart';
 
 class ShopService {
@@ -104,6 +105,68 @@ class ShopService {
       debugPrint('[ShopService] Backend connection failed: $e. Using resilient mock catalog.');
       return _getFallbackProducts(category: category, query: query);
     }
+  }
+
+  /// Fetches only the products published by one seller.
+  ///
+  /// This intentionally returns an empty list when the seller has no products
+  /// instead of falling back to the global catalog. Profile pages need to
+  /// distinguish an empty shop from unrelated products.
+  Future<List<Product>> getProductsForSeller(String sellerId) async {
+    final normalizedSellerId = sellerId.trim();
+    if (normalizedSellerId.isEmpty) return const <Product>[];
+    await _loadPersistentProducts();
+
+    try {
+      final token = await _tokenProvider();
+      final response = await _client
+          .get(
+            Uri.parse('$baseUrl/by-seller/$normalizedSellerId'),
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+              if (token != null && token.isNotEmpty)
+                'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(const Duration(seconds: 4));
+
+      if (response.statusCode != 200) {
+        debugPrint(
+          '[ShopService] Seller products request failed: ${response.statusCode}',
+        );
+        return _getCachedProductsForSeller(normalizedSellerId);
+      }
+
+      final decoded = jsonDecode(response.body);
+      final rawList = _extractProductList(decoded);
+      final products = rawList
+          .whereType<Map<String, dynamic>>()
+          .map(Product.fromJson)
+          .toList();
+
+      // Keep locally published products visible until their server copy is
+      // available, without mixing in products from other sellers.
+      final localProducts = _getCachedProductsForSeller(normalizedSellerId);
+      final remoteIds = products.map((product) => product.id).toSet();
+      products.addAll(
+        localProducts.where((product) => !remoteIds.contains(product.id)),
+      );
+
+      for (final product in products) {
+        Product.addCreatorProduct(product);
+      }
+      return products;
+    } catch (e) {
+      debugPrint('[ShopService] Seller products request failed: $e');
+      return _getCachedProductsForSeller(normalizedSellerId);
+    }
+  }
+
+  List<Product> _getCachedProductsForSeller(String sellerId) {
+    return Product.userAddedProducts
+        .where((product) => product.sellerId?.trim() == sellerId)
+        .toList();
   }
 
   /// Extracts the list of products from various Spring Boot JSON formats:
@@ -217,10 +280,20 @@ class ShopService {
                 ? decoded['data']
                 : decoded;
         if (data is Map<String, dynamic>) {
-          final publishedProduct = Product.fromJson(data);
+          var publishedProduct = Product.fromJson(data);
+          if (publishedProduct.seller == null || publishedProduct.seller!.isEmpty || publishedProduct.seller == '@seller') {
+            publishedProduct = publishedProduct.copyWith(seller: product.seller);
+          }
+          if (publishedProduct.sellerId == null || publishedProduct.sellerId!.isEmpty) {
+            publishedProduct = publishedProduct.copyWith(sellerId: product.sellerId);
+          }
+          if (publishedProduct.sellerAvatar == null || publishedProduct.sellerAvatar!.isEmpty) {
+            publishedProduct = publishedProduct.copyWith(sellerAvatar: product.sellerAvatar);
+          }
           Product.addCreatorProduct(publishedProduct);
           await _savePersistentProducts();
           publishedProductNotifier.value = publishedProduct;
+          ProfileSyncService.instance.productUploadedEvents.value = publishedProduct;
           return publishedProduct;
         }
       } else {
@@ -236,6 +309,7 @@ class ShopService {
     Product.addCreatorProduct(product);
     await _savePersistentProducts();
     publishedProductNotifier.value = product;
+    ProfileSyncService.instance.productUploadedEvents.value = product;
     return product;
   }
 
@@ -249,8 +323,15 @@ class ShopService {
     List<Product> products, {
     String? category,
     String? query,
+    bool filterOutOfStock = true,
   }) {
     var filtered = products;
+
+    if (filterOutOfStock) {
+      filtered = filtered
+          .where((p) => Product.getEffectiveStock(p.id, p.stock) > 0)
+          .toList();
+    }
 
     if (category != null && category.isNotEmpty && category.toLowerCase() != 'all') {
       final selCat = category.toLowerCase().trim();

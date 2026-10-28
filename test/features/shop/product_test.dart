@@ -1,5 +1,8 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viloapp/features/shop/models/product.dart';
+import 'package:viloapp/features/profile/presentation/widgets/shop_product_card.dart';
+import 'package:viloapp/features/shop/presentation/controllers/cart_controller.dart';
 
 void main() {
   group('Product Model & Creator Catalog Tests', () {
@@ -107,6 +110,147 @@ void main() {
         expect(deserialized.description, p.description);
         expect(deserialized.imageUrl, p.imageUrl);
       }
+    });
+
+    test('Real-time stock deduction decrements stock and notifies listeners', () {
+      Product.resetStockOverrides();
+      final product = Product(
+        id: 'stock-test-01',
+        name: 'Test Mechanical Keyboard',
+        categoryId: 'cat-tech',
+        price: 99.0,
+        stock: 5,
+        description: 'Test keyboard',
+        imageUrl: 'https://example.com/kb.png',
+      );
+
+      expect(Product.getEffectiveStock(product.id, product.stock), 5);
+      expect(product.isOutOfStock, isFalse);
+
+      int notifyCount = 0;
+      void listener() => notifyCount++;
+      Product.stockUpdateNotifier.addListener(listener);
+
+      // Deduct 2 units
+      Product.deductStock(product.id, 2, initialStock: product.stock);
+      expect(Product.getEffectiveStock(product.id, product.stock), 3);
+      expect(notifyCount, 1);
+      expect(product.isOutOfStock, isFalse);
+
+      // Deduct remaining 3 units -> drops to 0
+      Product.deductStock(product.id, 3, initialStock: product.stock);
+      expect(Product.getEffectiveStock(product.id, product.stock), 0);
+      expect(notifyCount, 2);
+      expect(product.isOutOfStock, isTrue);
+
+      Product.stockUpdateNotifier.removeListener(listener);
+      Product.resetStockOverrides();
+    });
+
+    testWidgets('ShopProductCard renders stock badge and displays Out of Stock tag when stock reaches 0', (tester) async {
+      Product.resetStockOverrides();
+      final product = Product(
+        id: 'stock-card-01',
+        name: 'Mechanical Gaming Keyboard',
+        categoryId: 'cat-tech',
+        price: 150.0,
+        stock: 2,
+        description: 'RGB mechanical switches',
+        imageUrl: 'https://example.com/kb.png',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ShopProductCard(
+              product: product,
+              sellerUsername: 'mongkol',
+            ),
+          ),
+        ),
+      );
+
+      // Should show '2 in stock' initially
+      expect(find.text('2 in stock'), findsOneWidget);
+      expect(find.text('Out of Stock'), findsNothing);
+
+      // Deduct all stock in real-time
+      Product.deductStock(product.id, 2, initialStock: product.stock);
+      await tester.pump();
+
+      // Card must reactively update without full rebuild of parent
+      expect(find.text('0 in stock'), findsOneWidget);
+      expect(find.text('Out of Stock'), findsWidgets);
+      expect(find.text('OUT OF STOCK'), findsOneWidget);
+
+      Product.resetStockOverrides();
+    });
+
+    testWidgets('Adding product to cart deducts stock in real time and removing restores stock', (tester) async {
+      Product.resetStockOverrides();
+      final product = Product(
+        id: 'cart-stock-01',
+        name: '4K Creator Camera',
+        categoryId: 'cat-tech',
+        price: 899.0,
+        stock: 5,
+        description: 'Vlog camera',
+        imageUrl: 'https://example.com/cam.png',
+      );
+
+      expect(Product.getEffectiveStock(product.id, product.stock), 5);
+
+      // 1. Add to cart -> stock deducts in real time immediately
+      await CartController.instance.addProduct(product, quantity: 2);
+      expect(Product.getEffectiveStock(product.id, product.stock), 3);
+
+      // 2. Add 1 more of same product -> stock deducts to 2
+      await CartController.instance.addProduct(product, quantity: 1);
+      expect(Product.getEffectiveStock(product.id, product.stock), 2);
+
+      // 3. Clear cart with restoreStock -> stock returns to 5
+      await CartController.instance.clearCart(restoreStock: true);
+      expect(Product.getEffectiveStock(product.id, product.stock), 5);
+
+      Product.resetStockOverrides();
+    });
+
+    testWidgets('Tapping Send Message in ShopProductCard deducts stock in real time', (tester) async {
+      Product.resetStockOverrides();
+      final product = Product(
+        id: 'msg-stock-01',
+        name: 'Studio Wireless Headphones',
+        categoryId: 'cat-audio',
+        price: 199.0,
+        stock: 3,
+        description: 'Noise cancelling',
+        imageUrl: 'https://example.com/hp.png',
+        seller: 'audio_pro',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ShopProductCard(
+              product: product,
+              sellerUsername: 'audio_pro',
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('3 in stock'), findsOneWidget);
+      expect(find.text('Send Message'), findsOneWidget);
+
+      // Tap Send Message
+      await tester.tap(find.text('Send Message'));
+      await tester.pump();
+
+      // Stock must be deducted from 3 to 2 in real time!
+      expect(Product.getEffectiveStock(product.id, product.stock), 2);
+      expect(find.text('2 in stock'), findsOneWidget);
+
+      Product.resetStockOverrides();
     });
   });
 }

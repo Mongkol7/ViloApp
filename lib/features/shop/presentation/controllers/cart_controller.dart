@@ -89,48 +89,79 @@ class CartController extends ChangeNotifier {
     }
   }
 
-  Future<bool> addToCart(ProductModel product, {int quantity = 1, String? variant}) async {
+  Future<bool> addToCart(ProductModel product, {int quantity = 1, String? variant, String? productStringId}) async {
     if (quantity <= 0) return false;
+
+    final effectiveStock = Product.getEffectiveStock(
+      product.id.toString(),
+      product.stock,
+    );
+    if (effectiveStock <= 0) return false;
+
+    final targetId = productStringId ?? product.id.toString();
 
     // 1. Optimistically update local in-memory cart
     final existingIndex = _inMemoryItems.indexWhere(
       (item) => item.productId == product.id && item.variant == variant,
     );
 
+    int actualAddedQty = 0;
     if (existingIndex >= 0) {
       final existing = _inMemoryItems[existingIndex];
+      if (effectiveStock <= 0) return false;
       final newQuantity = existing.quantity + quantity;
+      actualAddedQty = quantity;
       _inMemoryItems[existingIndex] = CartItemModel(
         id: existing.id,
         productId: existing.productId,
+        productStringId: existing.productStringId ?? targetId,
         productTitle: existing.productTitle,
         productImage: existing.productImage,
         price: existing.price,
         originalPrice: existing.originalPrice,
         quantity: newQuantity,
         subtotal: existing.price * newQuantity,
-        stock: existing.stock,
+        stock: effectiveStock,
         variant: existing.variant,
         createdAt: existing.createdAt,
         sellerName: existing.sellerName ?? product.sellerName,
+        sellerUsername: existing.sellerUsername ?? product.sellerUsername ?? product.sellerName,
+        sellerAvatar: existing.sellerAvatar ?? product.sellerAvatar,
+        sellerId: existing.sellerId ?? product.sellerId,
       );
     } else {
       final img = product.images.isNotEmpty ? product.images.first : product.primaryImage;
+      final clampedQty = quantity;
+      actualAddedQty = clampedQty;
       final newItem = CartItemModel(
         id: DateTime.now().millisecondsSinceEpoch ~/ 1000 + _inMemoryItems.length,
         productId: product.id,
+        productStringId: targetId,
         productTitle: product.title,
         productImage: img,
         price: product.price,
         originalPrice: product.originalPrice,
-        quantity: quantity,
-        subtotal: product.price * quantity,
-        stock: product.stock > 0 ? product.stock : 99,
+        quantity: clampedQty,
+        subtotal: product.price * clampedQty,
+        stock: effectiveStock,
         variant: variant,
         createdAt: DateTime.now().toIso8601String(),
         sellerName: product.sellerName ?? 'TechHorizon Global',
+        sellerUsername: product.sellerUsername ?? product.sellerName,
+        sellerAvatar: product.sellerAvatar,
+        sellerId: product.sellerId,
       );
       _inMemoryItems.add(newItem);
+    }
+
+    // Deduct stock in real time upon adding product to cart
+    if (actualAddedQty > 0) {
+      Product.deductStock(
+        targetId,
+        actualAddedQty,
+        initialStock: product.stock,
+        productName: product.title,
+      );
     }
 
     _recalculateCart();
@@ -149,7 +180,10 @@ class CartController extends ChangeNotifier {
           soldCount: product.salesCount,
           description: product.description,
           imageUrl: product.primaryImage,
-          seller: product.sellerName,
+          seller: product.sellerUsername ?? product.sellerName,
+          sellerAvatar: product.sellerAvatar,
+          sellerId: product.sellerId?.toString(),
+          stock: product.stock,
         ),
         quantity,
       );
@@ -177,14 +211,16 @@ class CartController extends ChangeNotifier {
       description: product.description,
       price: product.price,
       originalPrice: product.originalPrice,
-      stock: product.stock > 0 ? product.stock : 50,
+      stock: product.stock,
       rating: product.rating,
       reviewCount: 100,
       salesCount: product.soldCount,
       sellerName: product.seller ?? 'TechHorizon Global',
+      sellerUsername: product.seller,
+      sellerAvatar: product.sellerAvatar,
       images: [product.imageUrl],
     );
-    return addToCart(model, quantity: quantity, variant: variant);
+    return addToCart(model, quantity: quantity, variant: variant, productStringId: product.id);
   }
 
   Future<void> updateQuantity(int itemId, int quantity) async {
@@ -196,9 +232,42 @@ class CartController extends ChangeNotifier {
     final index = _inMemoryItems.indexWhere((item) => item.id == itemId);
     if (index >= 0) {
       final existing = _inMemoryItems[index];
+      final targetId = existing.productStringId ?? existing.productId.toString();
+      final effectiveStock = Product.getEffectiveStock(
+        targetId,
+        existing.stock,
+        productName: existing.productTitle,
+      );
+
+      // Adjust stock in real time when quantity changes
+      if (quantity > existing.quantity) {
+        final diff = quantity - existing.quantity;
+        if (effectiveStock < diff && effectiveStock > 0) {
+          quantity = existing.quantity + effectiveStock;
+        }
+        final actualDeduct = quantity - existing.quantity;
+        if (actualDeduct > 0) {
+          Product.deductStock(
+            targetId,
+            actualDeduct,
+            initialStock: existing.stock,
+            productName: existing.productTitle,
+          );
+        }
+      } else if (quantity < existing.quantity) {
+        final diff = existing.quantity - quantity;
+        Product.restoreStock(
+          targetId,
+          diff,
+          initialStock: existing.stock,
+          productName: existing.productTitle,
+        );
+      }
+
       _inMemoryItems[index] = CartItemModel(
         id: existing.id,
         productId: existing.productId,
+        productStringId: existing.productStringId,
         productTitle: existing.productTitle,
         productImage: existing.productImage,
         price: existing.price,
@@ -209,6 +278,8 @@ class CartController extends ChangeNotifier {
         variant: existing.variant,
         createdAt: existing.createdAt,
         sellerName: existing.sellerName,
+        sellerUsername: existing.sellerUsername,
+        sellerAvatar: existing.sellerAvatar,
       );
       _recalculateCart();
       notifyListeners();
@@ -229,10 +300,18 @@ class CartController extends ChangeNotifier {
     }
   }
 
-  Future<void> removeItem(int itemId) async {
+  Future<void> removeItem(int itemId, {bool restoreStock = true}) async {
     final index = _inMemoryItems.indexWhere((item) => item.id == itemId);
     if (index >= 0) {
       final removed = _inMemoryItems.removeAt(index);
+      if (restoreStock) {
+        Product.restoreStock(
+          removed.productStringId ?? removed.productId.toString(),
+          removed.quantity,
+          initialStock: removed.stock,
+          productName: removed.productTitle,
+        );
+      }
       _recalculateCart();
       notifyListeners();
 
@@ -248,7 +327,17 @@ class CartController extends ChangeNotifier {
     }
   }
 
-  Future<void> clearCart() async {
+  Future<void> clearCart({bool restoreStock = false}) async {
+    if (restoreStock) {
+      for (final item in _inMemoryItems) {
+        Product.restoreStock(
+          item.productStringId ?? item.productId.toString(),
+          item.quantity,
+          initialStock: item.stock,
+          productName: item.productTitle,
+        );
+      }
+    }
     _inMemoryItems.clear();
     _recalculateCart();
     notifyListeners();

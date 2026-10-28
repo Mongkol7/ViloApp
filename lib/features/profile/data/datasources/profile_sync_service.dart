@@ -3,6 +3,7 @@ import '../../../auth/data/datasources/token_storage.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../../feed/data/models/video_model.dart';
+import '../../../shop/models/product.dart';
 import '../../presentation/mock/profile_mock_data.dart';
 
 class FollowChangeEvent {
@@ -63,6 +64,9 @@ class ProfileSyncService {
 
   /// Emits whenever the current user's profile is updated (name, bio, avatar)
   final ValueNotifier<UserModel?> profileUpdatedEvents = ValueNotifier<UserModel?>(null);
+
+  /// Emits whenever a product is uploaded/published by the current user
+  final ValueNotifier<Product?> productUploadedEvents = ValueNotifier<Product?>(null);
 
   void notifyVideoUploaded(VideoModel video) {
     videoUploadedEvents.value = video;
@@ -147,6 +151,7 @@ class ProfileSyncService {
     soundUploadedEvents.value = null;
     soundDeletedEvents.value = null;
     profileUpdatedEvents.value = null;
+    productUploadedEvents.value = null;
   }
 
   /// In-memory cache of followers and following for instant zero-latency listing
@@ -188,17 +193,40 @@ class ProfileSyncService {
 
   /// Returns true if the given username or ID belongs to the current user.
   bool isCurrentUser({String? username, String? id}) {
-    if (id != null && id.isNotEmpty && id != '0') {
-      if (cachedMyProfile != null && cachedMyProfile!.id.toString() == id) return true;
-      if (id == '1') return true;
+    // 1. Resolve current user identity
+    final currentProfile = cachedMyProfile ?? TokenStorage.instance.getUserModel();
+    final int? myId = currentProfile?.id;
+    final String? myRawUsername = currentProfile?.username;
+    final String myUsername = (myRawUsername != null && myRawUsername.trim().isNotEmpty)
+        ? myRawUsername.trim().toLowerCase().replaceAll('@', '')
+        : '';
+
+    // Clean and validate candidate input
+    final cleanUsername = username?.trim().toLowerCase().replaceAll('@', '') ?? '';
+    final cleanId = (id != null && id.trim().isNotEmpty && id.trim() != '0') ? id.trim() : null;
+
+    if (cleanUsername == 'seller' || (cleanUsername.isEmpty && cleanId == null)) {
+      return false;
     }
 
-    if (id != null && (id == '1' || id == '0')) return true;
-    if (username != null && username.isNotEmpty) {
-      final clean = username.trim().toLowerCase().replaceAll('@', '');
-      final myUser = currentUsername;
-      if (myUser.isNotEmpty && clean == myUser) return true;
-      if (clean == 'mongkol') return true;
+    // 2. If valid ID is provided, compare with current user's ID
+    if (cleanId != null && myId != null && myId > 0) {
+      if (myId.toString() == cleanId) {
+        return true;
+      }
+      // If both IDs exist and do not match, they are different accounts
+      return false;
+    }
+
+    // 3. If username is provided, compare with current user's username
+    if (cleanUsername.isNotEmpty && myUsername.isNotEmpty) {
+      return cleanUsername == myUsername;
+    }
+
+    // 4. Fallback only if app is unauthenticated (no token and no cached profile)
+    if (myId == null && myUsername.isEmpty) {
+      final fallback = ProfileMockData.username.trim().toLowerCase().replaceAll('@', '');
+      return cleanUsername.isNotEmpty && cleanUsername == fallback;
     }
 
     return false;
@@ -239,5 +267,15 @@ class ProfileSyncService {
       isFollowing: isFollowing,
       delta: delta,
     );
+  }
+
+  bool isFollowingUser({String? username, int? userId}) {
+    if (cachedFollowing == null) return false;
+    final clean = username?.replaceAll('@', '').trim().toLowerCase() ?? '';
+    return cachedFollowing!.any((u) {
+      if (userId != null && u.id == userId) return true;
+      if (clean.isNotEmpty && u.username.toLowerCase() == clean) return true;
+      return false;
+    });
   }
 }

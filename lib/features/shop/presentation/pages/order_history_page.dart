@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../data/datasources/shop_remote_data_source.dart';
 import '../../data/models/order_model.dart';
+import '../../models/product.dart';
+import '../../../inbox_activity/data/datasources/inbox_message_manager.dart';
 
 class OrderHistoryPage extends StatefulWidget {
   const OrderHistoryPage({super.key});
@@ -20,6 +22,7 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
 
   Color _getStatusColor(String status) {
     switch (status.toUpperCase()) {
+      case 'SUCCESS':
       case 'PAID':
       case 'DELIVERED':
         return Colors.greenAccent;
@@ -28,9 +31,61 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
       case 'PENDING':
         return Colors.orangeAccent;
       case 'CANCELLED':
+      case 'CANCELED':
         return Colors.redAccent;
       default:
         return Colors.white70;
+    }
+  }
+
+  Future<void> _confirmCancelOrder(OrderModel order) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Cancel Order', style: TextStyle(color: Colors.white)),
+        content: Text(
+          'Are you sure you want to cancel order ${order.orderNumber}? Stock will be returned immediately.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep Order', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirm Cancel', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      for (final it in order.items) {
+        final productKey = it.productId?.toString() ?? it.id.toString();
+        Product.restoreStock(productKey, it.quantity, productName: it.productTitle);
+        Product.deductSoldCount(productKey, it.quantity, productName: it.productTitle);
+        await InboxMessageManager.instance.cancelOrderInChats(
+          productTitle: it.productTitle,
+          orderNumber: order.orderNumber,
+          orderId: order.id.toString(),
+        );
+      }
+      ShopRemoteDataSource.instance.updateOrderStatus(order.orderNumber, 'CANCELLED');
+      setState(() {
+        _ordersFuture = ShopRemoteDataSource.instance.getOrderHistory();
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Color(0xFF1E1E22),
+            content: Text('Order cancelled. Stock and sold counts restored.'),
+          ),
+        );
+      }
     }
   }
 
@@ -108,7 +163,8 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
             separatorBuilder: (context, index) => const SizedBox(height: 16),
             itemBuilder: (context, index) {
               final order = orders[index];
-              final statusColor = _getStatusColor(order.status);
+              final effectiveStatus = order.dynamicStatus;
+              final statusColor = _getStatusColor(effectiveStatus);
 
               return Container(
                 padding: const EdgeInsets.all(16),
@@ -123,28 +179,38 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
                     // Order Header
                     Row(
                       children: [
-                        Text(
-                          order.orderNumber,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
+                        Expanded(
+                          child: Text(
+                            order.orderNumber,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
                           ),
                         ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: statusColor.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: statusColor.withValues(alpha: 0.3)),
-                          ),
-                          child: Text(
-                            order.status,
-                            style: TextStyle(
-                              color: statusColor,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                            ),
+                            child: Text(
+                              effectiveStatus,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              softWrap: false,
+                              style: TextStyle(
+                                color: statusColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                              ),
                             ),
                           ),
                         ),
@@ -186,9 +252,14 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
                                   ],
                                 ),
                               ),
-                              Text(
-                                item.formattedSubtotal,
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                              Flexible(
+                                child: Text(
+                                  item.formattedSubtotal,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.end,
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
                               ),
                             ],
                           ),
@@ -200,23 +271,51 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
 
                     // Order Footer
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Payment: ${order.paymentMethod}',
-                          style: const TextStyle(color: Colors.white38, fontSize: 11),
+                        Expanded(
+                          child: Text(
+                            'Payment: ${order.paymentMethod}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white38, fontSize: 11),
+                          ),
                         ),
-                        Row(
-                          children: [
-                            const Text('Total: ', style: TextStyle(color: Colors.white60, fontSize: 13)),
-                            Text(
-                              order.formattedTotal,
-                              style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 16),
-                            ),
-                          ],
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('Total: ', style: TextStyle(color: Colors.white60, fontSize: 13)),
+                              Flexible(
+                                child: Text(
+                                  order.formattedTotal,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.end,
+                                  style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 16),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
+                    if (effectiveStatus == 'PENDING') ...[
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _confirmCancelOrder(order),
+                          icon: const Icon(Icons.cancel_outlined, size: 14, color: Color(0xFFEF4444)),
+                          label: const Text('Cancel Order (Within 4 hrs)', style: TextStyle(color: Color(0xFFEF4444), fontSize: 11.5, fontWeight: FontWeight.w600)),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: const Color(0xFFEF4444).withValues(alpha: 0.5)),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               );

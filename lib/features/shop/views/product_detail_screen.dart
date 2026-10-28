@@ -11,6 +11,10 @@ import 'shop_search_results_screen.dart';
 import '../../inbox_activity/data/datasources/inbox_message_manager.dart';
 import '../../inbox_activity/domain/entities/inbox_item.dart';
 import '../../inbox_activity/presentation/pages/chat_detail_screen.dart';
+import '../../profile/data/datasources/profile_sync_service.dart';
+import '../../auth/data/datasources/token_storage.dart';
+import '../../profile/data/datasources/profile_remote_data_source.dart';
+import '../../profile/presentation/screens/public_profile_screen.dart';
 
 /// Product Detail Screen matching Vilo's Obsidian Dark Canvas aesthetic (#080808 / #141416).
 class ProductDetailScreen extends StatefulWidget {
@@ -21,8 +25,14 @@ class ProductDetailScreen extends StatefulWidget {
   final String? price;
   final String? imageUrl;
   final String? seller;
+  final String? sellerAvatar;
+  final String? sellerId;
   final double? rating;
   final int? soldCount;
+  final String? description;
+  final int? stock;
+  final String? category;
+  final double? originalPrice;
 
   const ProductDetailScreen({
     super.key,
@@ -33,8 +43,14 @@ class ProductDetailScreen extends StatefulWidget {
     this.price,
     this.imageUrl,
     this.seller,
+    this.sellerAvatar,
+    this.sellerId,
     this.rating,
     this.soldCount,
+    this.description,
+    this.stock,
+    this.category,
+    this.originalPrice,
   });
 
   @override
@@ -76,6 +92,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   late final String _resolvedOriginalPrice;
   late final String _resolvedDiscount;
   late final String _resolvedSeller;
+  late final String? _resolvedSellerAvatar;
+  late final String? _resolvedSellerId;
+  late final bool _isOwner;
   late final double _resolvedRating;
   late final String _resolvedReviewsCount;
   late final String _resolvedSoldCount;
@@ -85,6 +104,37 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   void initState() {
     super.initState();
     _initProductData();
+  }
+
+  void _navigateToSellerProfile() {
+    final cleanSeller = _resolvedSeller.startsWith('@') ? _resolvedSeller : '@$_resolvedSeller';
+    final rawUsername = cleanSeller.replaceAll('@', '').trim();
+    final avatar = InboxMessageManager.resolveSellerAvatar(
+      candidateAvatar: _resolvedSellerAvatar,
+      sellerHandle: cleanSeller,
+    );
+    final targetUid = int.tryParse(_resolvedSellerId ?? '');
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PublicProfileScreen(
+          userId: targetUid,
+          username: rawUsername,
+          displayName: _resolvedSeller,
+          avatarUrl: avatar,
+          isFollowing: _isFollowingStore,
+        ),
+      ),
+    ).then((_) {
+      if (mounted) {
+        setState(() {
+          _isFollowingStore = ProfileSyncService.instance.isFollowingUser(
+            username: _resolvedSeller,
+            userId: targetUid,
+          );
+        });
+      }
+    });
   }
 
   void _initProductData() {
@@ -111,10 +161,26 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       _resolvedDiscount = '-15% OFF';
     }
 
-    _resolvedSeller = widget.productModel?.sellerName ??
+    _resolvedSeller = widget.productModel?.sellerUsername ??
+        widget.productModel?.sellerName ??
         widget.product?.seller ??
         widget.seller ??
         'TechHorizon Global';
+    _resolvedSellerAvatar = widget.productModel?.sellerAvatar ??
+        widget.product?.sellerAvatar ??
+        widget.sellerAvatar;
+    _resolvedSellerId = widget.productModel?.sellerId?.toString() ??
+        widget.product?.sellerId ??
+        widget.sellerId;
+    _isOwner = ProfileSyncService.instance.isCurrentUser(
+      username: _resolvedSeller,
+      id: _resolvedSellerId,
+    );
+    final targetUid = int.tryParse(_resolvedSellerId ?? '');
+    _isFollowingStore = ProfileSyncService.instance.isFollowingUser(
+      username: _resolvedSeller,
+      userId: targetUid,
+    );
 
     _resolvedRating = widget.productModel?.rating ?? widget.product?.rating ?? widget.rating ?? 4.8;
     _resolvedReviewsCount = '1.2k';
@@ -911,95 +977,162 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           children: [
             Row(
               children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1F2937),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white24, width: 1.5),
-                  ),
-                  child: const Center(
-                    child: Icon(Icons.storefront_rounded, color: Colors.white, size: 24),
+                GestureDetector(
+                  onTap: _navigateToSellerProfile,
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1F2937),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white24, width: 1.5),
+                    ),
+                    child: ClipOval(
+                      child: () {
+                        final storeAvatar = _resolvedSellerAvatar;
+                        if (storeAvatar != null && storeAvatar.isNotEmpty) {
+                          if (storeAvatar.startsWith('http://') || storeAvatar.startsWith('https://')) {
+                            return Image.network(
+                              storeAvatar,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront_rounded, color: Colors.white, size: 24),
+                            );
+                          } else {
+                            return Image.asset(
+                              storeAvatar,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront_rounded, color: Colors.white, size: 24),
+                            );
+                          }
+                        }
+                        return const Center(
+                          child: Icon(Icons.storefront_rounded, color: Colors.white, size: 24),
+                        );
+                      }(),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              _resolvedSeller,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14.5,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: _accentBlue.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: _accentBlue.withValues(alpha: 0.4)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: const [
-                                Icon(Icons.verified_rounded, color: _accentBlue, size: 11),
-                                SizedBox(width: 3),
-                                Text(
-                                  'Official Store',
-                                  style: TextStyle(
-                                    color: _accentBlue,
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                  child: GestureDetector(
+                    onTap: _navigateToSellerProfile,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _resolvedSeller,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14.5,
                                 ),
-                              ],
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: _accentBlue.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: _accentBlue.withValues(alpha: 0.4)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  Icon(Icons.verified_rounded, color: _accentBlue, size: 11),
+                                  SizedBox(width: 3),
+                                  Text(
+                                    'Official Store',
+                                    style: TextStyle(
+                                      color: _accentBlue,
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        const Text(
+                          '99.4% Positive Feedback • 128k Followers',
+                          style: TextStyle(color: Colors.white38, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                _isOwner
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF222226),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: const Text(
+                          'Your Store',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      )
+                    : GestureDetector(
+                        onTap: () async {
+                          HapticFeedback.lightImpact();
+                          final newFollowState = !_isFollowingStore;
+                          setState(() => _isFollowingStore = newFollowState);
+                          final targetUid = int.tryParse(_resolvedSellerId ?? '') ?? _resolvedSeller.hashCode.abs();
+                          ProfileSyncService.instance.notifyFollowChanged(
+                            targetUserId: targetUid,
+                            isFollowing: newFollowState,
+                          );
+                          try {
+                            if (newFollowState) {
+                              await ProfileRemoteDataSource.instance.toggleFollow(targetUid);
+                            } else {
+                              await ProfileRemoteDataSource.instance.unfollow(targetUid);
+                            }
+                          } catch (_) {}
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: const Color(0xFF1E1E22),
+                                behavior: SnackBarBehavior.floating,
+                                duration: const Duration(seconds: 1),
+                                content: Text(newFollowState ? 'Following $_resolvedSeller' : 'Unfollowed $_resolvedSeller'),
+                              ),
+                            );
+                          }
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: _isFollowingStore ? Colors.transparent : Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: _isFollowingStore ? Colors.white38 : Colors.white,
                             ),
                           ),
-                        ],
+                          child: Text(
+                            _isFollowingStore ? 'Following' : 'Follow',
+                            style: TextStyle(
+                              color: _isFollowingStore ? Colors.white : Colors.black,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 3),
-                      const Text(
-                        '99.4% Positive Feedback • 128k Followers',
-                        style: TextStyle(color: Colors.white38, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    setState(() => _isFollowingStore = !_isFollowingStore);
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: _isFollowingStore ? Colors.transparent : Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: _isFollowingStore ? Colors.white38 : Colors.white,
-                      ),
-                    ),
-                    child: Text(
-                      _isFollowingStore ? 'Following' : 'Follow',
-                      style: TextStyle(
-                        color: _isFollowingStore ? Colors.white : Colors.black,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -1890,7 +2023,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         width: 44,
         height: 44,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Container(
+        errorBuilder: (_, _, _) => Container(
           width: 44,
           height: 44,
           color: const Color(0xFF242428),
@@ -1903,7 +2036,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       width: 44,
       height: 44,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => Container(
+      errorBuilder: (_, _, _) => Container(
         width: 44,
         height: 44,
         color: const Color(0xFF242428),
@@ -1918,32 +2051,58 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ? text
         : 'Hi $_resolvedSeller, I have an inquiry about $_resolvedTitle ($_resolvedPrice). Is it currently available?';
 
-    final threadId = 'seller_chat_${_resolvedSeller.hashCode.abs()}';
-    final primaryImg = _carouselImages.isNotEmpty ? _carouselImages.first : (widget.imageUrl ?? '');
+    final buyerUser = ProfileSyncService.instance.cachedMyProfile ?? TokenStorage.instance.getUserModel();
+    final rawBuyerHandle = (buyerUser?.username != null && buyerUser!.username.trim().isNotEmpty)
+        ? buyerUser.username.trim()
+        : ProfileSyncService.instance.currentUsername;
+    final buyerHandle = rawBuyerHandle.startsWith('@') ? rawBuyerHandle : '@$rawBuyerHandle';
+    final buyerAvatar = buyerUser?.avatarUrl ?? ProfileSyncService.instance.currentUserAvatar;
+
     final handle = _resolvedSeller.startsWith('@')
         ? _resolvedSeller
         : '@${_resolvedSeller.replaceAll(' ', '_').toLowerCase()}';
+    final threadId = InboxMessageManager.buildThreadId(buyerHandle, handle);
+    final sellerAvatar = InboxMessageManager.resolveUserAvatar(handle, candidateAvatar: widget.sellerAvatar);
 
-    final thread = DirectMessageThread(
-      id: threadId,
-      username: handle,
-      avatarUrl: primaryImg,
-      lastMessage: messageText,
-      timeAgo: 'Just now',
-      isVerified: true,
-      followersCount: '128k',
-      messages: [
-        ChatMessage(
-          id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
-          text: messageText,
-          isMe: true,
-          timestamp: 'Just now',
-          status: 'Sent',
-        ),
-      ],
+    final newMsg = ChatMessage(
+      id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
+      text: messageText,
+      isMe: true,
+      senderHandle: buyerHandle,
+      timestamp: 'Just now',
+      status: 'Sent',
+      imageUrl: widget.imageUrl,
+      imageUrls: widget.imageUrl != null && widget.imageUrl!.isNotEmpty ? [widget.imageUrl!] : null,
     );
 
-    final registeredThread = InboxMessageManager.instance.addOrUpdateThread(thread);
+    final existingThread = InboxMessageManager.instance.getThread(threadId) ??
+        InboxMessageManager.instance.getThreadByUsername(handle);
+
+    final DirectMessageThread threadToRegister;
+    if (existingThread != null) {
+      threadToRegister = existingThread.copyWith(
+        lastMessage: messageText,
+        timeAgo: 'Just now',
+        messages: [...existingThread.messages, newMsg],
+      );
+    } else {
+      threadToRegister = DirectMessageThread(
+        id: threadId,
+        username: handle,
+        avatarUrl: sellerAvatar,
+        senderHandle: buyerHandle,
+        senderAvatar: buyerAvatar,
+        recipientHandle: handle,
+        recipientAvatar: sellerAvatar,
+        lastMessage: messageText,
+        timeAgo: 'Just now',
+        isVerified: true,
+        followersCount: '128k',
+        messages: [newMsg],
+      );
+    }
+
+    final registeredThread = InboxMessageManager.instance.addOrUpdateThread(threadToRegister);
 
     Navigator.pop(ctx);
 
@@ -1964,11 +2123,18 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   void _handleOpenSellerChatDirectly(BuildContext ctx) {
-    final threadId = 'seller_chat_${_resolvedSeller.hashCode.abs()}';
-    final primaryImg = _carouselImages.isNotEmpty ? _carouselImages.first : (widget.imageUrl ?? '');
+    final buyerUser = ProfileSyncService.instance.cachedMyProfile ?? TokenStorage.instance.getUserModel();
+    final rawBuyerHandle = (buyerUser?.username != null && buyerUser!.username.trim().isNotEmpty)
+        ? buyerUser.username.trim()
+        : ProfileSyncService.instance.currentUsername;
+    final buyerHandle = rawBuyerHandle.startsWith('@') ? rawBuyerHandle : '@$rawBuyerHandle';
+    final buyerAvatar = buyerUser?.avatarUrl ?? ProfileSyncService.instance.currentUserAvatar;
+
     final handle = _resolvedSeller.startsWith('@')
         ? _resolvedSeller
         : '@${_resolvedSeller.replaceAll(' ', '_').toLowerCase()}';
+    final threadId = InboxMessageManager.buildThreadId(buyerHandle, handle);
+    final sellerAvatar = InboxMessageManager.resolveUserAvatar(handle, candidateAvatar: widget.sellerAvatar);
 
     var existingThread = InboxMessageManager.instance.getThread(threadId) ??
         InboxMessageManager.instance.getThreadByUsername(handle);
@@ -1978,7 +2144,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           DirectMessageThread(
             id: threadId,
             username: handle,
-            avatarUrl: primaryImg,
+            avatarUrl: sellerAvatar,
+            senderHandle: buyerHandle,
+            senderAvatar: buyerAvatar,
+            recipientHandle: handle,
+            recipientAvatar: sellerAvatar,
             lastMessage: 'Viewing $_resolvedTitle',
             timeAgo: 'Just now',
             isVerified: true,
@@ -1988,6 +2158,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
                 text: 'Hi $_resolvedSeller! I am inquiring about $_resolvedTitle ($_resolvedPrice).',
                 isMe: true,
+                senderHandle: buyerHandle,
                 timestamp: 'Just now',
                 status: 'Sent',
               ),

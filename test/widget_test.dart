@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viloapp/core/theme/app_theme.dart';
 import 'package:viloapp/features/bottom_nav/presentation/widgets/vilo_floating_bottom_bar.dart';
+import 'package:viloapp/features/inbox_activity/data/datasources/inbox_message_manager.dart';
+import 'package:viloapp/features/inbox_activity/domain/entities/inbox_item.dart';
 import 'package:viloapp/features/inbox_activity/data/datasources/thought_story_manager.dart';
 import 'package:viloapp/features/inbox_activity/presentation/pages/inbox_screen.dart';
 import 'package:viloapp/features/auth/data/models/user_model.dart';
@@ -85,8 +87,33 @@ void main() {
     expect(find.text('System notifications'), findsOneWidget);
     expect(find.text('MESSAGES'), findsOneWidget);
 
-    // Tap FashionHub message thread
-    final fashionHubFinder = find.text('FashionHub');
+    // Verify clean empty messages state initially
+    expect(find.text('No messages yet'), findsOneWidget);
+
+    // Register a thread to verify ChatDetailScreen navigation
+    InboxMessageManager.instance.addOrUpdateThread(
+      const DirectMessageThread(
+        id: 'thread_fashion_hub',
+        username: 'FashionHub',
+        avatarUrl: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=150',
+        lastMessage: 'Yes, and do you ship to the US?',
+        timeAgo: 'Just now',
+        followersCount: '120k followers',
+        messages: [
+          ChatMessage(
+            id: 'm1',
+            text: 'Hi! I saw the new collection, do you have the floral dress in size M?',
+            isMe: true,
+            timestamp: 'Today',
+            status: 'Sent',
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Tap @FashionHub message thread
+    final fashionHubFinder = find.text('@FashionHub');
     expect(fashionHubFinder, findsOneWidget);
     await tester.tap(fashionHubFinder);
     await tester.pumpAndSettle();

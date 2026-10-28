@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import '../../../../app/app.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../search_discover/presentation/pages/search_screen.dart';
 import '../../data/datasources/inbox_message_manager.dart';
@@ -6,6 +9,7 @@ import '../../data/datasources/static_inbox_data.dart';
 import '../../data/datasources/thought_story_manager.dart';
 import '../../domain/entities/inbox_item.dart';
 import '../../domain/entities/shared_thought_story.dart';
+import '../../../profile/presentation/screens/public_profile_screen.dart';
 import '../widgets/animated_mini_music_wave.dart';
 import 'chat_detail_screen.dart';
 import 'share_thought_screen.dart';
@@ -18,10 +22,44 @@ class InboxScreen extends StatefulWidget {
   State<InboxScreen> createState() => _InboxScreenState();
 }
 
-class _InboxScreenState extends State<InboxScreen> {
+class _InboxScreenState extends State<InboxScreen> with RouteAware {
+  Timer? _remoteSyncTimer;
+  bool _routeSubscribed = false;
+
   @override
   void initState() {
     super.initState();
+    _loadMessages();
+    _remoteSyncTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      InboxMessageManager.instance.loadForCurrentUser().catchError((_) {});
+    });
+  }
+
+  @override
+  void dispose() {
+    if (_routeSubscribed) {
+      routeObserver.unsubscribe(this);
+    }
+    _remoteSyncTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_routeSubscribed) {
+      final route = ModalRoute.of(context);
+      if (route != null) {
+        routeObserver.subscribe(this, route);
+        _routeSubscribed = true;
+      }
+    }
+  }
+
+  @override
+  void didPopNext() {
+    // A profile or chat route was closed. Reload immediately so an order
+    // created there is visible without leaving and reopening Inbox.
     _loadMessages();
   }
 
@@ -107,10 +145,14 @@ class _InboxScreenState extends State<InboxScreen> {
           const SizedBox(width: 6),
         ],
       ),
-      body: ListView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.only(bottom: 110),
-        children: [
+      body: RefreshIndicator(
+        color: Colors.white,
+        backgroundColor: const Color(0xFF1E1E22),
+        onRefresh: _loadMessages,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          padding: const EdgeInsets.only(bottom: 110),
+          children: [
           // 1. Stories / Memories Horizontal Row
           SizedBox(
             height: 124,
@@ -156,6 +198,33 @@ class _InboxScreenState extends State<InboxScreen> {
           ValueListenableBuilder<List<DirectMessageThread>>(
             valueListenable: InboxMessageManager.instance.threadsNotifier,
             builder: (context, threads, _) {
+              if (threads.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 36, horizontal: 24),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.chat_bubble_outline_rounded,
+                          size: 38,
+                          color: Color(0xFF4A4A52),
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          'No messages yet',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF8E8E93),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -165,7 +234,8 @@ class _InboxScreenState extends State<InboxScreen> {
               );
             },
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -509,18 +579,34 @@ class _InboxScreenState extends State<InboxScreen> {
           child: Row(
             children: [
               // Avatar
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    width: 1.0,
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  final cleanHandle = thread.username.replaceAll('@', '').trim();
+                  if (cleanHandle.isEmpty) return;
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => PublicProfileScreen(
+                        username: thread.username,
+                        displayName: thread.username,
+                        avatarUrl: thread.avatarUrl,
+                      ),
+                    ),
+                  );
+                },
+                child: Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      width: 1.0,
+                    ),
                   ),
-                ),
-                child: ClipOval(
-                  child: _buildAvatarImage(thread.avatarUrl),
+                  child: ClipOval(
+                    child: _buildAvatarImage(thread.avatarUrl),
+                  ),
                 ),
               ),
               const SizedBox(width: 14),

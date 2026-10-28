@@ -11,6 +11,8 @@ import '../../../feed/data/models/video_feed_model.dart';
 import '../../../feed/presentation/pages/video_feed_page.dart';
 import '../../data/datasources/profile_remote_data_source.dart';
 import '../../data/datasources/profile_sync_service.dart';
+import '../../../shop/services/shop_service.dart';
+import '../../../shop/models/product.dart';
 import '../mock/profile_mock_data.dart';
 import '../pages/edit_profile_screen.dart';
 import '../pages/followers_following_screen.dart';
@@ -36,6 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   List<VideoFeedModel> _myVideos = [];
   List<VideoFeedModel> _savedVideos = [];
   List<VideoFeedModel> _likedVideos = [];
+  List<Product> _myProducts = [];
   final Set<int> _loadingCategories = <int>{};
 
   @override
@@ -68,6 +71,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     ProfileSyncService.instance.soundDeletedEvents.addListener(_onSoundDeleted);
     ProfileSyncService.instance.interactionEvents.addListener(_onInteractionEvent);
     ProfileSyncService.instance.profileUpdatedEvents.addListener(_onProfileUpdated);
+    ProfileSyncService.instance.productUploadedEvents.addListener(_onProductUploaded);
+    ShopService.instance.publishedProductNotifier.addListener(_onProductUploaded);
 
     // Instant zero-latency seed from cache if available
     final cached = (_user != null && _user!.id > 0)
@@ -87,6 +92,27 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (updated != null && mounted) {
       setState(() => _user = updated);
     }
+  }
+
+  void _onProductUploaded() {
+    final product = ProfileSyncService.instance.productUploadedEvents.value ??
+        ShopService.instance.publishedProductNotifier.value;
+    if (!mounted || product == null) return;
+
+    final isMine = ProfileSyncService.instance.isCurrentUser(
+          username: product.seller,
+          id: product.sellerId,
+        ) ||
+        (_user?.id.toString() == product.sellerId) ||
+        (_user?.username.isNotEmpty == true &&
+            product.seller?.replaceAll('@', '').toLowerCase() ==
+                _user!.username.replaceAll('@', '').toLowerCase());
+    if (!isMine) return;
+
+    setState(() {
+      _myProducts.removeWhere((item) => item.id == product.id);
+      _myProducts.insert(0, product);
+    });
   }
 
   void _onFollowEvent() {
@@ -253,6 +279,18 @@ void _onVideoUploaded() {
       debugPrint('[ProfileScreen] getMyProfile notice: $e');
     }
 
+    // Load the seller's real products for the Shop tab. Do not use the global
+    // catalog here because it contains products from other accounts.
+    if (_user != null && _user!.id > 0) {
+      try {
+        final products = await ShopService.instance
+            .getProductsForSeller(_user!.id.toString());
+        if (mounted) setState(() => _myProducts = products);
+      } catch (e) {
+        debugPrint('[ProfileScreen] get seller products notice: $e');
+      }
+    }
+
     // 1. Load user's uploaded sounds
     try {
       final sounds = await FeedRemoteDataSource.instance.getMySounds();
@@ -356,6 +394,13 @@ void _onVideoUploaded() {
             forceRefresh: true,
           );
           if (mounted) setState(() => _myVideos = List.from(videos));
+          break;
+        case 2:
+          if (_user != null && _user!.id > 0) {
+            final products = await ShopService.instance
+                .getProductsForSeller(_user!.id.toString());
+            if (mounted) setState(() => _myProducts = products);
+          }
           break;
         case 3:
           final saved = await FeedRemoteDataSource.instance.getSavedVideos();
@@ -545,6 +590,8 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
     ProfileSyncService.instance.soundDeletedEvents.removeListener(_onSoundDeleted);
     ProfileSyncService.instance.interactionEvents.removeListener(_onInteractionEvent);
     ProfileSyncService.instance.profileUpdatedEvents.removeListener(_onProfileUpdated);
+    ProfileSyncService.instance.productUploadedEvents.removeListener(_onProductUploaded);
+    ShopService.instance.publishedProductNotifier.removeListener(_onProductUploaded);
     super.dispose();
   }
 
@@ -934,7 +981,16 @@ void _confirmDeleteProfileVideo(VideoFeedModel video) async {
                       _confirmDeleteProfileVideo(video),
                 ),
               ), // Grid / Posted Videos (Index 1)
-              _buildCategoryPage(2, buildProfileTabSlivers(2)), // Shop
+              _buildCategoryPage(
+                2,
+                buildProfileTabSlivers(
+                  2,
+                  userProducts: _myProducts,
+                  username: _user?.username,
+                  userAvatar: _user?.avatarUrl ?? ProfileSyncService.instance.currentUserAvatar,
+                  isCurrentUser: true,
+                ),
+              ), // Shop
               _buildCategoryPage(
                 3,
                 buildProfileTabSlivers(

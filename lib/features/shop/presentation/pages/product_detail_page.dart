@@ -13,8 +13,13 @@ class ProductDetailPage extends StatelessWidget {
   final String? price;
   final String? description;
   final String? seller;
+  final String? sellerAvatar;
+  final String? sellerId;
   final double? rating;
   final int? soldCount;
+  final int? stock;
+  final String? category;
+  final double? originalPrice;
 
   const ProductDetailPage({
     super.key,
@@ -25,8 +30,13 @@ class ProductDetailPage extends StatelessWidget {
     this.price,
     this.description,
     this.seller,
+    this.sellerAvatar,
+    this.sellerId,
     this.rating,
     this.soldCount,
+    this.stock,
+    this.category,
+    this.originalPrice,
   });
 
   @override
@@ -46,9 +56,15 @@ class ProductDetailPage extends StatelessWidget {
       imageUrl: imageUrl ?? pEntity?.imageUrl ?? (pModel?.images.isNotEmpty == true ? pModel!.images.first : null),
       title: title ?? pEntity?.name ?? pModel?.title,
       price: price ?? pEntity?.formattedPrice ?? pModel?.formattedPrice,
+      description: description ?? pEntity?.description ?? pModel?.description,
       seller: seller ?? pEntity?.seller ?? pModel?.sellerName,
+      sellerAvatar: sellerAvatar ?? pEntity?.sellerAvatar ?? pModel?.sellerAvatar,
+      sellerId: sellerId ?? pEntity?.sellerId ?? pModel?.sellerId?.toString(),
       rating: rating ?? pEntity?.rating ?? pModel?.rating,
       soldCount: soldCount ?? pEntity?.soldCount ?? pModel?.salesCount,
+      stock: stock ?? pEntity?.stock ?? pModel?.stock,
+      category: category ?? pEntity?.category ?? pModel?.category?.name,
+      originalPrice: originalPrice ?? pEntity?.originalPrice ?? pModel?.originalPrice,
     );
   }
 }

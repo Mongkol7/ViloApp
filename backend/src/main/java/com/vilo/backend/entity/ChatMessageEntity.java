@@ -29,8 +29,14 @@ public class ChatMessageEntity {
     @Column(name = "product_title", length = 255)
     private String productTitle;
 
+    @Column(name = "order_reference", length = 100)
+    private String orderReference;
+
     @Column(name = "product_price", length = 50)
     private String productPrice;
+
+    @Column(name = "image_url", columnDefinition = "TEXT")
+    private String imageUrl;
 
     @Column(name = "is_me", nullable = false)
     private Boolean isMe = true;
@@ -42,6 +48,10 @@ public class ChatMessageEntity {
     public ChatMessageEntity() {}
 
     public ChatMessageEntity(Long id, User user, String threadId, String recipientHandle, String messageText, String productTitle, String productPrice, Boolean isMe, Instant createdAt) {
+        this(id, user, threadId, recipientHandle, messageText, productTitle, productPrice, null, isMe, createdAt);
+    }
+
+    public ChatMessageEntity(Long id, User user, String threadId, String recipientHandle, String messageText, String productTitle, String productPrice, String imageUrl, Boolean isMe, Instant createdAt) {
         this.id = id;
         this.user = user;
         this.threadId = threadId;
@@ -49,6 +59,7 @@ public class ChatMessageEntity {
         this.messageText = messageText;
         this.productTitle = productTitle;
         this.productPrice = productPrice;
+        this.imageUrl = imageUrl;
         this.isMe = isMe;
         this.createdAt = createdAt;
     }
@@ -101,12 +112,28 @@ public class ChatMessageEntity {
         this.productTitle = productTitle;
     }
 
+    public String getOrderReference() {
+        return orderReference;
+    }
+
+    public void setOrderReference(String orderReference) {
+        this.orderReference = orderReference;
+    }
+
     public String getProductPrice() {
         return productPrice;
     }
 
     public void setProductPrice(String productPrice) {
         this.productPrice = productPrice;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
 
     public Boolean getIsMe() {

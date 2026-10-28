@@ -102,6 +102,11 @@ public class OrderService {
 
         Order savedOrder = orderRepository.save(order);
 
+        // The Flutter order flow already persists the buyer's exact inquiry in
+        // the canonical chat thread. Do not create a second server-generated
+        // message here: that made the seller see a different/duplicate order
+        // message from the one shown to the buyer.
+
         // 5. Clear user cart
         cartItemRepository.deleteByUser(user);
 

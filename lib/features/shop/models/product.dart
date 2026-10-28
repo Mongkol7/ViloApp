@@ -1,3 +1,7 @@
+import 'package:flutter/foundation.dart';
+import '../../../core/network/api_client.dart';
+import '../../auth/data/datasources/token_storage.dart';
+
 class Product {
   final String id;
   final String name;
@@ -10,6 +14,8 @@ class Product {
   final int stock;
   final String? badge;
   final String? seller;
+  final String? sellerAvatar;
+  final String? sellerId;
   final String description;
   final String imageUrl;
 
@@ -22,9 +28,11 @@ class Product {
     this.originalPrice,
     this.rating = 4.8,
     this.soldCount = 0,
-    this.stock = 0,
+    this.stock = 10,
     this.badge,
     this.seller,
+    this.sellerAvatar,
+    this.sellerId,
     required this.description,
     required this.imageUrl,
   });
@@ -67,11 +75,21 @@ class Product {
 
     // Seller mapping
     String? sellerName;
+    String? sellerAvatar;
+    String? sellerId;
     if (json['seller'] is Map) {
       final sellerMap = json['seller'] as Map<String, dynamic>;
-      sellerName = (sellerMap['displayName'] ?? sellerMap['username']) as String?;
+      sellerName = (sellerMap['username'] ?? sellerMap['displayName']) as String?;
+      sellerAvatar = sellerMap['avatarUrl'] as String?;
+      sellerId = sellerMap['id']?.toString();
     } else if (json['seller'] is String) {
       sellerName = json['seller'] as String;
+    }
+    if (sellerAvatar == null && json['sellerAvatar'] != null) {
+      sellerAvatar = json['sellerAvatar'] as String?;
+    }
+    if (sellerId == null && json['sellerId'] != null) {
+      sellerId = json['sellerId']?.toString();
     }
 
     // Image mapping
@@ -102,9 +120,11 @@ class Product {
       soldCount: (json['soldCount'] as num?)?.toInt() ??
           (json['salesCount'] as num?)?.toInt() ??
           0,
-      stock: (json['stock'] as num?)?.toInt() ?? 0,
+      stock: json['stock'] != null ? (json['stock'] as num).toInt() : 10,
       badge: badgeText,
       seller: sellerName,
+      sellerAvatar: sellerAvatar,
+      sellerId: sellerId,
       description: json['description'] as String? ?? '',
       imageUrl: resolvedImage,
     );
@@ -123,6 +143,8 @@ class Product {
       'stock': stock,
       'badge': badge,
       'seller': seller,
+      'sellerAvatar': sellerAvatar,
+      'sellerId': sellerId,
       'description': description,
       'imageUrl': imageUrl,
     };
@@ -140,6 +162,8 @@ class Product {
     int? stock,
     String? badge,
     String? seller,
+    String? sellerAvatar,
+    String? sellerId,
     String? description,
     String? imageUrl,
   }) {
@@ -155,6 +179,8 @@ class Product {
       stock: stock ?? this.stock,
       badge: badge ?? this.badge,
       seller: seller ?? this.seller,
+      sellerAvatar: sellerAvatar ?? this.sellerAvatar,
+      sellerId: sellerId ?? this.sellerId,
       description: description ?? this.description,
       imageUrl: imageUrl ?? this.imageUrl,
     );
@@ -170,6 +196,400 @@ class Product {
 
   /// Dynamic catalog of products added/listed by creators & merchants
   static final List<Product> userAddedProducts = [];
+
+  static final ValueNotifier<int> stockUpdateNotifier = ValueNotifier<int>(0);
+  static final Map<String, int> _stockOverrides = {};
+  static final Map<String, int> _soldOverrides = {};
+  static final Map<String, Map<String, dynamic>> _productDetailsOverrides = {};
+
+  static Map<String, dynamic>? getProductDetailsOverride(String productId, {String? productName}) {
+    final cleanId = productId.trim();
+    if (_productDetailsOverrides.containsKey(cleanId)) {
+      return _productDetailsOverrides[cleanId];
+    }
+    if (productName != null && productName.trim().isNotEmpty) {
+      final nameKey = productName.trim().toLowerCase();
+      if (_productDetailsOverrides.containsKey(nameKey)) {
+        return _productDetailsOverrides[nameKey];
+      }
+    }
+    return null;
+  }
+
+  static void updateProductDetails(
+    String productId, {
+    String? name,
+    double? price,
+    double? originalPrice,
+    int? stock,
+    String? description,
+    String? category,
+  }) {
+    final cleanId = productId.trim();
+    final details = Map<String, dynamic>.from(_productDetailsOverrides[cleanId] ?? {});
+    if (name != null) details['name'] = name;
+    if (price != null) details['price'] = price;
+    if (originalPrice != null) details['originalPrice'] = originalPrice;
+    if (stock != null) details['stock'] = stock;
+    if (description != null) details['description'] = description;
+    if (category != null) details['category'] = category;
+
+    _productDetailsOverrides[cleanId] = details;
+    if (name != null && name.trim().isNotEmpty) {
+      _productDetailsOverrides[name.trim().toLowerCase()] = details;
+    }
+
+    if (stock != null) {
+      _stockOverrides[cleanId] = stock;
+      if (name != null && name.trim().isNotEmpty) {
+        _stockOverrides[name.trim().toLowerCase()] = stock;
+      }
+    }
+
+    for (final p in [
+      ...userAddedProducts,
+      ...creatorProducts,
+      ...screenshotFeedProducts,
+      ...screenshotTopSellers,
+    ]) {
+      final isIdMatch = p.id == cleanId ||
+          p.id.hashCode.abs().toString() == cleanId ||
+          p.id.hashCode.toString() == cleanId;
+      final isNameMatch = name != null &&
+          p.name.toLowerCase().trim() == name.toLowerCase().trim();
+      if (isIdMatch || isNameMatch) {
+        _productDetailsOverrides[p.id] = details;
+        _productDetailsOverrides[p.name.toLowerCase().trim()] = details;
+        _productDetailsOverrides[p.id.hashCode.abs().toString()] = details;
+        if (stock != null) {
+          _stockOverrides[p.id] = stock;
+          _stockOverrides[p.name.toLowerCase().trim()] = stock;
+          _stockOverrides[p.id.hashCode.abs().toString()] = stock;
+          _stockOverrides[p.id.hashCode.toString()] = stock;
+        }
+      }
+    }
+
+    for (int i = 0; i < userAddedProducts.length; i++) {
+      final p = userAddedProducts[i];
+      final isIdMatch = p.id == cleanId || p.id.hashCode.abs().toString() == cleanId;
+      final isNameMatch = name != null && p.name.toLowerCase().trim() == name.toLowerCase().trim();
+      if (isIdMatch || isNameMatch) {
+        userAddedProducts[i] = userAddedProducts[i].copyWith(
+          name: name ?? p.name,
+          price: price ?? p.price,
+          originalPrice: originalPrice ?? p.originalPrice,
+          stock: stock ?? p.stock,
+          description: description ?? p.description,
+          category: category ?? p.category,
+        );
+      }
+    }
+    stockUpdateNotifier.value++;
+  }
+
+  static int getEffectiveSoldCount(String productId, int initialSold, {String? productName}) {
+    final cleanId = productId.trim();
+    if (_soldOverrides.containsKey(cleanId)) {
+      return _soldOverrides[cleanId]!;
+    }
+
+    if (productName != null && productName.trim().isNotEmpty) {
+      final nameKey = productName.trim().toLowerCase();
+      if (_soldOverrides.containsKey(nameKey)) {
+        return _soldOverrides[nameKey]!;
+      }
+    }
+
+    for (final p in [
+      ...userAddedProducts,
+      ...creatorProducts,
+      ...screenshotFeedProducts,
+      ...screenshotTopSellers,
+    ]) {
+      final isIdMatch = p.id == cleanId ||
+          p.id.hashCode.abs().toString() == cleanId ||
+          p.id.hashCode.toString() == cleanId;
+      final isNameMatch = productName != null &&
+          p.name.toLowerCase().trim() == productName.toLowerCase().trim();
+
+      if (isIdMatch || isNameMatch) {
+        if (_soldOverrides.containsKey(p.id)) return _soldOverrides[p.id]!;
+        if (_soldOverrides.containsKey(p.name.toLowerCase().trim())) {
+          return _soldOverrides[p.name.toLowerCase().trim()]!;
+        }
+        final hashStr = p.id.hashCode.abs().toString();
+        if (_soldOverrides.containsKey(hashStr)) return _soldOverrides[hashStr]!;
+        return p.soldCount;
+      }
+    }
+
+    for (final p in userAddedProducts) {
+      if (p.id == cleanId || p.id.hashCode.abs().toString() == cleanId) {
+        return p.soldCount;
+      }
+    }
+    return initialSold;
+  }
+
+  static bool incrementSoldCount(String productId, int quantity, {int initialSold = 0, String? productName}) {
+    if (quantity <= 0) return false;
+    final cleanId = productId.trim();
+    final current = getEffectiveSoldCount(cleanId, initialSold, productName: productName);
+    final updated = current + quantity;
+    _soldOverrides[cleanId] = updated;
+
+    if (productName != null && productName.trim().isNotEmpty) {
+      _soldOverrides[productName.trim().toLowerCase()] = updated;
+    }
+
+    for (final p in [
+      ...userAddedProducts,
+      ...creatorProducts,
+      ...screenshotFeedProducts,
+      ...screenshotTopSellers,
+    ]) {
+      final isIdMatch = p.id == cleanId ||
+          p.id.hashCode.abs().toString() == cleanId ||
+          p.id.hashCode.toString() == cleanId;
+      final isNameMatch = productName != null &&
+          p.name.toLowerCase().trim() == productName.toLowerCase().trim();
+
+      if (isIdMatch || isNameMatch) {
+        _soldOverrides[p.id] = updated;
+        _soldOverrides[p.name.toLowerCase().trim()] = updated;
+        _soldOverrides[p.id.hashCode.abs().toString()] = updated;
+        _soldOverrides[p.id.hashCode.toString()] = updated;
+      }
+    }
+
+    for (int i = 0; i < userAddedProducts.length; i++) {
+      final p = userAddedProducts[i];
+      final isIdMatch = p.id == cleanId || p.id.hashCode.abs().toString() == cleanId;
+      final isNameMatch = productName != null &&
+          p.name.toLowerCase().trim() == productName.toLowerCase().trim();
+      if (isIdMatch || isNameMatch) {
+        userAddedProducts[i] = userAddedProducts[i].copyWith(soldCount: updated);
+      }
+    }
+    stockUpdateNotifier.value++;
+    return true;
+  }
+
+  static bool deductSoldCount(String productId, int quantity, {int initialSold = 0, String? productName}) {
+    if (quantity <= 0) return false;
+    final cleanId = productId.trim();
+    final current = getEffectiveSoldCount(cleanId, initialSold, productName: productName);
+    final updated = (current - quantity).clamp(0, 999999);
+    _soldOverrides[cleanId] = updated;
+
+    if (productName != null && productName.trim().isNotEmpty) {
+      _soldOverrides[productName.trim().toLowerCase()] = updated;
+    }
+
+    for (final p in [
+      ...userAddedProducts,
+      ...creatorProducts,
+      ...screenshotFeedProducts,
+      ...screenshotTopSellers,
+    ]) {
+      final isIdMatch = p.id == cleanId ||
+          p.id.hashCode.abs().toString() == cleanId ||
+          p.id.hashCode.toString() == cleanId;
+      final isNameMatch = productName != null &&
+          p.name.toLowerCase().trim() == productName.toLowerCase().trim();
+
+      if (isIdMatch || isNameMatch) {
+        _soldOverrides[p.id] = updated;
+        _soldOverrides[p.name.toLowerCase().trim()] = updated;
+        _soldOverrides[p.id.hashCode.abs().toString()] = updated;
+        _soldOverrides[p.id.hashCode.toString()] = updated;
+      }
+    }
+
+    for (int i = 0; i < userAddedProducts.length; i++) {
+      final p = userAddedProducts[i];
+      final isIdMatch = p.id == cleanId || p.id.hashCode.abs().toString() == cleanId;
+      final isNameMatch = productName != null &&
+          p.name.toLowerCase().trim() == productName.toLowerCase().trim();
+      if (isIdMatch || isNameMatch) {
+        userAddedProducts[i] = userAddedProducts[i].copyWith(soldCount: updated);
+      }
+    }
+    stockUpdateNotifier.value++;
+    return true;
+  }
+
+  static int getEffectiveStock(String productId, int initialStock, {String? productName}) {
+    final cleanId = productId.trim();
+    if (_stockOverrides.containsKey(cleanId)) {
+      return _stockOverrides[cleanId]!;
+    }
+
+    if (productName != null && productName.trim().isNotEmpty) {
+      final nameKey = productName.trim().toLowerCase();
+      if (_stockOverrides.containsKey(nameKey)) {
+        return _stockOverrides[nameKey]!;
+      }
+    }
+
+    // Match across user-added and preset products by ID, numeric hash, or title
+    for (final p in [
+      ...userAddedProducts,
+      ...creatorProducts,
+      ...screenshotFeedProducts,
+      ...screenshotTopSellers,
+    ]) {
+      final isIdMatch = p.id == cleanId ||
+          p.id.hashCode.abs().toString() == cleanId ||
+          p.id.hashCode.toString() == cleanId;
+      final isNameMatch = productName != null &&
+          p.name.toLowerCase().trim() == productName.toLowerCase().trim();
+
+      if (isIdMatch || isNameMatch) {
+        if (_stockOverrides.containsKey(p.id)) return _stockOverrides[p.id]!;
+        if (_stockOverrides.containsKey(p.name.toLowerCase().trim())) {
+          return _stockOverrides[p.name.toLowerCase().trim()]!;
+        }
+        final hashStr = p.id.hashCode.abs().toString();
+        if (_stockOverrides.containsKey(hashStr)) return _stockOverrides[hashStr]!;
+      }
+    }
+
+    for (final p in userAddedProducts) {
+      if (p.id == cleanId || p.id.hashCode.abs().toString() == cleanId) {
+        return p.stock;
+      }
+    }
+    return initialStock;
+  }
+
+  static bool deductStock(String productId, int quantity, {int initialStock = 10, String? productName}) {
+    if (quantity <= 0) return false;
+    final cleanId = productId.trim();
+    final current = getEffectiveStock(cleanId, initialStock, productName: productName);
+    final updated = (current - quantity).clamp(0, 999999);
+    _stockOverrides[cleanId] = updated;
+
+    if (productName != null && productName.trim().isNotEmpty) {
+      _stockOverrides[productName.trim().toLowerCase()] = updated;
+    }
+
+    // Propagate override to all representations (cleanId, hash string, product title, item id)
+    for (final p in [
+      ...userAddedProducts,
+      ...creatorProducts,
+      ...screenshotFeedProducts,
+      ...screenshotTopSellers,
+    ]) {
+      final isIdMatch = p.id == cleanId ||
+          p.id.hashCode.abs().toString() == cleanId ||
+          p.id.hashCode.toString() == cleanId;
+      final isNameMatch = productName != null &&
+          p.name.toLowerCase().trim() == productName.toLowerCase().trim();
+
+      if (isIdMatch || isNameMatch) {
+        _stockOverrides[p.id] = updated;
+        _stockOverrides[p.name.toLowerCase().trim()] = updated;
+        _stockOverrides[p.id.hashCode.abs().toString()] = updated;
+        _stockOverrides[p.id.hashCode.toString()] = updated;
+      }
+    }
+
+    for (int i = 0; i < userAddedProducts.length; i++) {
+      final p = userAddedProducts[i];
+      final isIdMatch = p.id == cleanId || p.id.hashCode.abs().toString() == cleanId;
+      final isNameMatch = productName != null &&
+          p.name.toLowerCase().trim() == productName.toLowerCase().trim();
+      if (isIdMatch || isNameMatch) {
+        userAddedProducts[i] = userAddedProducts[i].copyWith(stock: updated);
+      }
+    }
+    stockUpdateNotifier.value++;
+
+    // Best-effort remote stock deduction to backend database
+    final numericId = int.tryParse(cleanId);
+    if (numericId != null) {
+      _syncRemoteStockDeduction(numericId, quantity);
+    }
+
+    return true;
+  }
+
+  static bool restoreStock(String productId, int quantity, {int initialStock = 10, String? productName}) {
+    if (quantity <= 0) return false;
+    final cleanId = productId.trim();
+    final current = getEffectiveStock(cleanId, initialStock, productName: productName);
+    final updated = (current + quantity).clamp(0, 999999);
+    _stockOverrides[cleanId] = updated;
+
+    if (productName != null && productName.trim().isNotEmpty) {
+      _stockOverrides[productName.trim().toLowerCase()] = updated;
+    }
+
+    for (final p in [
+      ...userAddedProducts,
+      ...creatorProducts,
+      ...screenshotFeedProducts,
+      ...screenshotTopSellers,
+    ]) {
+      final isIdMatch = p.id == cleanId ||
+          p.id.hashCode.abs().toString() == cleanId ||
+          p.id.hashCode.toString() == cleanId;
+      final isNameMatch = productName != null &&
+          p.name.toLowerCase().trim() == productName.toLowerCase().trim();
+
+      if (isIdMatch || isNameMatch) {
+        _stockOverrides[p.id] = updated;
+        _stockOverrides[p.name.toLowerCase().trim()] = updated;
+        _stockOverrides[p.id.hashCode.abs().toString()] = updated;
+        _stockOverrides[p.id.hashCode.toString()] = updated;
+      }
+    }
+
+    for (int i = 0; i < userAddedProducts.length; i++) {
+      final p = userAddedProducts[i];
+      final isIdMatch = p.id == cleanId || p.id.hashCode.abs().toString() == cleanId;
+      final isNameMatch = productName != null &&
+          p.name.toLowerCase().trim() == productName.toLowerCase().trim();
+      if (isIdMatch || isNameMatch) {
+        userAddedProducts[i] = userAddedProducts[i].copyWith(stock: updated);
+      }
+    }
+
+    if (_productDetailsOverrides.containsKey(cleanId)) {
+      _productDetailsOverrides[cleanId]!['stock'] = updated;
+    }
+    if (productName != null && productName.trim().isNotEmpty) {
+      final nameKey = productName.trim().toLowerCase();
+      if (_productDetailsOverrides.containsKey(nameKey)) {
+        _productDetailsOverrides[nameKey]!['stock'] = updated;
+      }
+    }
+
+    stockUpdateNotifier.value++;
+    return true;
+  }
+
+  static void _syncRemoteStockDeduction(int productId, int quantity) async {
+    try {
+      if (!await TokenStorage.instance.hasValidToken()) return;
+      await ApiClient.instance.post(
+        '/products/$productId/deduct-stock?quantity=$quantity',
+        requireAuth: true,
+      );
+    } catch (e) {
+      debugPrint('[Product] Remote stock deduction deferred: $e');
+    }
+  }
+
+  static void resetStockOverrides() {
+    _stockOverrides.clear();
+    stockUpdateNotifier.value++;
+  }
+
+  bool get isOutOfStock => getEffectiveStock(id, stock) <= 0;
+  int get effectiveStock => getEffectiveStock(id, stock);
 
   static void addCreatorProduct(Product product) {
     userAddedProducts.removeWhere((p) => p.id == product.id);

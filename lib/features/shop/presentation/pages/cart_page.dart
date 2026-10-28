@@ -3,9 +3,13 @@ import 'package:flutter/services.dart';
 import '../../data/models/cart_item_model.dart';
 import '../controllers/cart_controller.dart';
 import 'order_history_page.dart';
+import '../../data/datasources/shop_remote_data_source.dart';
 import '../../../inbox_activity/data/datasources/inbox_message_manager.dart';
 import '../../../inbox_activity/domain/entities/inbox_item.dart';
 import '../../../inbox_activity/presentation/pages/chat_detail_screen.dart';
+import '../../models/product.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
+import '../../../auth/data/datasources/token_storage.dart';
 
 class CartPage extends StatelessWidget {
   const CartPage({super.key});
@@ -18,7 +22,7 @@ class CartPage extends StatelessWidget {
       backgroundColor: Colors.black,
       body: SafeArea(
         child: AnimatedBuilder(
-          animation: CartController.instance,
+          animation: Listenable.merge([CartController.instance, Product.stockUpdateNotifier]),
           builder: (context, _) {
             final cartCtrl = CartController.instance;
             final cart = cartCtrl.cart;
@@ -53,6 +57,32 @@ class CartPage extends StatelessWidget {
                           ),
                         ),
                       ),
+                      ValueListenableBuilder<int>(
+                        valueListenable: ShopRemoteDataSource.instance.pendingOrdersCountNotifier,
+                        builder: (context, pendingCount, _) {
+                          return Badge(
+                            isLabelVisible: pendingCount > 0,
+                            label: Text(
+                              '$pendingCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            backgroundColor: const Color(0xFFEF4444),
+                            offset: const Offset(-2, 2),
+                            child: IconButton(
+                              tooltip: 'My Orders',
+                              icon: const Icon(Icons.receipt_long_outlined, color: Colors.white70, size: 22),
+                              onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const OrderHistoryPage()),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                       if (cart.items.isNotEmpty)
                         IconButton(
                           tooltip: 'Clear Cart',
@@ -85,16 +115,7 @@ class CartPage extends StatelessWidget {
                             );
                           },
                         ),
-                      IconButton(
-                        tooltip: 'Order History',
-                        icon: const Icon(Icons.receipt_long_outlined, color: Colors.white, size: 22),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const OrderHistoryPage()),
-                          );
-                        },
-                      ),
+
                     ],
                   ),
                 ),
@@ -133,9 +154,11 @@ class CartPage extends StatelessWidget {
   Map<String, List<CartItemModel>> _groupItemsBySeller(List<CartItemModel> items) {
     final Map<String, List<CartItemModel>> groups = {};
     for (final item in items) {
-      final seller = item.sellerName?.trim().isNotEmpty == true
-          ? item.sellerName!.trim()
-          : 'TechHorizon Global';
+      final seller = item.chatHandle.isNotEmpty
+          ? item.chatHandle
+          : (item.sellerName?.trim().isNotEmpty == true
+              ? item.sellerName!.trim()
+              : 'TechHorizon Global');
       groups.putIfAbsent(seller, () => []).add(item);
     }
     return groups;
@@ -382,124 +405,182 @@ class CartPage extends StatelessWidget {
   }
 
   Widget _buildCartItemTile(BuildContext context, CartItemModel item, CartController ctrl) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Product Thumbnail
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: _buildThumbnail(item.productImage),
-          ),
-          const SizedBox(width: 14),
+    final effectiveStock = Product.getEffectiveStock(
+      item.productStringId ?? item.productId.toString(),
+      item.stock,
+      productName: item.productTitle,
+    );
+    final isOutOfStock = effectiveStock <= 0;
 
-          // Details
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.productTitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
+    return Opacity(
+      opacity: isOutOfStock ? 0.55 : 1.0,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Product Thumbnail
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: _buildThumbnail(item.productImage),
+            ),
+            const SizedBox(width: 14),
+
+            // Details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.productTitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
+                  const SizedBox(height: 4),
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 2,
+                    children: [
+                      Text(
+                        item.formattedPrice,
+                        style: const TextStyle(
+                          color: _accentBlue,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: isOutOfStock
+                              ? const Color(0xFFEF4444).withValues(alpha: 0.15)
+                              : const Color(0xFF10B981).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: isOutOfStock
+                                ? const Color(0xFFEF4444).withValues(alpha: 0.5)
+                                : const Color(0xFF10B981).withValues(alpha: 0.4),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Text(
+                          isOutOfStock ? '0 in stock' : '$effectiveStock in stock',
+                          style: TextStyle(
+                            color: isOutOfStock ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      if (item.originalPrice != null && item.originalPrice! > item.price)
+                        Text(
+                          '\$${item.originalPrice!.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            color: Colors.white24,
+                            fontSize: 11,
+                            decoration: TextDecoration.lineThrough,
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (item.variant != null && item.variant!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
                     Text(
-                      item.formattedPrice,
-                      style: const TextStyle(
-                        color: _accentBlue,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                      item.variant!,
+                      style: const TextStyle(color: Colors.white38, fontSize: 11),
+                    ),
+                  ],
+                  if (isOutOfStock)
+                    Container(
+                      margin: const EdgeInsets.only(top: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.5)),
+                      ),
+                      child: const Text(
+                        'Out of Stock',
+                        style: TextStyle(
+                          color: Color(0xFFEF4444),
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                    if (item.originalPrice != null && item.originalPrice! > item.price) ...[
-                      const SizedBox(width: 6),
+                ],
+              ),
+            ),
+
+            // Quantity Stepper
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: const Icon(Icons.delete_outline_rounded, color: Colors.white38, size: 18),
+                  onPressed: () => ctrl.removeItem(item.id),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2C2C2E),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      InkWell(
+                        onTap: () {
+                          if (item.quantity > 1) {
+                            ctrl.updateQuantity(item.id, item.quantity - 1);
+                          } else {
+                            ctrl.removeItem(item.id, restoreStock: false);
+                          }
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          child: Icon(Icons.remove, color: Colors.white70, size: 14),
+                        ),
+                      ),
                       Text(
-                        '\$${item.originalPrice!.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          color: Colors.white24,
-                          fontSize: 11,
-                          decoration: TextDecoration.lineThrough,
+                        '${item.quantity}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      InkWell(
+                        onTap: (isOutOfStock || effectiveStock <= 0)
+                            ? null
+                            : () => ctrl.updateQuantity(item.id, item.quantity + 1),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          child: Icon(
+                            Icons.add,
+                            color: (isOutOfStock || effectiveStock <= 0) ? Colors.white24 : Colors.white,
+                            size: 14,
+                          ),
                         ),
                       ),
                     ],
-                  ],
-                ),
-                if (item.variant != null && item.variant!.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    item.variant!,
-                    style: const TextStyle(color: Colors.white38, fontSize: 11),
                   ),
-                ],
+                ),
               ],
             ),
-          ),
-
-          // Quantity Stepper
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              IconButton(
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                icon: const Icon(Icons.delete_outline_rounded, color: Colors.white38, size: 18),
-                onPressed: () => ctrl.removeItem(item.id),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2C2C2E),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white12),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    InkWell(
-                      onTap: () {
-                        if (item.quantity > 1) {
-                          ctrl.updateQuantity(item.id, item.quantity - 1);
-                        } else {
-                          ctrl.removeItem(item.id);
-                        }
-                      },
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        child: Icon(Icons.remove, color: Colors.white70, size: 14),
-                      ),
-                    ),
-                    Text(
-                      '${item.quantity}',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                    ),
-                    InkWell(
-                      onTap: () => ctrl.updateQuantity(item.id, item.quantity + 1),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        child: Icon(Icons.add, color: Colors.white, size: 14),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -582,16 +663,56 @@ class CartPage extends StatelessWidget {
     final cart = ctrl.cart;
     if (cart.items.isEmpty) return;
 
+    final hasOutOfStock = cart.items.any((item) =>
+        Product.getEffectiveStock(
+          item.productStringId ?? item.productId.toString(),
+          item.stock,
+          productName: item.productTitle,
+        ) <= 0);
+    if (hasOutOfStock) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFF1E1E22),
+          content: Text('Some products in your cart are out of stock. Please remove them before proceeding.'),
+        ),
+      );
+      return;
+    }
+
     final sellerGroups = _groupItemsBySeller(cart.items);
     if (sellerGroups.isEmpty) return;
 
+    // Deduct stock & increment sold count in real time
+    for (final item in cart.items) {
+      Product.deductStock(
+        item.productStringId ?? item.productId.toString(),
+        item.quantity,
+        initialStock: item.stock,
+        productName: item.productTitle,
+      );
+      Product.incrementSoldCount(
+        item.productStringId ?? item.productId.toString(),
+        item.quantity,
+        productName: item.productTitle,
+      );
+    }
+
+    final buyerUser = ProfileSyncService.instance.cachedMyProfile ?? TokenStorage.instance.getUserModel();
+    final rawBuyerHandle = (buyerUser?.username != null && buyerUser!.username.trim().isNotEmpty)
+        ? buyerUser.username.trim()
+        : ProfileSyncService.instance.currentUsername;
+    final buyerHandle = rawBuyerHandle.startsWith('@') ? rawBuyerHandle : '@$rawBuyerHandle';
+    final buyerAvatar = buyerUser?.avatarUrl ?? ProfileSyncService.instance.currentUserAvatar;
+
     // Identify first product added to cart and its merchant
     final firstItem = cart.items.first;
-    final firstSellerName = firstItem.sellerName?.trim().isNotEmpty == true
-        ? firstItem.sellerName!.trim()
-        : 'TechHorizon Global';
+    final firstSellerName = firstItem.chatHandle.isNotEmpty
+        ? firstItem.chatHandle
+        : (firstItem.sellerName?.trim().isNotEmpty == true
+            ? firstItem.sellerName!.trim()
+            : 'TechHorizon Global');
     final firstSellerHandle = firstSellerName.startsWith('@') ? firstSellerName : '@$firstSellerName';
-    final firstSellerThreadId = 'order_chat_${firstSellerName.hashCode.abs()}';
+    final firstSellerThreadId = InboxMessageManager.buildThreadId(buyerHandle, firstSellerHandle);
 
     // 1. Dispatch order inquiries for ALL distinct merchants & register in Inbox
     DirectMessageThread? firstRegisteredThread;
@@ -604,31 +725,65 @@ class CartPage extends StatelessWidget {
       final itemsSummary = items.map((e) => '${e.productTitle} (x${e.quantity})').join('\n- ');
       final msg = 'Hi! I would like to order ${items.length} item(s) (Total: \$${subtotal.toStringAsFixed(2)}) from $handle:\n- $itemsSummary\nAre these ready to ship?';
 
+      final createdOrder = ShopRemoteDataSource.instance.createOrderFromCartItems(
+        sellerName: seller,
+        items: items,
+        customNote: msg,
+      );
+      ShopRemoteDataSource.instance.addOrder(createdOrder);
+
       final itemImages = items
           .map((e) => e.productImage)
           .where((img) => img.trim().isNotEmpty)
           .toList();
 
+      final threadId = InboxMessageManager.buildThreadId(buyerHandle, handle);
+      final sellerAvatar = InboxMessageManager.resolveUserAvatar(
+        handle,
+        candidateAvatar: items.first.sellerAvatar,
+      );
+
       final thread = DirectMessageThread(
-        id: 'order_chat_${seller.hashCode.abs()}',
+        id: threadId,
         username: handle,
-        avatarUrl: _getStoreAvatarUrl(seller),
+        avatarUrl: sellerAvatar,
+        senderHandle: buyerHandle,
+        senderAvatar: buyerAvatar,
+        recipientHandle: handle,
+        recipientAvatar: sellerAvatar,
         lastMessage: msg,
         timeAgo: 'Just now',
         isVerified: true,
         followersCount: '48.2k',
         messages: [
           ChatMessage(
-            id: 'msg_${DateTime.now().millisecondsSinceEpoch}_${seller.hashCode.abs()}',
+            id: 'order_${createdOrder.orderNumber}',
             text: msg,
             isMe: true,
+            senderHandle: buyerHandle,
             timestamp: 'Just now',
             status: 'Sent',
             imageUrl: itemImages.isNotEmpty ? itemImages.first : null,
             imageUrls: itemImages,
+            isOrder: true,
+            orderCreatedAtMs: DateTime.now().millisecondsSinceEpoch,
+            orderStatus: 'Active',
+            orderProductId: items.first.productStringId ?? items.first.productId.toString(),
+            orderProductTitle: items.first.productTitle,
+            orderReference: createdOrder.orderNumber,
+            orderQuantity: items.fold<int>(0, (sum, i) => sum + i.quantity),
+            orderItems: items
+                .map((i) => {
+                      'id': i.productStringId ?? i.productId.toString(),
+                      'title': i.productTitle,
+                      'quantity': i.quantity,
+                    })
+                .toList(),
           ),
         ],
       );
+
+
 
       final registered = InboxMessageManager.instance.addOrUpdateThread(thread);
       if (seller == firstSellerName || entry.key == sellerGroups.entries.first.key) {
@@ -640,7 +795,11 @@ class CartPage extends StatelessWidget {
     final targetThread = InboxMessageManager.instance.getThread(firstSellerThreadId) ??
         InboxMessageManager.instance.getThreadByUsername(firstSellerHandle) ??
         firstRegisteredThread ??
-        InboxMessageManager.instance.threads.first;
+        (InboxMessageManager.instance.threads.isNotEmpty ? InboxMessageManager.instance.threads.first : null);
+
+    if (targetThread == null) {
+      return;
+    }
 
     // 2. SnackBar Notification (Inquiries sent across all merchants, no orders created)
     final count = sellerGroups.length;
@@ -670,7 +829,7 @@ class CartPage extends StatelessWidget {
     );
 
     // 3. Clear all items from cart upon sending inquiries for all products
-    ctrl.clearCart();
+    ctrl.clearCart(restoreStock: false);
 
     // 4. Navigate directly to the first product's chat page
     Navigator.push(
@@ -688,42 +847,114 @@ class CartPage extends StatelessWidget {
     required List<CartItemModel> items,
     String? customNote,
   }) {
+    final hasOutOfStock = items.any((item) =>
+        Product.getEffectiveStock(
+          item.productStringId ?? item.productId.toString(),
+          item.stock,
+          productName: item.productTitle,
+        ) <= 0);
+    if (hasOutOfStock) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFF1E1E22),
+          content: Text('Some products in this order are out of stock. Please remove them before proceeding.'),
+        ),
+      );
+      return;
+    }
+
+    final buyerUser = ProfileSyncService.instance.cachedMyProfile ?? TokenStorage.instance.getUserModel();
+    final rawBuyerHandle = (buyerUser?.username != null && buyerUser!.username.trim().isNotEmpty)
+        ? buyerUser.username.trim()
+        : ProfileSyncService.instance.currentUsername;
+    final buyerHandle = rawBuyerHandle.startsWith('@') ? rawBuyerHandle : '@$rawBuyerHandle';
+    final buyerAvatar = buyerUser?.avatarUrl ?? ProfileSyncService.instance.currentUserAvatar;
+
     final displayHandle = sellerName.startsWith('@') ? sellerName : '@$sellerName';
     final companySubtotal = items.fold<double>(0.0, (s, i) => s + i.subtotal);
     final itemsSummary = items.map((e) => '${e.productTitle} (x${e.quantity})').join('\n- ');
     final defaultNote = 'Hi! I would like to order ${items.length} item(s) (Total: \$${companySubtotal.toStringAsFixed(2)}) from $displayHandle:\n- $itemsSummary\nAre these ready to ship?';
     final messageText = (customNote != null && customNote.trim().isNotEmpty) ? customNote.trim() : defaultNote;
 
+    // Create the local order before the chat message so both sides can refer
+    // to this exact order instead of matching cancellations by product title.
+    final createdOrder = ShopRemoteDataSource.instance.createOrderFromCartItems(
+      sellerName: sellerName,
+      items: items,
+      customNote: messageText,
+    );
+    ShopRemoteDataSource.instance.addOrder(createdOrder);
+
     final itemImages = items
         .map((e) => e.productImage)
         .where((img) => img.trim().isNotEmpty)
         .toList();
 
+    final threadId = InboxMessageManager.buildThreadId(buyerHandle, displayHandle);
+    final sellerAvatar = InboxMessageManager.resolveUserAvatar(
+      displayHandle,
+      candidateAvatar: items.isNotEmpty ? items.first.sellerAvatar : null,
+    );
+
     // 1. Construct and register DirectMessageThread with InboxMessageManager
     final thread = DirectMessageThread(
-      id: 'order_chat_${sellerName.hashCode.abs()}',
+      id: threadId,
       username: displayHandle,
-      avatarUrl: _getStoreAvatarUrl(sellerName),
+      avatarUrl: sellerAvatar,
+      senderHandle: buyerHandle,
+      senderAvatar: buyerAvatar,
+      recipientHandle: displayHandle,
+      recipientAvatar: sellerAvatar,
       lastMessage: messageText,
       timeAgo: 'Just now',
       isVerified: true,
       followersCount: '48.2k',
       messages: [
         ChatMessage(
-          id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
+          id: 'order_${createdOrder.orderNumber}',
           text: messageText,
           isMe: true,
+          senderHandle: buyerHandle,
           timestamp: 'Just now',
           status: 'Sent',
           imageUrl: itemImages.isNotEmpty ? itemImages.first : null,
           imageUrls: itemImages,
+          isOrder: true,
+          orderCreatedAtMs: DateTime.now().millisecondsSinceEpoch,
+          orderStatus: 'Active',
+          orderProductId: items.isNotEmpty ? (items.first.productStringId ?? items.first.productId.toString()) : null,
+          orderProductTitle: items.isNotEmpty ? items.first.productTitle : null,
+          orderReference: createdOrder.orderNumber,
+          orderQuantity: items.fold<int>(0, (sum, i) => sum + i.quantity),
+          orderItems: items
+              .map((i) => {
+                    'id': i.productStringId ?? i.productId.toString(),
+                    'title': i.productTitle,
+                    'quantity': i.quantity,
+                  })
+              .toList(),
         ),
       ],
     );
 
+    // Deduct stock & increment sold count in real time
+    for (final item in items) {
+      Product.deductStock(
+        item.productStringId ?? item.productId.toString(),
+        item.quantity,
+        initialStock: item.stock,
+        productName: item.productTitle,
+      );
+      Product.incrementSoldCount(
+        item.productStringId ?? item.productId.toString(),
+        item.quantity,
+        productName: item.productTitle,
+      );
+    }
+
     final registeredThread = InboxMessageManager.instance.addOrUpdateThread(thread);
 
-    // 2. SnackBar feedback (Inquiry sent, no order created)
+    // 2. SnackBar feedback
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: const Color(0xFF1E1E22),
@@ -749,7 +980,7 @@ class CartPage extends StatelessWidget {
 
     // 3. Clear only the sent merchant's products from cart
     for (final item in items) {
-      ctrl.removeItem(item.id);
+      ctrl.removeItem(item.id, restoreStock: false);
     }
 
     // 4. Navigate to ChatDetailScreen
@@ -759,20 +990,6 @@ class CartPage extends StatelessWidget {
         builder: (_) => ChatDetailScreen(thread: registeredThread),
       ),
     );
-  }
-
-  String _getStoreAvatarUrl(String sellerName) {
-    final clean = sellerName.toLowerCase();
-    if (clean.contains('tech') || clean.contains('horizon')) {
-      return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200';
-    }
-    if (clean.contains('vilo') || clean.contains('lifestyle')) {
-      return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200';
-    }
-    if (clean.contains('aero') || clean.contains('mount')) {
-      return 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200';
-    }
-    return 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200';
   }
 
   void _openOrderInquirySheet(
@@ -785,18 +1002,36 @@ class CartPage extends StatelessWidget {
     HapticFeedback.mediumImpact();
     final cart = ctrl.cart;
     final activeSeller = sellerName ??
+        specificItem?.chatHandle ??
         specificItem?.sellerName ??
-        (cart.items.isNotEmpty ? (cart.items.first.sellerName ?? 'TechHorizon Global') : 'TechHorizon Global');
+        (cart.items.isNotEmpty
+            ? (cart.items.first.chatHandle.isNotEmpty
+                ? cart.items.first.chatHandle
+                : (cart.items.first.sellerName ?? 'TechHorizon Global'))
+            : 'TechHorizon Global');
     final displayHandle = activeSeller.startsWith('@') ? activeSeller : '@$activeSeller';
 
     final orderItems = items ?? (specificItem != null ? [specificItem] : cart.items);
+
+    final hasOutOfStock = orderItems.any((item) =>
+        Product.getEffectiveStock(item.productId.toString(), item.stock) <= 0);
+    if (hasOutOfStock) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFF1E1E22),
+          content: Text('This product is out of stock and cannot be ordered.'),
+        ),
+      );
+      return;
+    }
     final totalAmount = orderItems.fold<double>(0.0, (sum, i) => sum + i.subtotal);
     final formattedTotal = '\$${totalAmount.toStringAsFixed(2)}';
 
+    final itemsSummary = orderItems.map((e) => '${e.productTitle} (x${e.quantity})').join('\n- ');
     final TextEditingController controller = TextEditingController(
       text: specificItem != null
           ? 'Hi! I would like to order ${specificItem.productTitle} (${specificItem.formattedPrice}) from $displayHandle. Is this ready to ship?'
-          : 'Hi! I would like to order ${orderItems.length} item(s) for $formattedTotal from $displayHandle. Are they ready to ship?',
+          : 'Hi! I would like to order ${orderItems.length} item(s) (Total: $formattedTotal) from $displayHandle:\n- $itemsSummary\nAre these ready to ship?',
     );
 
     showModalBottomSheet(

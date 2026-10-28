@@ -8,6 +8,8 @@ import '../pages/qr_code_screen.dart';
 import '../pages/tiktok_studio_screen.dart';
 import '../pages/promote_screen.dart';
 import '../pages/settings_and_privacy_screen.dart';
+import '../../../shop/presentation/pages/order_history_page.dart';
+import '../../../shop/data/datasources/shop_remote_data_source.dart';
 
 class ProfileMenuDrawer extends StatelessWidget {
   const ProfileMenuDrawer({super.key});
@@ -39,6 +41,34 @@ class ProfileMenuDrawer extends StatelessWidget {
                     icon: Icons.account_balance_wallet_outlined,
                     title: 'Balance',
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BalanceScreen())),
+                  ),
+                  ValueListenableBuilder<int>(
+                    valueListenable: ShopRemoteDataSource.instance.pendingOrdersCountNotifier,
+                    builder: (context, pendingCount, _) {
+                      return _buildMenuTile(
+                        context,
+                        icon: Icons.receipt_long_outlined,
+                        title: 'Order history',
+                        trailing: pendingCount > 0
+                            ? Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEF4444),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '$pendingCount pending',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              )
+                            : null,
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const OrderHistoryPage())),
+                      );
+                    },
                   ),
                   _buildDivider(),
                   
@@ -112,6 +142,7 @@ class ProfileMenuDrawer extends StatelessWidget {
     required VoidCallback onTap,
     Color? iconColor,
     Color? titleColor,
+    Widget? trailing,
   }) {
     return ListTile(
       leading: Icon(icon, color: iconColor ?? Colors.white, size: 24),
@@ -123,11 +154,12 @@ class ProfileMenuDrawer extends StatelessWidget {
           fontWeight: FontWeight.w500,
         ),
       ),
-      trailing: const Icon(
-        Icons.chevron_right,
-        color: Colors.grey,
-        size: 20,
-      ),
+      trailing: trailing ??
+          const Icon(
+            Icons.chevron_right,
+            color: Colors.grey,
+            size: 20,
+          ),
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
     );
