@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../feed/data/models/video_model.dart';
+import '../../../../core/network/media_url.dart';
 import '../style/pulse_tokens.dart';
 
 /// A single square thumbnail for the video grid (Videos / Saved / Liked tabs).
@@ -30,14 +30,8 @@ class VideoGridItem extends StatelessWidget {
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) => Container(color: PulseColors.surfaceContainer),
       );
-    } else if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
-      imageWidget = Image.network(
-        cleanUrl,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => Container(color: PulseColors.surfaceContainer),
-      );
     } else if (cleanUrl.isNotEmpty) {
-      final resolved = VideoModel.resolveMediaUrl(cleanUrl);
+      final resolved = resolveBackendMediaUrl(cleanUrl);
       imageWidget = Image.network(
         resolved,
         fit: BoxFit.cover,

@@ -2,6 +2,7 @@ package com.vilo.backend.controller;
 
 import com.vilo.backend.common.ApiResponse;
 import com.vilo.backend.dto.CheckoutRequest;
+import com.vilo.backend.dto.DirectOrderRequest;
 import com.vilo.backend.dto.OrderResponse;
 import com.vilo.backend.entity.User;
 import com.vilo.backend.service.OrderService;
@@ -31,6 +32,15 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.ok("Order placed successfully", order));
     }
 
+    @PostMapping("/direct")
+    public ResponseEntity<ApiResponse<OrderResponse>> createDirectOrder(
+            @AuthenticationPrincipal User currentUser,
+            @Valid @RequestBody DirectOrderRequest request
+    ) {
+        OrderResponse order = orderService.createDirectOrder(currentUser, request);
+        return ResponseEntity.status(201).body(ApiResponse.ok("Order created successfully", order));
+    }
+
     @GetMapping("/history")
     public ResponseEntity<ApiResponse<List<OrderResponse>>> getOrderHistory(
             @AuthenticationPrincipal User currentUser
@@ -46,5 +56,23 @@ public class OrderController {
     ) {
         OrderResponse order = orderService.getOrderById(currentUser, id);
         return ResponseEntity.ok(ApiResponse.ok("Order details retrieved", order));
+    }
+
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<ApiResponse<OrderResponse>> cancelOrder(
+            @AuthenticationPrincipal User currentUser,
+            @PathVariable Long id
+    ) {
+        OrderResponse order = orderService.cancelOrder(currentUser, id);
+        return ResponseEntity.ok(ApiResponse.ok("Order cancelled successfully", order));
+    }
+
+    @PostMapping("/cancel-by-number")
+    public ResponseEntity<ApiResponse<OrderResponse>> cancelOrderByNumber(
+            @AuthenticationPrincipal User currentUser,
+            @RequestParam String orderNumber
+    ) {
+        OrderResponse order = orderService.cancelOrderByNumber(currentUser, orderNumber);
+        return ResponseEntity.ok(ApiResponse.ok("Order cancelled successfully", order));
     }
 }

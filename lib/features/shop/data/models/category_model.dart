@@ -1,3 +1,5 @@
+import '../../../../core/network/media_url.dart';
+
 class CategoryModel {
   final int id;
   final String name;
@@ -18,8 +20,8 @@ class CategoryModel {
       id: (json['id'] as num).toInt(),
       name: json['name'] as String? ?? '',
       slug: json['slug'] as String? ?? '',
-      iconUrl: json['iconUrl'] as String?,
-      imageUrl: json['imageUrl'] as String?,
+      iconUrl: resolveBackendMediaUrl(json['iconUrl'] as String?),
+      imageUrl: resolveBackendMediaUrl(json['imageUrl'] as String?),
     );
   }
 

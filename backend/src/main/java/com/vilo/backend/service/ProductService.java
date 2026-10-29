@@ -112,11 +112,29 @@ public class ProductService {
 
     @Transactional
     public ProductResponse deductStock(Long id, int quantity) {
+        if (quantity <= 0) {
+            throw new BadRequestException("Quantity must be greater than zero");
+        }
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + id));
-        int updated = Math.max(0, product.getStock() - quantity);
-        product.setStock(updated);
+        if (product.getStock() < quantity) {
+            throw new BadRequestException("Insufficient stock for product: " + product.getTitle() +
+                    " (Requested: " + quantity + ", Available: " + product.getStock() + ")");
+        }
+        product.setStock(product.getStock() - quantity);
         product.setSalesCount(product.getSalesCount() + quantity);
+        return ProductResponse.fromEntity(productRepository.save(product));
+    }
+
+    @Transactional
+    public ProductResponse restoreStock(Long id, int quantity) {
+        if (quantity <= 0) {
+            throw new BadRequestException("Quantity must be greater than zero");
+        }
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + id));
+        product.setStock(product.getStock() + quantity);
+        product.setSalesCount(Math.max(0, product.getSalesCount() - quantity));
         return ProductResponse.fromEntity(productRepository.save(product));
     }
 }

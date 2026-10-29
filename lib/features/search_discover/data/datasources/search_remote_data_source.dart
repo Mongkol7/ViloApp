@@ -347,7 +347,7 @@ class SearchRemoteDataSource {
           saveCount: (v['saveCount'] is num) ? (v['saveCount'] as num).toInt() : ((v['savesCount'] is num) ? (v['savesCount'] as num).toInt() : 0),
           musicTitle: v['musicTitle']?.toString() ?? 'Original Sound',
           creatorId: (v['creatorId'] is num) ? (v['creatorId'] as num).toInt() : null,
-          avatarUrl: v['avatarUrl']?.toString(),
+          avatarUrl: VideoModel.resolveMediaUrl(v['avatarUrl']?.toString()),
           tags: tagsList,
         ));
       }

@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+
+import '../../../../core/network/media_url.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../../feed/presentation/pages/sound_detail_page.dart';
@@ -723,7 +725,7 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     if (cleanUrl.isEmpty) return placeholder;
     return Image.network(
-      cleanUrl,
+      resolveBackendMediaUrl(cleanUrl),
       fit: BoxFit.cover,
       errorBuilder: (_, _, _) => placeholder,
     );
@@ -779,7 +781,7 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
               child: ClipOval(
                 child: Image.network(
-                  effectiveAvatarUrl,
+                  resolveBackendMediaUrl(effectiveAvatarUrl),
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) => Container(
                     color: AppColors.surface,

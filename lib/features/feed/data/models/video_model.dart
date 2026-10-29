@@ -1,5 +1,5 @@
 // ignore_for_file: prefer_initializing_formals
-import '../../../../core/network/api_client.dart';
+import '../../../../core/network/media_url.dart';
 import '../../../auth/data/datasources/token_storage.dart';
 
 class VideoModel {
@@ -201,34 +201,14 @@ class VideoModel {
     return null;
   }
 
-  /// Resolves relative URLs (e.g., /uploads/videos/abc.mp4) to full HTTP URLs using ApiClient
+  /// Resolves relative and legacy local-host URLs to reachable media URLs.
   static String resolveMediaUrl(String? url) {
-    if (url == null || url.trim().isEmpty) return '';
-    final clean = url.trim();
-    if (clean.startsWith('http://') ||
-        clean.startsWith('https://') ||
-        clean.startsWith('assets/')) {
-      return clean;
-    }
-    final host = ApiClient.baseUrl.replaceAll('/api/v1', '');
-    if (clean.startsWith('/')) {
-      return '$host$clean';
-    }
-    return '$host/$clean';
+    return resolveBackendMediaUrl(url);
   }
 
   /// Resolves any media URL (including assets/...) to an absolute backend HTTP streaming URL
   static String toNetworkMediaUrl(String? url) {
-    if (url == null || url.trim().isEmpty) return '';
-    final clean = url.trim();
-    if (clean.startsWith('http://') || clean.startsWith('https://')) {
-      return clean;
-    }
-    final host = ApiClient.baseUrl.replaceAll('/api/v1', '');
-    if (clean.startsWith('/')) {
-      return '$host$clean';
-    }
-    return '$host/$clean';
+    return resolveBackendMediaUrl(url);
   }
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {

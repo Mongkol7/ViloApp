@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../core/network/media_url.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../../profile/presentation/mock/profile_mock_data.dart';
 import '../../data/datasources/feed_remote_data_source.dart';
@@ -983,7 +984,7 @@ class _SoundDetailPageState extends State<SoundDetailPage> with SingleTickerProv
   }
 
   Widget _buildVideoThumbnail(String url) {
-    final cleanUrl = url.trim();
+    final cleanUrl = resolveBackendMediaUrl(url.trim());
     final placeholder = Container(
       color: AppColors.surface,
       child: const Icon(Icons.movie_outlined, color: AppColors.outline),

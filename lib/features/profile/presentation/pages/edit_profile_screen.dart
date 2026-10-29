@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/network/media_url.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../auth/data/models/user_model.dart';
@@ -155,7 +156,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               width: 64,
                               height: 64,
                               child: Image.network(
-                                url,
+                                resolveBackendMediaUrl(url),
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, _, _) => Container(
                                   color: const Color(0xFF2A2A30),
@@ -289,7 +290,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ),
                       child: ClipOval(
                         child: Image.network(
-                          _currentAvatarUrl,
+                          resolveBackendMediaUrl(_currentAvatarUrl),
                           fit: BoxFit.cover,
                           errorBuilder: (_, _, _) => Container(
                             color: PulseColors.surfaceContainer,

@@ -30,11 +30,6 @@ class UserModel {
   static String? _resolveAvatarUrl(dynamic value) {
     if (value == null || value.toString().trim().isEmpty) return null;
     final clean = value.toString().trim();
-    if (clean.startsWith('assets/') ||
-        clean.startsWith('http://') ||
-        clean.startsWith('https://')) {
-      return clean;
-    }
     return resolveBackendMediaUrl(clean);
   }
 

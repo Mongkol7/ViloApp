@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/network/media_url.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../domain/entities/person_suggestion.dart';
@@ -68,7 +69,7 @@ class PersonCard extends StatelessWidget {
               ),
               child: ClipOval(
                 child: Image.network(
-                  person.avatarUrl,
+                  resolveBackendMediaUrl(person.avatarUrl),
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {
                     return Container(

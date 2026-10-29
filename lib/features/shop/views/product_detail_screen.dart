@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import '../../../core/network/media_url.dart';
 
 import '../data/models/product_model.dart';
 import '../models/product.dart';
@@ -749,15 +750,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   Widget _buildCarouselImageWidget(String path) {
-    if (path.startsWith('assets/')) {
+    final resolvedPath = resolveBackendMediaUrl(path);
+    if (resolvedPath.startsWith('assets/')) {
       return Image.asset(
-        path,
+        resolvedPath,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) => _buildImagePlaceholder(),
       );
     }
     return Image.network(
-      path,
+      resolvedPath,
       fit: BoxFit.cover,
       loadingBuilder: (context, child, progress) {
         if (progress == null) return child;
@@ -991,9 +993,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       child: () {
                         final storeAvatar = _resolvedSellerAvatar;
                         if (storeAvatar != null && storeAvatar.isNotEmpty) {
-                          if (storeAvatar.startsWith('http://') || storeAvatar.startsWith('https://')) {
+                          final resolvedStoreAvatar =
+                              resolveBackendMediaUrl(storeAvatar);
+                          if (resolvedStoreAvatar.startsWith('http://') ||
+                              resolvedStoreAvatar.startsWith('https://')) {
                             return Image.network(
-                              storeAvatar,
+                              resolvedStoreAvatar,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront_rounded, color: Colors.white, size: 24),
                             );
@@ -2017,9 +2022,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   Widget _buildProductInquiryThumbnail() {
     final img = _carouselImages.isNotEmpty ? _carouselImages.first : (widget.imageUrl ?? '');
-    if (img.startsWith('http://') || img.startsWith('https://')) {
+    final resolvedImg = resolveBackendMediaUrl(img);
+    if (resolvedImg.startsWith('http://') || resolvedImg.startsWith('https://')) {
       return Image.network(
-        img,
+        resolvedImg,
         width: 44,
         height: 44,
         fit: BoxFit.cover,

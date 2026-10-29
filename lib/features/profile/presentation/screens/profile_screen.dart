@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../../core/network/media_url.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../../inbox_activity/data/datasources/thought_story_manager.dart';
 import '../../../inbox_activity/domain/entities/shared_thought_story.dart';
@@ -857,7 +858,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                 'assets/',
                                               )
                                               ? Image.asset(
-                                                  currentAvatarUrl,
+                                                  resolveBackendMediaUrl(
+                                                    currentAvatarUrl,
+                                                  ),
                                                   fit: BoxFit.cover,
                                                   errorBuilder:
                                                       (
@@ -875,7 +878,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                       ),
                                                 )
                                               : Image.network(
-                                                  currentAvatarUrl,
+                                                  resolveBackendMediaUrl(
+                                                    currentAvatarUrl,
+                                                  ),
                                                   fit: BoxFit.cover,
                                                   errorBuilder:
                                                       (

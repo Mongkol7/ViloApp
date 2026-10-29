@@ -1,10 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/datasources/shop_remote_data_source.dart';
 import '../../data/models/cart_item_model.dart';
 import '../../data/models/cart_model.dart';
 import '../../data/models/product_model.dart';
 import '../../models/cart_item.dart';
 import '../../models/product.dart';
+import '../../../auth/data/datasources/token_storage.dart';
+import '../../../profile/data/datasources/profile_sync_service.dart';
 
 class CartController extends ChangeNotifier {
   static CartController? _instance;
@@ -12,19 +17,20 @@ class CartController extends ChangeNotifier {
 
   final ShopRemoteDataSource _dataSource;
   final List<CartItemModel> _inMemoryItems = [];
+  static const String _localCartStoragePrefix = 'vilo_cart_backup_v1_';
 
   CartModel _cart = const CartModel();
   bool _isLoading = false;
   String? _errorMessage;
 
   CartController._([ShopRemoteDataSource? dataSource])
-      : _dataSource = dataSource ?? ShopRemoteDataSource.instance {
+    : _dataSource = dataSource ?? ShopRemoteDataSource.instance {
     loadCart();
   }
 
   @visibleForTesting
   CartController.forTesting([ShopRemoteDataSource? dataSource])
-      : _dataSource = dataSource ?? ShopRemoteDataSource.instance;
+    : _dataSource = dataSource ?? ShopRemoteDataSource.instance;
 
   @visibleForTesting
   static void setMockInstance(CartController mock) {
@@ -44,14 +50,77 @@ class CartController extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
+  String get _localCartStorageKey {
+    final active =
+        ProfileSyncService.instance.cachedMyProfile ??
+        TokenStorage.instance.getUserModel();
+    final raw =
+        (active?.username ?? ProfileSyncService.instance.currentUsername)
+            .trim()
+            .toLowerCase();
+    final account = raw.replaceAll('@', '');
+    return '$_localCartStoragePrefix${account.isEmpty ? 'guest' : account}';
+  }
+
+  Future<List<CartItemModel>> _loadLocalCartBackup() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_localCartStorageKey);
+      if (raw == null || raw.isEmpty) return const <CartItemModel>[];
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const <CartItemModel>[];
+      return decoded
+          .whereType<Map<String, dynamic>>()
+          .map(CartItemModel.fromJson)
+          .where((item) => item.quantity > 0)
+          .toList();
+    } catch (error) {
+      debugPrint('Unable to load local cart backup: $error');
+      return const <CartItemModel>[];
+    }
+  }
+
+  Future<void> _persistLocalCart() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = _inMemoryItems.map((item) => item.toJson()).toList();
+      await prefs.setString(_localCartStorageKey, jsonEncode(encoded));
+    } catch (error) {
+      debugPrint('Unable to persist local cart backup: $error');
+    }
+  }
+
+  void _mergeCartItems(List<CartItemModel> items) {
+    for (final remoteItem in items) {
+      final existingIndex = _inMemoryItems.indexWhere(
+        (localItem) =>
+            localItem.productId == remoteItem.productId &&
+            localItem.variant == remoteItem.variant,
+      );
+      if (existingIndex == -1) {
+        _inMemoryItems.add(remoteItem);
+      } else {
+        _inMemoryItems[existingIndex] = remoteItem;
+      }
+    }
+  }
+
   void _recalculateCart() {
-    final totalCount = _inMemoryItems.fold<int>(0, (sum, item) => sum + item.quantity);
-    final totalAmount = _inMemoryItems.fold<double>(0.0, (sum, item) => sum + item.subtotal);
+    final totalCount = _inMemoryItems.fold<int>(
+      0,
+      (sum, item) => sum + item.quantity,
+    );
+    final totalAmount = _inMemoryItems.fold<double>(
+      0.0,
+      (sum, item) => sum + item.subtotal,
+    );
     final originalTotal = _inMemoryItems.fold<double>(
       0.0,
       (sum, item) => sum + ((item.originalPrice ?? item.price) * item.quantity),
     );
-    final totalSavings = (originalTotal > totalAmount) ? (originalTotal - totalAmount) : 0.0;
+    final totalSavings = (originalTotal > totalAmount)
+        ? (originalTotal - totalAmount)
+        : 0.0;
 
     _cart = CartModel(
       items: List.unmodifiable(_inMemoryItems),
@@ -68,16 +137,25 @@ class CartController extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final localItems = await _loadLocalCartBackup();
+      _inMemoryItems
+        ..clear()
+        ..addAll(localItems);
+      if (localItems.isNotEmpty) {
+        _recalculateCart();
+        notifyListeners();
+      }
+
       final remoteCart = await _dataSource.getCart();
       if (remoteCart.items.isNotEmpty) {
-        _inMemoryItems.clear();
-        _inMemoryItems.addAll(remoteCart.items);
-        _cart = remoteCart;
+        _mergeCartItems(remoteCart.items);
+        _recalculateCart();
       } else if (_inMemoryItems.isNotEmpty) {
         _recalculateCart();
       } else {
         _cart = remoteCart;
       }
+      await _persistLocalCart();
     } catch (e) {
       _errorMessage = e.toString();
       if (_inMemoryItems.isNotEmpty) {
@@ -89,16 +167,17 @@ class CartController extends ChangeNotifier {
     }
   }
 
-  Future<bool> addToCart(ProductModel product, {int quantity = 1, String? variant, String? productStringId}) async {
+  Future<bool> addToCart(
+    ProductModel product, {
+    int quantity = 1,
+    String? variant,
+    String? productStringId,
+  }) async {
     if (quantity <= 0) return false;
 
-    final effectiveStock = Product.getEffectiveStock(
-      product.id.toString(),
-      product.stock,
-    );
-    if (effectiveStock <= 0) return false;
-
     final targetId = productStringId ?? product.id.toString();
+    final effectiveStock = Product.getEffectiveStock(targetId, product.stock);
+    if (effectiveStock <= 0) return false;
 
     // 1. Optimistically update local in-memory cart
     final existingIndex = _inMemoryItems.indexWhere(
@@ -109,8 +188,14 @@ class CartController extends ChangeNotifier {
     if (existingIndex >= 0) {
       final existing = _inMemoryItems[existingIndex];
       if (effectiveStock <= 0) return false;
-      final newQuantity = existing.quantity + quantity;
-      actualAddedQty = quantity;
+      final availableToAdd = effectiveStock;
+      final requestedNewQuantity = existing.quantity + quantity;
+      final newQuantity =
+          requestedNewQuantity > existing.quantity + availableToAdd
+          ? existing.quantity + availableToAdd
+          : requestedNewQuantity;
+      actualAddedQty = newQuantity - existing.quantity;
+      if (actualAddedQty <= 0) return false;
       _inMemoryItems[existingIndex] = CartItemModel(
         id: existing.id,
         productId: existing.productId,
@@ -121,20 +206,32 @@ class CartController extends ChangeNotifier {
         originalPrice: existing.originalPrice,
         quantity: newQuantity,
         subtotal: existing.price * newQuantity,
-        stock: effectiveStock,
+        // Keep the product's total stock on the cart item. The remaining
+        // stock is derived from Product.getEffectiveStock(), so replacing
+        // this with effectiveStock would make a later checkout calculate
+        // 2 - 2 = 0 for a product that originally had 3 in stock.
+        stock: existing.stock,
         variant: existing.variant,
         createdAt: existing.createdAt,
         sellerName: existing.sellerName ?? product.sellerName,
-        sellerUsername: existing.sellerUsername ?? product.sellerUsername ?? product.sellerName,
+        sellerUsername:
+            existing.sellerUsername ??
+            product.sellerUsername ??
+            product.sellerName,
         sellerAvatar: existing.sellerAvatar ?? product.sellerAvatar,
         sellerId: existing.sellerId ?? product.sellerId,
       );
     } else {
-      final img = product.images.isNotEmpty ? product.images.first : product.primaryImage;
-      final clampedQty = quantity;
+      final img = product.images.isNotEmpty
+          ? product.images.first
+          : product.primaryImage;
+      final clampedQty = quantity > effectiveStock ? effectiveStock : quantity;
+      if (clampedQty <= 0) return false;
       actualAddedQty = clampedQty;
       final newItem = CartItemModel(
-        id: DateTime.now().millisecondsSinceEpoch ~/ 1000 + _inMemoryItems.length,
+        id:
+            DateTime.now().millisecondsSinceEpoch ~/ 1000 +
+            _inMemoryItems.length,
         productId: product.id,
         productStringId: targetId,
         productTitle: product.title,
@@ -166,6 +263,7 @@ class CartController extends ChangeNotifier {
 
     _recalculateCart();
     notifyListeners();
+    await _persistLocalCart();
 
     // 2. Also sync to legacy CartManager
     try {
@@ -185,7 +283,7 @@ class CartController extends ChangeNotifier {
           sellerId: product.sellerId?.toString(),
           stock: product.stock,
         ),
-        quantity,
+        actualAddedQty,
       );
     } catch (_) {}
 
@@ -193,7 +291,7 @@ class CartController extends ChangeNotifier {
     try {
       await _dataSource.addToCart(
         productId: product.id,
-        quantity: quantity,
+        quantity: actualAddedQty,
         variant: variant,
       );
     } catch (e) {
@@ -203,7 +301,11 @@ class CartController extends ChangeNotifier {
     return true;
   }
 
-  Future<bool> addProduct(Product product, {int quantity = 1, String? variant}) async {
+  Future<bool> addProduct(
+    Product product, {
+    int quantity = 1,
+    String? variant,
+  }) async {
     final int prodId = int.tryParse(product.id) ?? product.id.hashCode.abs();
     final model = ProductModel(
       id: prodId,
@@ -220,7 +322,12 @@ class CartController extends ChangeNotifier {
       sellerAvatar: product.sellerAvatar,
       images: [product.imageUrl],
     );
-    return addToCart(model, quantity: quantity, variant: variant, productStringId: product.id);
+    return addToCart(
+      model,
+      quantity: quantity,
+      variant: variant,
+      productStringId: product.id,
+    );
   }
 
   Future<void> updateQuantity(int itemId, int quantity) async {
@@ -232,7 +339,8 @@ class CartController extends ChangeNotifier {
     final index = _inMemoryItems.indexWhere((item) => item.id == itemId);
     if (index >= 0) {
       final existing = _inMemoryItems[index];
-      final targetId = existing.productStringId ?? existing.productId.toString();
+      final targetId =
+          existing.productStringId ?? existing.productId.toString();
       final effectiveStock = Product.getEffectiveStock(
         targetId,
         existing.stock,
@@ -242,7 +350,10 @@ class CartController extends ChangeNotifier {
       // Adjust stock in real time when quantity changes
       if (quantity > existing.quantity) {
         final diff = quantity - existing.quantity;
-        if (effectiveStock < diff && effectiveStock > 0) {
+        if (effectiveStock <= 0) {
+          return;
+        }
+        if (effectiveStock < diff) {
           quantity = existing.quantity + effectiveStock;
         }
         final actualDeduct = quantity - existing.quantity;
@@ -283,10 +394,13 @@ class CartController extends ChangeNotifier {
       );
       _recalculateCart();
       notifyListeners();
+      await _persistLocalCart();
 
       // Legacy sync
       try {
-        final legacyItem = CartManager.instance.getItem(existing.productId.toString());
+        final legacyItem = CartManager.instance.getItem(
+          existing.productId.toString(),
+        );
         if (legacyItem != null) {
           legacyItem.quantity = quantity;
         }
@@ -314,6 +428,7 @@ class CartController extends ChangeNotifier {
       }
       _recalculateCart();
       notifyListeners();
+      await _persistLocalCart();
 
       try {
         CartManager.instance.removeItem(removed.productId.toString());
@@ -341,6 +456,7 @@ class CartController extends ChangeNotifier {
     _inMemoryItems.clear();
     _recalculateCart();
     notifyListeners();
+    await _persistLocalCart();
 
     try {
       CartManager.instance.clear();

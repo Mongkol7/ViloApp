@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../../../core/network/media_url.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
@@ -1829,7 +1831,7 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                           radius: 22,
                           backgroundImage: avatar.startsWith('assets/')
                               ? AssetImage(avatar)
-                              : NetworkImage(avatar),
+                              : NetworkImage(resolveBackendMediaUrl(avatar)),
                           onBackgroundImageError: (_, _) {},
                           backgroundColor: Colors.grey[900],
                         ),
@@ -1944,10 +1946,12 @@ class _VideoPostWidgetState extends State<_VideoPostWidget>
                     radius: 17,
                     backgroundColor: Colors.black,
                     backgroundImage: NetworkImage(
-                      (video.thumbnailUrl != null &&
-                              video.thumbnailUrl!.isNotEmpty)
-                          ? video.thumbnailUrl!
-                          : 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100',
+                      resolveBackendMediaUrl(
+                        (video.thumbnailUrl != null &&
+                                video.thumbnailUrl!.isNotEmpty)
+                            ? video.thumbnailUrl!
+                            : 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100',
+                      ),
                     ),
                     onBackgroundImageError: (_, _) {},
                   ),

@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../auth/data/datasources/token_storage.dart';
+import '../../../../core/network/api_client.dart';
 import '../mock/profile_mock_data.dart';
 import '../style/pulse_tokens.dart';
 import '../../data/datasources/profile_sync_service.dart';
 import '../../../shop/models/product.dart';
 import '../../../shop/data/datasources/shop_remote_data_source.dart';
+import '../../../shop/data/models/order_model.dart';
 import '../../../shop/presentation/pages/product_detail_page.dart';
 import '../../../inbox_activity/data/datasources/inbox_message_manager.dart';
 import '../../../inbox_activity/domain/entities/inbox_item.dart';
@@ -514,7 +516,7 @@ class ShopProductCard extends StatelessWidget {
                             borderRadius: BorderRadius.circular(
                               PulseRadius.full,
                             ),
-                            onTap: () {
+                            onTap: () async {
                               if (isOutOfStock) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
@@ -533,11 +535,55 @@ class ShopProductCard extends StatelessWidget {
                               final messageText =
                                   'Hi! I would like to order $resolvedName (Price: $resolvedPrice/unit). Is it available to ship?';
 
+                              // Profile orders are persisted as chat inquiries.
+                              // Reserve backend stock before creating the message
+                              // so the reservation survives an app restart.
+                              final numericProductId = int.tryParse(id);
+                              OrderModel? persistedOrder;
+                              if (numericProductId != null) {
+                                try {
+                                  persistedOrder = await ShopRemoteDataSource
+                                      .instance
+                                      .createDirectOrder(
+                                        items: [
+                                          {
+                                            'productId': numericProductId,
+                                            'quantity': 1,
+                                          },
+                                        ],
+                                        notes: messageText,
+                                      );
+                                } catch (error) {
+                                  if (error is ApiResponseException &&
+                                      error.statusCode == 404) {
+                                    // Legacy/local catalog items can have a
+                                    // numeric-looking id that is not present
+                                    // in the backend. Keep the existing local
+                                    // inquiry flow for those items.
+                                    persistedOrder = null;
+                                  } else {
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        backgroundColor: const Color(
+                                          0xFF1E1E22,
+                                        ),
+                                        content: Text(
+                                          'Unable to reserve this product: $error',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                }
+                              }
+
                               // This profile action creates an order inquiry. Keep its
                               // order reference unique so an older cancellation event
                               // cannot cancel this new inquiry by product title alone.
-                              final createdOrder = ShopRemoteDataSource.instance
-                                  .recordChatOrder(
+                              final createdOrder =
+                                  persistedOrder ??
+                                  ShopRemoteDataSource.instance.recordChatOrder(
                                     productTitle: resolvedName,
                                     price: resolvedPriceVal,
                                     quantity: 1,

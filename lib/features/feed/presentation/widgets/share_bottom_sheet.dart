@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../../core/network/media_url.dart';
 import '../../data/models/video_model.dart';
 import '../../../inbox_activity/data/datasources/inbox_message_manager.dart';
 import '../../../inbox_activity/domain/entities/inbox_item.dart';
@@ -239,8 +240,12 @@ class _RecipientAvatar extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 25,
-              backgroundImage: avatarUrl.startsWith('http') ? NetworkImage(avatarUrl) : null,
-              child: avatarUrl.startsWith('http') ? null : const Icon(Icons.person, color: Colors.white),
+              backgroundImage: avatarUrl.trim().isNotEmpty
+                  ? NetworkImage(resolveBackendMediaUrl(avatarUrl))
+                  : null,
+              child: avatarUrl.trim().isNotEmpty
+                  ? null
+                  : const Icon(Icons.person, color: Colors.white),
             ),
             const SizedBox(height: 5),
             Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 11)),

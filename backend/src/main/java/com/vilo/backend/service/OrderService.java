@@ -1,6 +1,8 @@
 package com.vilo.backend.service;
 
 import com.vilo.backend.dto.CheckoutRequest;
+import com.vilo.backend.dto.DirectOrderItemRequest;
+import com.vilo.backend.dto.DirectOrderRequest;
 import com.vilo.backend.dto.OrderResponse;
 import com.vilo.backend.entity.*;
 import com.vilo.backend.exception.BadRequestException;
@@ -15,6 +17,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -111,6 +115,113 @@ public class OrderService {
         cartItemRepository.deleteByUser(user);
 
         return OrderResponse.fromEntity(savedOrder);
+    }
+
+    @Transactional
+    public OrderResponse createDirectOrder(User user, DirectOrderRequest request) {
+        if (request.getItems() == null || request.getItems().isEmpty()) {
+            throw new BadRequestException("Cannot create an order with no products");
+        }
+
+        Map<Long, Product> products = new HashMap<>();
+        Map<Long, Integer> quantities = new HashMap<>();
+        for (DirectOrderItemRequest itemRequest : request.getItems()) {
+            if (itemRequest.getProductId() == null || itemRequest.getQuantity() == null ||
+                    itemRequest.getQuantity() <= 0) {
+                throw new BadRequestException("Each order item must have a valid product and quantity");
+            }
+            Product product = productRepository.findById(itemRequest.getProductId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Product not found with id: " + itemRequest.getProductId()));
+            products.put(product.getId(), product);
+            quantities.merge(product.getId(), itemRequest.getQuantity(), Integer::sum);
+        }
+
+        for (Map.Entry<Long, Integer> entry : quantities.entrySet()) {
+            Product product = products.get(entry.getKey());
+            if (product.getStock() < entry.getValue()) {
+                throw new BadRequestException("Insufficient stock for product: " + product.getTitle() +
+                        " (Requested: " + entry.getValue() + ", Available: " + product.getStock() + ")");
+            }
+        }
+
+        BigDecimal totalAmount = BigDecimal.ZERO;
+        for (DirectOrderItemRequest itemRequest : request.getItems()) {
+            Product product = products.get(itemRequest.getProductId());
+            totalAmount = totalAmount.add(product.getPrice()
+                    .multiply(BigDecimal.valueOf(itemRequest.getQuantity())));
+        }
+
+        Order order = Order.builder()
+                .orderNumber("ORD-" + LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE) + "-" +
+                        UUID.randomUUID().toString().substring(0, 6).toUpperCase())
+                .user(user)
+                .totalAmount(totalAmount)
+                .status(OrderStatus.PENDING)
+                .shippingAddress("Direct Seller Inquiry")
+                .paymentMethod("Inquiry / Direct Chat")
+                .notes(request.getNotes())
+                .build();
+
+        for (DirectOrderItemRequest itemRequest : request.getItems()) {
+            Product product = products.get(itemRequest.getProductId());
+            product.setStock(product.getStock() - itemRequest.getQuantity());
+            product.setSalesCount(product.getSalesCount() + itemRequest.getQuantity());
+            productRepository.save(product);
+            String firstImage = product.getImages() != null && !product.getImages().isEmpty()
+                    ? product.getImages().get(0) : "";
+            order.addOrderItem(OrderItem.builder()
+                    .order(order)
+                    .product(product)
+                    .productTitle(product.getTitle())
+                    .productImageUrl(firstImage)
+                    .price(product.getPrice())
+                    .quantity(itemRequest.getQuantity())
+                    .variant(itemRequest.getVariant())
+                    .build());
+        }
+
+        return OrderResponse.fromEntity(orderRepository.save(order));
+    }
+
+    @Transactional
+    public OrderResponse cancelOrder(User user, Long orderId) {
+        Order order = orderRepository.findByIdAndUser(orderId, user)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + orderId));
+        return cancelOrderEntity(order);
+    }
+
+    @Transactional
+    public OrderResponse cancelOrderByNumber(User user, String orderNumber) {
+        Order order = orderRepository.findByOrderNumber(orderNumber)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with number: " + orderNumber));
+        boolean buyer = order.getUser() != null && order.getUser().getId().equals(user.getId());
+        boolean seller = order.getOrderItems().stream().allMatch(item ->
+                item.getProduct() != null && item.getProduct().getSeller() != null &&
+                        item.getProduct().getSeller().getId().equals(user.getId()));
+        if (!buyer && !seller) {
+            throw new BadRequestException("You cannot cancel this order");
+        }
+        return cancelOrderEntity(order);
+    }
+
+    private OrderResponse cancelOrderEntity(Order order) {
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            return OrderResponse.fromEntity(order);
+        }
+        if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.PAID) {
+            throw new BadRequestException("This order can no longer be cancelled");
+        }
+        for (OrderItem item : order.getOrderItems()) {
+            Product product = item.getProduct();
+            if (product != null) {
+                product.setStock(product.getStock() + item.getQuantity());
+                product.setSalesCount(Math.max(0, product.getSalesCount() - item.getQuantity()));
+                productRepository.save(product);
+            }
+        }
+        order.setStatus(OrderStatus.CANCELLED);
+        return OrderResponse.fromEntity(orderRepository.save(order));
     }
 
     @Transactional(readOnly = true)

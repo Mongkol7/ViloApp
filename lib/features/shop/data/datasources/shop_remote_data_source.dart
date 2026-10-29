@@ -10,18 +10,22 @@ import '../../../profile/data/datasources/profile_sync_service.dart';
 
 class ShopRemoteDataSource {
   static ShopRemoteDataSource? _instance;
-  static ShopRemoteDataSource get instance => _instance ??= ShopRemoteDataSource._();
+  static ShopRemoteDataSource get instance =>
+      _instance ??= ShopRemoteDataSource._();
 
   final ApiClient _client;
   int _lastLocalOrderId = 0;
 
-  ShopRemoteDataSource._([ApiClient? client]) : _client = client ?? ApiClient.instance;
+  ShopRemoteDataSource._([ApiClient? client])
+    : _client = client ?? ApiClient.instance;
 
   Future<List<CategoryModel>> getCategories() async {
     try {
       final data = await _client.get('/categories', requireAuth: false);
       if (data is List) {
-        return data.map((json) => CategoryModel.fromJson(json as Map<String, dynamic>)).toList();
+        return data
+            .map((json) => CategoryModel.fromJson(json as Map<String, dynamic>))
+            .toList();
       }
       return [];
     } catch (_) {
@@ -38,10 +42,7 @@ class ShopRemoteDataSource {
     int size = 20,
   }) async {
     try {
-      final queryParams = <String>[
-        'page=$page',
-        'size=$size',
-      ];
+      final queryParams = <String>['page=$page', 'size=$size'];
       if (categoryId != null) queryParams.add('categoryId=$categoryId');
       if (minPrice != null) queryParams.add('minPrice=$minPrice');
       if (maxPrice != null) queryParams.add('maxPrice=$maxPrice');
@@ -59,7 +60,9 @@ class ShopRemoteDataSource {
         rawList = data;
       }
 
-      return rawList.map((json) => ProductModel.fromJson(json as Map<String, dynamic>)).toList();
+      return rawList
+          .map((json) => ProductModel.fromJson(json as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       return [];
     }
@@ -70,11 +73,41 @@ class ShopRemoteDataSource {
     return ProductModel.fromJson(data as Map<String, dynamic>);
   }
 
+  /// Reserves stock for a direct order/message flow. Cart additions remain
+  /// local reservations; only an order message or checkout changes backend
+  /// inventory.
+  Future<ProductModel> reserveProductStock({
+    required int productId,
+    int quantity = 1,
+  }) async {
+    final data = await _client.post(
+      '/products/$productId/deduct-stock?quantity=$quantity',
+      requireAuth: true,
+    );
+    return ProductModel.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<ProductModel> restoreProductStock({
+    required int productId,
+    int quantity = 1,
+  }) async {
+    final data = await _client.post(
+      '/products/$productId/restore-stock?quantity=$quantity',
+      requireAuth: true,
+    );
+    return ProductModel.fromJson(data as Map<String, dynamic>);
+  }
+
   Future<List<ProductModel>> getProductsByVideo(int videoId) async {
     try {
-      final data = await _client.get('/products/by-video/$videoId', requireAuth: false);
+      final data = await _client.get(
+        '/products/by-video/$videoId',
+        requireAuth: false,
+      );
       if (data is List) {
-        return data.map((json) => ProductModel.fromJson(json as Map<String, dynamic>)).toList();
+        return data
+            .map((json) => ProductModel.fromJson(json as Map<String, dynamic>))
+            .toList();
       }
       return [];
     } catch (_) {
@@ -84,9 +117,14 @@ class ShopRemoteDataSource {
 
   Future<List<ProductModel>> getProductsBySeller(int sellerId) async {
     try {
-      final data = await _client.get('/products/by-seller/$sellerId', requireAuth: false);
+      final data = await _client.get(
+        '/products/by-seller/$sellerId',
+        requireAuth: false,
+      );
       if (data is List) {
-        return data.map((json) => ProductModel.fromJson(json as Map<String, dynamic>)).toList();
+        return data
+            .map((json) => ProductModel.fromJson(json as Map<String, dynamic>))
+            .toList();
       }
       return [];
     } catch (_) {
@@ -116,7 +154,11 @@ class ShopRemoteDataSource {
       'quantity': quantity,
       'variant': ?variant,
     };
-    final data = await _client.post('/cart/items', body: body, requireAuth: true);
+    final data = await _client.post(
+      '/cart/items',
+      body: body,
+      requireAuth: true,
+    );
     return CartItemModel.fromJson(data as Map<String, dynamic>);
   }
 
@@ -147,8 +189,13 @@ class ShopRemoteDataSource {
   final Map<String, List<OrderModel>> _userScopedOrders = {};
 
   String get _activeUserKey {
-    final active = ProfileSyncService.instance.cachedMyProfile ?? TokenStorage.instance.getUserModel();
-    final raw = (active?.username ?? ProfileSyncService.instance.currentUsername).trim().toLowerCase();
+    final active =
+        ProfileSyncService.instance.cachedMyProfile ??
+        TokenStorage.instance.getUserModel();
+    final raw =
+        (active?.username ?? ProfileSyncService.instance.currentUsername)
+            .trim()
+            .toLowerCase();
     return raw.replaceAll('@', '');
   }
 
@@ -156,10 +203,16 @@ class ShopRemoteDataSource {
 
   int get pendingOrdersCount {
     final orders = localOrders;
-    return orders.where((o) => o.dynamicStatus == 'PENDING').fold<int>(
-      0,
-      (sum, o) => sum + (o.itemCount > 0 ? o.itemCount : (o.items.isNotEmpty ? o.items.length : 1)),
-    );
+    return orders
+        .where((o) => o.dynamicStatus == 'PENDING')
+        .fold<int>(
+          0,
+          (sum, o) =>
+              sum +
+              (o.itemCount > 0
+                  ? o.itemCount
+                  : (o.items.isNotEmpty ? o.items.length : 1)),
+        );
   }
 
   void updatePendingCount() {
@@ -168,12 +221,16 @@ class ShopRemoteDataSource {
 
   int _nextLocalOrderId() {
     final current = DateTime.now().millisecondsSinceEpoch;
-    _lastLocalOrderId = current > _lastLocalOrderId ? current : _lastLocalOrderId + 1;
+    _lastLocalOrderId = current > _lastLocalOrderId
+        ? current
+        : _lastLocalOrderId + 1;
     return _lastLocalOrderId;
   }
 
   String _localOrderNumber({required String seller, required int orderId}) {
-    final cleanSeller = seller.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+    final cleanSeller = seller
+        .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')
+        .toUpperCase();
     final now = DateTime.fromMillisecondsSinceEpoch(orderId);
     // Keep the complete monotonic local id in the reference. Using only the
     // last few timestamp digits allowed a later order to reuse an older
@@ -194,10 +251,14 @@ class ShopRemoteDataSource {
     final key = _activeUserKey;
     if (key.isNotEmpty) {
       final list = _userScopedOrders.putIfAbsent(key, () => []);
-      list.removeWhere((o) => o.id == order.id || o.orderNumber == order.orderNumber);
+      list.removeWhere(
+        (o) => o.id == order.id || o.orderNumber == order.orderNumber,
+      );
       list.insert(0, order);
     }
-    _localOrderHistory.removeWhere((o) => o.id == order.id || o.orderNumber == order.orderNumber);
+    _localOrderHistory.removeWhere(
+      (o) => o.id == order.id || o.orderNumber == order.orderNumber,
+    );
     _localOrderHistory.insert(0, order);
     updatePendingCount();
   }
@@ -205,20 +266,32 @@ class ShopRemoteDataSource {
   void updateOrderStatus(String orderNumberOrTitle, String newStatus) {
     for (final list in _userScopedOrders.values) {
       for (int i = 0; i < list.length; i++) {
-        final match = list[i].orderNumber == orderNumberOrTitle ||
+        final match =
+            list[i].orderNumber == orderNumberOrTitle ||
             list[i].id.toString() == orderNumberOrTitle ||
-            list[i].items.any((it) => it.productTitle.toLowerCase() == orderNumberOrTitle.toLowerCase());
+            list[i].items.any(
+              (it) =>
+                  it.productTitle.toLowerCase() ==
+                  orderNumberOrTitle.toLowerCase(),
+            );
         if (match) {
           list[i] = list[i].copyWith(status: newStatus);
         }
       }
     }
     for (int i = 0; i < _localOrderHistory.length; i++) {
-      final match = _localOrderHistory[i].orderNumber == orderNumberOrTitle ||
+      final match =
+          _localOrderHistory[i].orderNumber == orderNumberOrTitle ||
           _localOrderHistory[i].id.toString() == orderNumberOrTitle ||
-          _localOrderHistory[i].items.any((it) => it.productTitle.toLowerCase() == orderNumberOrTitle.toLowerCase());
+          _localOrderHistory[i].items.any(
+            (it) =>
+                it.productTitle.toLowerCase() ==
+                orderNumberOrTitle.toLowerCase(),
+          );
       if (match) {
-        _localOrderHistory[i] = _localOrderHistory[i].copyWith(status: newStatus);
+        _localOrderHistory[i] = _localOrderHistory[i].copyWith(
+          status: newStatus,
+        );
       }
     }
     updatePendingCount();
@@ -233,7 +306,10 @@ class ShopRemoteDataSource {
   }) {
     final orderId = _nextLocalOrderId();
     final now = DateTime.fromMillisecondsSinceEpoch(orderId);
-    final orderNum = _localOrderNumber(seller: sellerName ?? 'VILO', orderId: orderId);
+    final orderNum = _localOrderNumber(
+      seller: sellerName ?? 'VILO',
+      orderId: orderId,
+    );
     final subtotal = price * quantity;
     final item = OrderItemModel(
       id: orderId,
@@ -307,7 +383,6 @@ class ShopRemoteDataSource {
     required String shippingAddress,
     required String paymentMethod,
     String? notes,
-    List<CartItemModel>? items,
   }) async {
     final body = {
       'shippingAddress': shippingAddress,
@@ -315,42 +390,61 @@ class ShopRemoteDataSource {
       if (notes != null && notes.isNotEmpty) 'notes': notes,
     };
     try {
-      final data = await _client.post('/orders/checkout', body: body, requireAuth: true);
+      final data = await _client.post(
+        '/orders/checkout',
+        body: body,
+        requireAuth: true,
+      );
       final order = OrderModel.fromJson(data as Map<String, dynamic>);
       addOrder(order);
       return order;
-    } catch (_) {
-      // Create completed PAID order locally for offline / resilient persistence
-      final orderItemsList = items ?? const <CartItemModel>[];
-      final now = DateTime.now();
-      final orderId = _nextLocalOrderId();
-      final totalAmount = orderItemsList.fold<double>(0.0, (sum, i) => sum + i.subtotal);
-      final order = OrderModel(
-        id: orderId,
-        orderNumber: _localOrderNumber(seller: 'PAID', orderId: orderId),
-        totalAmount: totalAmount,
-        status: 'PAID',
-        shippingAddress: shippingAddress,
-        paymentMethod: paymentMethod,
-        notes: notes ?? 'Successfully paid order',
-        items: orderItemsList.map((item) {
-          return OrderItemModel(
-            id: item.id,
-            productId: item.productId,
-            productTitle: item.productTitle,
-            productImageUrl: item.productImage,
-            price: item.price,
-            quantity: item.quantity,
-            subtotal: item.subtotal,
-            variant: item.variant,
-          );
-        }).toList(),
-        itemCount: orderItemsList.fold<int>(0, (sum, i) => sum + i.quantity),
-        createdAt: now.toIso8601String(),
+    } catch (e) {
+      // A checkout is only successful when the backend creates the order and
+      // decrements product stock in the same transaction. Do not manufacture
+      // a local PAID order when the request fails; that made stock appear to
+      // be deducted until a Dart restart, while the backend stock stayed unchanged.
+      debugPrint(
+        '[ShopRemoteDataSource] Checkout failed; no local order created: $e',
       );
-      addOrder(order);
-      return order;
+      rethrow;
     }
+  }
+
+  Future<OrderModel> createDirectOrder({
+    required List<Map<String, dynamic>> items,
+    String? notes,
+  }) async {
+    final data = await _client.post(
+      '/orders/direct',
+      body: {
+        'items': items,
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+      requireAuth: true,
+    );
+    final order = OrderModel.fromJson(data as Map<String, dynamic>);
+    addOrder(order);
+    return order;
+  }
+
+  Future<OrderModel> cancelOrder(int orderId) async {
+    final data = await _client.post(
+      '/orders/$orderId/cancel',
+      requireAuth: true,
+    );
+    final order = OrderModel.fromJson(data as Map<String, dynamic>);
+    addOrder(order);
+    return order;
+  }
+
+  Future<OrderModel> cancelOrderByNumber(String orderNumber) async {
+    final data = await _client.post(
+      '/orders/cancel-by-number?orderNumber=${Uri.encodeQueryComponent(orderNumber)}',
+      requireAuth: true,
+    );
+    final order = OrderModel.fromJson(data as Map<String, dynamic>);
+    addOrder(order);
+    return order;
   }
 
   Future<List<OrderModel>> getOrderHistory() async {
@@ -363,7 +457,9 @@ class ShopRemoteDataSource {
       final data = await _client.get('/orders/history', requireAuth: true);
       List<OrderModel> remoteOrders = [];
       if (data is List) {
-        remoteOrders = data.map((json) => OrderModel.fromJson(json as Map<String, dynamic>)).toList();
+        remoteOrders = data
+            .map((json) => OrderModel.fromJson(json as Map<String, dynamic>))
+            .toList();
       }
       final Set<int> existingIds = remoteOrders.map((o) => o.id).toSet();
       final combined = [

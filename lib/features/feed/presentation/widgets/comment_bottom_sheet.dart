@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../../core/network/media_url.dart';
 import '../../../profile/data/datasources/profile_remote_data_source.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../../profile/presentation/screens/public_profile_screen.dart';
@@ -383,7 +384,9 @@ class _CommentBottomSheetState extends State<CommentBottomSheet> {
                     ),
                     child: ClipOval(
                       child: Image.network(
-                        ProfileSyncService.instance.currentUserAvatar,
+                        resolveBackendMediaUrl(
+                          ProfileSyncService.instance.currentUserAvatar,
+                        ),
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => Container(
                           color: const Color(0xFF2C2C2C),
@@ -544,7 +547,7 @@ class _CommentCardState extends State<_CommentCard> {
                   ),
                   child: ClipOval(
                     child: Image.network(
-                      avatar,
+                      resolveBackendMediaUrl(avatar),
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) => Container(
                         color: Colors.grey[850],

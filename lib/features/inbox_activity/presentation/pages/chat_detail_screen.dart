@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../app/app.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../core/network/media_url.dart';
 import '../../../shop/models/product.dart';
 import '../../../shop/data/datasources/shop_remote_data_source.dart';
 import '../../../auth/data/datasources/token_storage.dart';
@@ -37,6 +38,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
   bool _routeSubscribed = false;
   bool _isChatVisible = true;
   bool _isUploadingPhoto = false;
+  bool _isCancellingOrder = false;
 
   void _scrollToBottom({bool animated = true}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1527,37 +1529,42 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
     );
   }
 
-  Future<void> _performOrderCancellation(ChatMessage message) async {
-    // 1. Restore stock and deduct sold count
-    if (message.orderItems != null && message.orderItems!.isNotEmpty) {
-      for (final item in message.orderItems!) {
-        final pId = item['id']?.toString() ?? '';
-        final pTitle = item['title']?.toString();
-        final pQty = (item['quantity'] as num?)?.toInt() ?? 1;
-        Product.restoreStock(pId, pQty, productName: pTitle);
-        Product.deductSoldCount(pId, pQty, productName: pTitle);
-      }
-    } else {
-      final pId = message.orderProductId ?? '';
-      final pTitle = message.orderProductTitle;
-      final pQty = message.orderQuantity ?? 1;
-      Product.restoreStock(pId, pQty, productName: pTitle);
-      Product.deductSoldCount(pId, pQty, productName: pTitle);
-
-      // Best effort text matching for legacy or profile message orders
-      if (pTitle == null && message.text.contains('order ')) {
-        final match = RegExp(r'order ([^(]+)').firstMatch(message.text);
-        if (match != null) {
-          final parsed = match.group(1)?.trim();
-          if (parsed != null && parsed.isNotEmpty) {
-            Product.restoreStock(parsed, 1, productName: parsed);
-            Product.deductSoldCount(parsed, 1, productName: parsed);
-          }
-        }
-      }
+  Future<bool> _restoreProductStockAfterOrder(
+    String productId,
+    int quantity, {
+    String? productName,
+  }) async {
+    final numericProductId = int.tryParse(productId);
+    if (numericProductId == null) {
+      Product.restoreStock(productId, quantity, productName: productName);
+      Product.deductSoldCount(productId, quantity, productName: productName);
+      return true;
     }
 
-    // Phnom Penh time calculation (UTC+7)
+    try {
+      final restored = await ShopRemoteDataSource.instance.restoreProductStock(
+        productId: numericProductId,
+        quantity: quantity,
+      );
+      Product.setAuthoritativeStock(
+        productId,
+        stock: restored.stock,
+        productName: productName,
+      );
+      Product.deductSoldCount(productId, quantity, productName: productName);
+      return true;
+    } catch (error) {
+      debugPrint('Unable to restore backend stock for $productId: $error');
+      if (error is ApiResponseException && error.statusCode == 404) {
+        Product.restoreStock(productId, quantity, productName: productName);
+        Product.deductSoldCount(productId, quantity, productName: productName);
+        return true;
+      }
+      return false;
+    }
+  }
+
+  ChatMessage _buildCancelledOrderMessage(ChatMessage message) {
     final nowUtc = DateTime.now().toUtc();
     final phnomPenh = nowUtc.add(const Duration(hours: 7));
     const months = [
@@ -1586,26 +1593,139 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
         .replaceAll('@', '')
         .trim()
         .toLowerCase();
-    final bool isBuyerCancelling =
+    final isBuyerCancelling =
         (sender.isNotEmpty && sender == cleanMy) ||
         (sender.isEmpty && message.isMe);
-    final String cancelledRole = isBuyerCancelling ? 'Buyer' : 'Seller';
-    final String cancelledDisplay = '$cancelledRole ($myHandle)';
+    final cancelledRole = isBuyerCancelling ? 'Buyer' : 'Seller';
 
-    // 2. Mark this message as Cancelled in InboxMessageManager
-    final cancelledMessage = message.copyWith(
+    return message.copyWith(
       orderStatus: 'Cancelled',
-      cancelledBy: cancelledDisplay,
+      cancelledBy: '$cancelledRole ($myHandle)',
       cancellationTime: formattedTime,
     );
-    await InboxMessageManager.instance.updateMessageInThread(
-      _thread.id,
-      cancelledMessage,
-    );
+  }
+
+  Future<void> _performOrderCancellation(ChatMessage message) async {
+    if (_isCancellingOrder) return;
+    _isCancellingOrder = true;
+    try {
+      await _performOrderCancellationInternal(message);
+    } finally {
+      _isCancellingOrder = false;
+    }
+  }
+
+  Future<void> _performOrderCancellationInternal(ChatMessage message) async {
+    final orderReference = message.orderReference?.trim() ?? '';
+    final cancelledMessage = _buildCancelledOrderMessage(message);
+
+    // Update the visible message immediately. Network synchronization below
+    // must not block the user or allow a second tap to restore stock again.
+    if (mounted) {
+      setState(() {
+        final idx = _messages.indexWhere((m) => m.id == message.id);
+        if (idx != -1) _messages[idx] = cancelledMessage;
+      });
+    }
+    // Persisted cart orders must be cancelled through the order API so the
+    // backend restores stock exactly once and updates the order status.
+    var persistedOrderCancelled = false;
+    var persistedCancellationFailed = false;
+    if (orderReference.isNotEmpty) {
+      try {
+        await ShopRemoteDataSource.instance.cancelOrderByNumber(orderReference);
+        persistedOrderCancelled = true;
+      } catch (error) {
+        // Older local-only chat orders do not exist in backend order history.
+        // They continue through the legacy local stock path below.
+        if (error is! ApiResponseException || error.statusCode != 404) {
+          persistedCancellationFailed = true;
+          debugPrint(
+            'Unable to cancel persisted order $orderReference: $error',
+          );
+        }
+      }
+    }
+
+    if (persistedCancellationFailed) {
+      // Do not restore stock when the order cancellation itself failed. Roll
+      // back the optimistic message so the next attempt represents reality.
+      if (mounted) {
+        setState(() {
+          final idx = _messages.indexWhere((m) => m.id == message.id);
+          if (idx != -1) _messages[idx] = message;
+        });
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to cancel this order. Please try again.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    // 1. Restore local stock for legacy/local-only orders.
+    var stockRestored = true;
+    if (!persistedOrderCancelled &&
+        message.orderItems != null &&
+        message.orderItems!.isNotEmpty) {
+      for (final item in message.orderItems!) {
+        final pId = item['id']?.toString() ?? '';
+        final pTitle = item['title']?.toString();
+        final pQty = (item['quantity'] as num?)?.toInt() ?? 1;
+        stockRestored =
+            await _restoreProductStockAfterOrder(
+              pId,
+              pQty,
+              productName: pTitle,
+            ) &&
+            stockRestored;
+      }
+    } else if (!persistedOrderCancelled) {
+      final pId = message.orderProductId ?? '';
+      final pTitle = message.orderProductTitle;
+      final pQty = message.orderQuantity ?? 1;
+      stockRestored = await _restoreProductStockAfterOrder(
+        pId,
+        pQty,
+        productName: pTitle,
+      );
+
+      // Best effort text matching for legacy or profile message orders
+      if (pTitle == null && message.text.contains('order ')) {
+        final match = RegExp(r'order ([^(]+)').firstMatch(message.text);
+        if (match != null) {
+          final parsed = match.group(1)?.trim();
+          if (parsed != null && parsed.isNotEmpty) {
+            stockRestored =
+                await _restoreProductStockAfterOrder(
+                  parsed,
+                  1,
+                  productName: parsed,
+                ) &&
+                stockRestored;
+          }
+        }
+      }
+    }
+
+    // The order/stock operation has succeeded. Persist the message locally
+    // immediately and let the peer synchronization finish in the background.
+    unawaited(() async {
+      try {
+        await InboxMessageManager.instance.updateMessageInThread(
+          _thread.id,
+          cancelledMessage,
+        );
+      } catch (error) {
+        debugPrint('Unable to sync cancellation message: $error');
+      }
+    }());
 
     // Sync only this exact order. Fall back to legacy title/message matching
     // for older messages that were created before order references existed.
-    final orderReference = message.orderReference?.trim() ?? '';
     if (orderReference.isNotEmpty) {
       ShopRemoteDataSource.instance.updateOrderStatus(
         orderReference,
@@ -1637,10 +1757,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
         }
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           backgroundColor: Color(0xFF1E1E22),
           content: Text(
-            'Order cancelled. Stock and sold count restored in real time.',
+            stockRestored
+                ? 'Order cancelled. Stock and sold count restored in real time.'
+                : 'Order cancelled, but stock could not be synchronized. Please refresh and try again.',
           ),
           duration: Duration(seconds: 2),
         ),
@@ -1747,10 +1869,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
     double? height,
     BoxFit fit = BoxFit.cover,
   }) {
-    var cleanUrl = url.trim();
-    if (cleanUrl.startsWith('/')) {
-      cleanUrl = '${ApiClient.baseUrl.replaceAll('/api/v1', '')}$cleanUrl';
-    }
+    var cleanUrl = resolveBackendMediaUrl(url.trim());
     if (cleanUrl.startsWith('assets/')) {
       return Image.asset(
         cleanUrl,
@@ -1760,9 +1879,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
         errorBuilder: (context, error, stackTrace) =>
             _buildImagePlaceholder(width, height),
       );
-    }
-    if (cleanUrl.startsWith('uploads/')) {
-      cleanUrl = '${ApiClient.baseUrl.replaceAll('/api/v1', '')}/$cleanUrl';
     }
     if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
       return Image.network(
@@ -1825,6 +1941,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
   }
 
   Widget _buildChatAvatar(String url) {
+    url = resolveBackendMediaUrl(url);
     if (url.startsWith('assets/')) {
       return Image.asset(
         url,

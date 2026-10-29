@@ -85,4 +85,13 @@ public class ProductController {
         ProductResponse product = productService.deductStock(id, quantity);
         return ResponseEntity.ok(ApiResponse.ok("Stock deducted successfully", product));
     }
+
+    @PostMapping("/{id}/restore-stock")
+    public ResponseEntity<ApiResponse<ProductResponse>> restoreStock(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "1") int quantity
+    ) {
+        ProductResponse product = productService.restoreStock(id, quantity);
+        return ResponseEntity.ok(ApiResponse.ok("Stock restored successfully", product));
+    }
 }

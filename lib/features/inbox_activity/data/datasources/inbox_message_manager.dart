@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../core/network/media_url.dart';
 import '../../../auth/data/datasources/token_storage.dart';
 import '../../../profile/data/datasources/profile_sync_service.dart';
 import '../../../profile/data/datasources/profile_remote_data_source.dart';
@@ -539,8 +540,7 @@ class InboxMessageManager {
     );
     final raw = response?.toString() ?? '';
     if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
-    final host = ApiClient.baseUrl.replaceAll('/api/v1', '');
-    return raw.startsWith('/') ? '$host$raw' : '$host/$raw';
+    return resolveBackendMediaUrl(raw);
   }
 
   Future<void> deleteMessage(
@@ -638,7 +638,14 @@ class InboxMessageManager {
             .toList();
         await _persist();
         if (!wasCancelled && updatedMessage.isCancelled) {
-          await _syncCancellationToBackend(thread, updatedMessage);
+          try {
+            await _syncCancellationToBackend(thread, updatedMessage);
+          } catch (error) {
+            // The local state is already authoritative for this device. A
+            // transport failure must not make an order cancellation appear to
+            // fail after stock/order state was already updated.
+            debugPrint('Unable to sync cancellation message: $error');
+          }
         }
       }
     }
@@ -701,7 +708,7 @@ class InboxMessageManager {
       bool threadChanged = false;
       ChatMessage? newlyCancelledMessage;
       final updatedMessages = thread.messages.map((m) {
-        if (m.isOrder && (m.orderStatus == null || m.orderStatus == 'Active')) {
+        if (m.isOrder && !m.isCancelled) {
           final mTitle = (m.orderProductTitle ?? '').trim().toLowerCase();
           final matchesTitle =
               (cleanTitle.isNotEmpty && mTitle == cleanTitle) ||
@@ -745,10 +752,14 @@ class InboxMessageManager {
         final updatedThread = thread.copyWith(messages: updatedMessages);
         _threads[i] = updatedThread;
         if (newlyCancelledMessage != null) {
-          await _syncCancellationToBackend(
-            updatedThread,
-            newlyCancelledMessage!,
-          );
+          try {
+            await _syncCancellationToBackend(
+              updatedThread,
+              newlyCancelledMessage!,
+            );
+          } catch (error) {
+            debugPrint('Unable to sync order cancellation message: $error');
+          }
         }
       }
     }
@@ -959,7 +970,9 @@ class InboxMessageManager {
         candidateAvatar.trim().isNotEmpty &&
         (candidateAvatar.startsWith('http://') ||
             candidateAvatar.startsWith('https://') ||
-            candidateAvatar.startsWith('assets/')) &&
+            candidateAvatar.startsWith('assets/') ||
+            candidateAvatar.startsWith('/uploads/') ||
+            candidateAvatar.startsWith('uploads/')) &&
         !candidateAvatar.contains('dicebear.com') &&
         !candidateAvatar.contains('iphone_17') &&
         !candidateAvatar.contains('case.jpg') &&
@@ -970,7 +983,7 @@ class InboxMessageManager {
         !candidateAvatar.contains('serum') &&
         !candidateAvatar.contains('cooker') &&
         !candidateAvatar.contains('tote')) {
-      return candidateAvatar.trim();
+      return resolveBackendMediaUrl(candidateAvatar.trim());
     }
     if (clean.isEmpty) {
       return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';

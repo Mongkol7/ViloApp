@@ -77,7 +77,10 @@ class OrderModel {
       createdDate = DateTime.fromMillisecondsSinceEpoch(id);
     }
 
-    if (createdDate != null) {
+    // Only legacy in-memory inquiry orders use the local four-hour display
+    // transition. Backend orders must keep their persisted status so a
+    // pending order remains cancellable after an app restart.
+    if (id > 1000000000000 && createdDate != null) {
       final elapsed = DateTime.now().difference(createdDate);
       if (elapsed.inSeconds >= 4 * 3600) {
         return 'SUCCESS';
@@ -86,7 +89,8 @@ class OrderModel {
       }
     }
 
-    return (status.toUpperCase() == 'DELIVERED' || status.toUpperCase() == 'PAID')
+    return (status.toUpperCase() == 'DELIVERED' ||
+            status.toUpperCase() == 'PAID')
         ? 'SUCCESS'
         : status;
   }

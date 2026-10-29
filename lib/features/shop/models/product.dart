@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
-import '../../../core/network/api_client.dart';
-import '../../auth/data/datasources/token_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../core/network/media_url.dart';
 
 class Product {
   final String id;
@@ -40,15 +43,7 @@ class Product {
   /// Converts backend-relative product media paths into URLs reachable by
   /// the current Flutter target while preserving bundled asset paths.
   static String resolveImageUrl(String? value) {
-    if (value == null || value.trim().isEmpty) return '';
-    final clean = value.trim();
-    if (clean.startsWith('assets/') ||
-        clean.startsWith('http://') ||
-        clean.startsWith('https://')) {
-      return clean;
-    }
-    final host = ApiClient.baseUrl.replaceAll('/api/v1', '');
-    return clean.startsWith('/') ? '$host$clean' : '$host/$clean';
+    return resolveBackendMediaUrl(value);
   }
 
   String get formattedPrice => '\$${price.toStringAsFixed(2)}';
@@ -218,6 +213,63 @@ class Product {
   static final Map<String, int> _stockOverrides = {};
   static final Map<String, int> _soldOverrides = {};
   static final Map<String, Map<String, dynamic>> _productDetailsOverrides = {};
+  static const String _inventoryOverridesStorageKey =
+      'vilo_product_inventory_overrides_v1';
+  static Future<void>? _inventoryLoadFuture;
+  static Future<void> _inventoryWriteFuture = Future<void>.value();
+
+  /// Loads local inventory overrides before the first catalog is rendered.
+  /// The backend remains authoritative whenever it is reachable; these values
+  /// keep local/fallback products from appearing restocked after a Dart restart.
+  static Future<void> loadPersistedInventoryOverrides() {
+    return _inventoryLoadFuture ??= _loadPersistedInventoryOverrides();
+  }
+
+  static Future<void> _loadPersistedInventoryOverrides() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_inventoryOverridesStorageKey);
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return;
+
+      final stock = decoded['stock'];
+      if (stock is Map) {
+        for (final entry in stock.entries) {
+          if (entry.value is num) {
+            _stockOverrides[entry.key.toString()] = (entry.value as num)
+                .toInt();
+          }
+        }
+      }
+
+      final sold = decoded['sold'];
+      if (sold is Map) {
+        for (final entry in sold.entries) {
+          if (entry.value is num) {
+            _soldOverrides[entry.key.toString()] = (entry.value as num).toInt();
+          }
+        }
+      }
+    } catch (error) {
+      debugPrint('[Product] Unable to load inventory overrides: $error');
+    }
+  }
+
+  static void _persistInventoryOverrides() {
+    final snapshot = jsonEncode({
+      'stock': Map<String, int>.from(_stockOverrides),
+      'sold': Map<String, int>.from(_soldOverrides),
+    });
+    _inventoryWriteFuture = _inventoryWriteFuture.then((_) async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_inventoryOverridesStorageKey, snapshot);
+      } catch (error) {
+        debugPrint('[Product] Unable to persist inventory overrides: $error');
+      }
+    });
+  }
 
   static Map<String, dynamic>? getProductDetailsOverride(
     String productId, {
@@ -313,6 +365,7 @@ class Product {
       }
     }
     stockUpdateNotifier.value++;
+    _persistInventoryOverrides();
   }
 
   static int getEffectiveSoldCount(
@@ -422,6 +475,7 @@ class Product {
       }
     }
     stockUpdateNotifier.value++;
+    _persistInventoryOverrides();
     return true;
   }
 
@@ -481,6 +535,7 @@ class Product {
       }
     }
     stockUpdateNotifier.value++;
+    _persistInventoryOverrides();
     return true;
   }
 
@@ -590,12 +645,7 @@ class Product {
       }
     }
     stockUpdateNotifier.value++;
-
-    // Best-effort remote stock deduction to backend database
-    final numericId = int.tryParse(cleanId);
-    if (numericId != null) {
-      _syncRemoteStockDeduction(numericId, quantity);
-    }
+    _persistInventoryOverrides();
 
     return true;
   }
@@ -665,24 +715,82 @@ class Product {
     }
 
     stockUpdateNotifier.value++;
+    _persistInventoryOverrides();
     return true;
-  }
-
-  static void _syncRemoteStockDeduction(int productId, int quantity) async {
-    try {
-      if (!await TokenStorage.instance.hasValidToken()) return;
-      await ApiClient.instance.post(
-        '/products/$productId/deduct-stock?quantity=$quantity',
-        requireAuth: true,
-      );
-    } catch (e) {
-      debugPrint('[Product] Remote stock deduction deferred: $e');
-    }
   }
 
   static void resetStockOverrides() {
     _stockOverrides.clear();
+    _persistInventoryOverrides();
     stockUpdateNotifier.value++;
+  }
+
+  /// Stores the stock returned by the backend after a successful purchase.
+  ///
+  /// Cart quantities are represented locally as temporary reservations until
+  /// checkout succeeds. Once checkout succeeds, this value becomes the
+  /// authoritative display value so a purchase of 2 from stock 3 leaves 1
+  /// visible instead of leaving the old reservation at 0.
+  static void setAuthoritativeStock(
+    String productId, {
+    required int stock,
+    String? productName,
+  }) {
+    final cleanId = productId.trim();
+    if (cleanId.isEmpty) return;
+    final updated = stock.clamp(0, 999999).toInt();
+    final keys = <String>{cleanId};
+    if (productName != null && productName.trim().isNotEmpty) {
+      keys.add(productName.trim().toLowerCase());
+    }
+
+    for (final product in [
+      ...userAddedProducts,
+      ...creatorProducts,
+      ...screenshotFeedProducts,
+      ...screenshotTopSellers,
+    ]) {
+      final idMatches =
+          keys.contains(product.id) ||
+          keys.contains(product.id.hashCode.abs().toString()) ||
+          keys.contains(product.id.hashCode.toString());
+      final nameMatches =
+          productName != null &&
+          product.name.trim().toLowerCase() == productName.trim().toLowerCase();
+      if (idMatches || nameMatches) {
+        keys
+          ..add(product.id)
+          ..add(product.id.hashCode.abs().toString())
+          ..add(product.id.hashCode.toString())
+          ..add(product.name.trim().toLowerCase());
+      }
+    }
+
+    for (final key in keys) {
+      _stockOverrides[key] = updated;
+    }
+
+    for (int i = 0; i < userAddedProducts.length; i++) {
+      final product = userAddedProducts[i];
+      final matches =
+          keys.contains(product.id) ||
+          keys.contains(product.id.hashCode.abs().toString()) ||
+          keys.contains(product.id.hashCode.toString()) ||
+          (productName != null &&
+              product.name.trim().toLowerCase() ==
+                  productName.trim().toLowerCase());
+      if (matches) {
+        userAddedProducts[i] = product.copyWith(stock: updated);
+      }
+    }
+
+    for (final key in keys) {
+      final details = _productDetailsOverrides[key];
+      if (details != null) details['stock'] = updated;
+    }
+
+    stockUpdateNotifier.value++;
+    _persistInventoryOverrides();
   }
 
   bool get isOutOfStock => getEffectiveStock(id, stock) <= 0;

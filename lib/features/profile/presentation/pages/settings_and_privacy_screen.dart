@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/network/media_url.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../auth/presentation/dialogs/logout_dialog.dart';
@@ -213,7 +214,7 @@ class SettingsAndPrivacyScreen extends StatelessWidget {
       leading: profileImage != null
           ? ClipOval(
               child: Image.network(
-                profileImage,
+                resolveBackendMediaUrl(profileImage),
                 width: 24,
                 height: 24,
                 fit: BoxFit.cover,

@@ -12,13 +12,11 @@ import '../widgets/merchant_card.dart';
 class ShopSearchResultsScreen extends StatefulWidget {
   final String initialQuery;
 
-  const ShopSearchResultsScreen({
-    super.key,
-    this.initialQuery = 'Keyboard',
-  });
+  const ShopSearchResultsScreen({super.key, this.initialQuery = 'Keyboard'});
 
   @override
-  State<ShopSearchResultsScreen> createState() => _ShopSearchResultsScreenState();
+  State<ShopSearchResultsScreen> createState() =>
+      _ShopSearchResultsScreenState();
 }
 
 class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
@@ -28,7 +26,9 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
 
   static const Color _bgVoid = Color(0xFF080808);
   static const Color _bgSurfaceElevated = Color(0xFF1C1C1E);
-  static const Color _surfaceStroke = Color(0x14FFFFFF); // rgba(255, 255, 255, 0.08)
+  static const Color _surfaceStroke = Color(
+    0x14FFFFFF,
+  ); // rgba(255, 255, 255, 0.08)
 
   final List<String> _topTabs = ['Community', 'Following', 'For You', 'Shop'];
   late String _currentQuery;
@@ -39,7 +39,11 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
     _currentQuery = widget.initialQuery;
     _searchController = TextEditingController(text: _currentQuery);
     // 4 tabs, index 3 is 'Shop'
-    _topTabController = TabController(length: _topTabs.length, vsync: this, initialIndex: 3);
+    _topTabController = TabController(
+      length: _topTabs.length,
+      vsync: this,
+      initialIndex: 3,
+    );
   }
 
   @override
@@ -94,9 +98,7 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
             physics: const BouncingScrollPhysics(),
             slivers: [
               // Offset for top tabs and search bar header
-              SliverToBoxAdapter(
-                child: SizedBox(height: topPadding + 112),
-              ),
+              SliverToBoxAdapter(child: SizedBox(height: topPadding + 112)),
 
               // Filter Results Meta Header
               SliverToBoxAdapter(
@@ -117,7 +119,10 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
                       ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: _bgSurfaceElevated,
                           borderRadius: BorderRadius.circular(10),
@@ -125,7 +130,11 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
                         ),
                         child: Text(
                           '${merchants.length} stores',
-                          style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
@@ -138,15 +147,12 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
                   sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 14),
-                          child: MerchantCard(merchant: merchants[index]),
-                        );
-                      },
-                      childCount: merchants.length,
-                    ),
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: MerchantCard(merchant: merchants[index]),
+                      );
+                    }, childCount: merchants.length),
                   ),
                 )
               else
@@ -177,7 +183,9 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
         child: Container(
           decoration: BoxDecoration(
             color: _bgVoid.withValues(alpha: 0.88),
-            border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+            border: Border(
+              bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+            ),
           ),
           padding: EdgeInsets.fromLTRB(16, topPadding + 4, 16, 10),
           child: Column(
@@ -198,7 +206,9 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
                         indicatorWeight: 2.5,
                         labelColor: Colors.white,
                         unselectedLabelColor: Colors.white38,
-                        labelPadding: const EdgeInsets.symmetric(horizontal: 14),
+                        labelPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                        ),
                         labelStyle: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
@@ -214,7 +224,9 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
                             Navigator.pop(context);
                           }
                         },
-                        tabs: _topTabs.map((title) => Tab(text: title)).toList(),
+                        tabs: _topTabs
+                            .map((title) => Tab(text: title))
+                            .toList(),
                       ),
                     ),
                   ),
@@ -227,7 +239,11 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
                       border: Border.all(color: _surfaceStroke),
                     ),
                     child: const Center(
-                      child: Icon(Icons.search_rounded, color: Colors.white, size: 20),
+                      child: Icon(
+                        Icons.search_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
                   ),
                 ],
@@ -249,7 +265,11 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
                         border: Border.all(color: _surfaceStroke),
                       ),
                       child: const Center(
-                        child: Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 16),
+                        child: Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white,
+                          size: 16,
+                        ),
                       ),
                     ),
                   ),
@@ -267,17 +287,27 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Row(
                         children: [
-                          const Icon(Icons.search_rounded, color: Colors.white54, size: 19),
+                          const Icon(
+                            Icons.search_rounded,
+                            color: Colors.white54,
+                            size: 19,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: TextField(
                               controller: _searchController,
                               textInputAction: TextInputAction.search,
                               onSubmitted: _onSearchSubmitted,
-                              style: const TextStyle(color: Colors.white, fontSize: 13),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                              ),
                               decoration: const InputDecoration(
                                 hintText: 'Search products or creators...',
-                                hintStyle: TextStyle(color: Colors.white38, fontSize: 13),
+                                hintStyle: TextStyle(
+                                  color: Colors.white38,
+                                  fontSize: 13,
+                                ),
                                 border: InputBorder.none,
                                 isDense: true,
                                 contentPadding: EdgeInsets.zero,
@@ -289,15 +319,23 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
                               onTap: _onClearQuery,
                               child: const Padding(
                                 padding: EdgeInsets.symmetric(horizontal: 4),
-                                child: Icon(Icons.close_rounded, color: Colors.white38, size: 17),
+                                child: Icon(
+                                  Icons.close_rounded,
+                                  color: Colors.white38,
+                                  size: 17,
+                                ),
                               ),
                             ),
                           const SizedBox(width: 4),
                           // High-contrast pure white "Search" button
                           GestureDetector(
-                            onTap: () => _onSearchSubmitted(_searchController.text),
+                            onTap: () =>
+                                _onSearchSubmitted(_searchController.text),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 5,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(14),
@@ -321,13 +359,17 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
                   // Shopping Cart with Notification Badge
                   GestureDetector(
                     onTap: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => const CartPage()));
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CartPage(),
+                        ),
+                      );
                     },
                     child: AnimatedBuilder(
                       animation: CartController.instance,
                       builder: (context, childWidget) {
                         final count = CartController.instance.itemCount;
-                        final displayCount = count > 0 ? count.toString() : '4';
 
                         return Stack(
                           clipBehavior: Clip.none,
@@ -341,34 +383,48 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
                                 border: Border.all(color: _surfaceStroke),
                               ),
                               child: const Center(
-                                child: Icon(Icons.shopping_bag_outlined, color: Colors.white, size: 19),
+                                child: Icon(
+                                  Icons.shopping_bag_outlined,
+                                  color: Colors.white,
+                                  size: 19,
+                                ),
                               ),
                             ),
-                            Positioned(
-                              top: -2,
-                              right: -2,
-                              child: Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF1E1F24),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white70, width: 1.2),
-                                ),
-                                constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                                child: Center(
-                                  child: Text(
-                                    displayCount,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.w900,
-                                      height: 1,
+                            if (count > 0)
+                              Positioned(
+                                top: -2,
+                                right: -2,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEF4444),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: _bgVoid,
+                                      width: 1.2,
+                                    ),
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 18,
+                                    minHeight: 18,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      count > 99 ? '99+' : count.toString(),
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w900,
+                                        height: 1,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
                           ],
                         );
                       },
@@ -385,7 +441,13 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
 
   // ── Empty State ──────────────────────────────────────────────────
   Widget _buildEmptyState() {
-    final suggested = ['Keyboard', 'Gaming Mouse', 'Desk Light', 'Microphone', 'V-Watch'];
+    final suggested = [
+      'Keyboard',
+      'Gaming Mouse',
+      'Desk Light',
+      'Microphone',
+      'V-Watch',
+    ];
 
     return Center(
       child: Padding(
@@ -402,13 +464,21 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
                 border: Border.all(color: _surfaceStroke),
               ),
               child: const Center(
-                child: Icon(Icons.search_off_rounded, color: Colors.white30, size: 36),
+                child: Icon(
+                  Icons.search_off_rounded,
+                  color: Colors.white30,
+                  size: 36,
+                ),
               ),
             ),
             const SizedBox(height: 16),
             Text(
               'No stores or products found for "$_currentQuery"',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 6),
@@ -429,7 +499,10 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
                     _onSearchSubmitted(tag);
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: _bgSurfaceElevated,
                       borderRadius: BorderRadius.circular(16),
@@ -437,7 +510,10 @@ class _ShopSearchResultsScreenState extends State<ShopSearchResultsScreen>
                     ),
                     child: Text(
                       tag,
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 );

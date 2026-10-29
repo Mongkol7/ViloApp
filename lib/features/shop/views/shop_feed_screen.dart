@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../../core/network/media_url.dart';
 import '../presentation/controllers/cart_controller.dart';
 import '../models/product.dart';
 import '../presentation/pages/cart_page.dart';
@@ -228,7 +230,7 @@ class _ShopFeedScreenState extends State<ShopFeedScreen> {
                     ),
                     const SizedBox(width: 12),
 
-                    // Shopping Cart with Badge "4"
+                    // Shopping Cart with live item-count badge
                     GestureDetector(
                       onTap: () {
                         Navigator.push(
@@ -1285,9 +1287,10 @@ class _ShopFeedScreenState extends State<ShopFeedScreen> {
         fallbackUrl ??
         'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600';
 
-    if (imagePath.startsWith('assets/')) {
+    final resolvedImagePath = resolveBackendMediaUrl(imagePath);
+    if (resolvedImagePath.startsWith('assets/')) {
       return Image.asset(
-        imagePath,
+        resolvedImagePath,
         fit: fit,
         errorBuilder: (context, error, stackTrace) {
           return Image.network(
@@ -1306,9 +1309,9 @@ class _ShopFeedScreenState extends State<ShopFeedScreen> {
           );
         },
       );
-    } else if (imagePath.startsWith('http')) {
+    } else if (resolvedImagePath.startsWith('http')) {
       return Image.network(
-        imagePath,
+        resolvedImagePath,
         fit: fit,
         loadingBuilder: (context, child, progress) {
           if (progress == null) return child;

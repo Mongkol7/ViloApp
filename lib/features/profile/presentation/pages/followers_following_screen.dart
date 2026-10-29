@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/network/media_url.dart';
 import 'package:flutter/services.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../../feed/data/datasources/feed_remote_data_source.dart';
@@ -513,7 +514,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
                       width: 48,
                       height: 48,
                       child: Image.network(
-                        avatarUrl,
+                        resolveBackendMediaUrl(avatarUrl),
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) => Container(
                           color: PulseColors.surfaceContainer,

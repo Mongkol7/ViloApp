@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/network/media_url.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../auth/data/datasources/token_storage.dart';
@@ -611,7 +612,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         errorBuilder: (context, error, stackTrace) => _buildImageErrorWidget(),
                       )
                     : Image.network(
-                        url,
+                        resolveBackendMediaUrl(url),
                         fit: BoxFit.cover,
                         loadingBuilder: (ctx, child, progress) {
                           if (progress == null) return child;

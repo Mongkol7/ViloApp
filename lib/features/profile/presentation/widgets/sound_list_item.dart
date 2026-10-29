@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../../../core/network/media_url.dart';
 import '../../../feed/data/datasources/feed_remote_data_source.dart';
 import '../../../feed/presentation/pages/sound_detail_page.dart';
 import '../../data/datasources/profile_sync_service.dart';
@@ -234,7 +235,7 @@ class _SoundListItemState extends State<SoundListItem> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(PulseRadius.sm),
                       child: Image.network(
-                        _currentCoverUrl,
+                        resolveBackendMediaUrl(_currentCoverUrl),
                         width: 48,
                         height: 48,
                         fit: BoxFit.cover,

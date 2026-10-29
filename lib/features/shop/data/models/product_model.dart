@@ -1,4 +1,5 @@
 import 'category_model.dart';
+import '../../../../core/network/media_url.dart';
 import '../../models/product.dart';
 
 class ProductModel {
@@ -40,8 +41,9 @@ class ProductModel {
     this.videoIds = const [],
   });
 
-  String get primaryImage =>
-      images.isNotEmpty ? images.first : 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600';
+  String get primaryImage => images.isNotEmpty
+      ? resolveBackendMediaUrl(images.first)
+      : 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600';
 
   String get formattedPrice => '\$${price.toStringAsFixed(2)}';
   String? get formattedOriginalPrice =>
@@ -82,8 +84,10 @@ class ProductModel {
       sellerName: sellerJson != null
           ? (sellerJson['username'] ?? sellerJson['displayName']) as String?
           : null,
-      sellerAvatar: sellerJson != null ? sellerJson['avatarUrl'] as String? : null,
-      images: parsedImages,
+      sellerAvatar: sellerJson != null
+          ? resolveBackendMediaUrl(sellerJson['avatarUrl'] as String?)
+          : null,
+      images: parsedImages.map(resolveBackendMediaUrl).toList(),
       videoIds: parsedVideoIds,
     );
   }

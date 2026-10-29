@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/network/media_url.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../data/datasources/feed_remote_data_source.dart';
 import '../../data/models/video_feed_model.dart';
@@ -261,7 +262,7 @@ class _PostCard extends StatelessWidget {
       );
     }
     return Image.network(
-      url,
+      resolveBackendMediaUrl(url),
       height: height,
       width: double.infinity,
       fit: BoxFit.cover,
@@ -338,7 +339,9 @@ class _PostCard extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 10,
-                  backgroundImage: NetworkImage(data['avatar'] as String),
+                  backgroundImage: NetworkImage(
+                    resolveBackendMediaUrl(data['avatar'] as String),
+                  ),
                 ),
                 const SizedBox(width: 6),
                 Expanded(

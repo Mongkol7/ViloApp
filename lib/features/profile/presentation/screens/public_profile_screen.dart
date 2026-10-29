@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../../core/network/media_url.dart';
 import '../../../auth/data/datasources/token_storage.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../../inbox_activity/data/datasources/inbox_message_manager.dart';
@@ -657,7 +658,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
                       height: 96,
                       child: avatarUrl.startsWith('assets/')
                           ? Image.asset(
-                              avatarUrl,
+                              resolveBackendMediaUrl(avatarUrl),
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) =>
                                   Container(
@@ -670,7 +671,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
                                   ),
                             )
                           : Image.network(
-                              avatarUrl,
+                              resolveBackendMediaUrl(avatarUrl),
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) =>
                                   Container(

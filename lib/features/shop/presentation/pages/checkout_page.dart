@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../../../core/network/media_url.dart';
 import '../../data/datasources/shop_remote_data_source.dart';
 import '../../data/models/order_model.dart';
 import '../controllers/cart_controller.dart';
 import 'order_history_page.dart';
+import '../../models/product.dart';
 
 class CheckoutPage extends StatefulWidget {
   const CheckoutPage({super.key});
@@ -51,8 +53,35 @@ class _CheckoutPageState extends State<CheckoutPage> {
         shippingAddress: address,
         paymentMethod: _selectedPaymentMethod,
         notes: _notesController.text.trim(),
-        items: cart.items,
       );
+
+      // Keep the catalog in sync with the successful server-side purchase.
+      // The fallback prevents a stale screen from showing the temporary cart
+      // reservation as zero (for example, 3 - 2 must remain 1).
+      final refreshedProductIds = <int>{};
+      for (final item in cart.items) {
+        final fallbackStock = (item.stock - item.quantity).clamp(0, 999999).toInt();
+        Product.setAuthoritativeStock(
+          item.productId.toString(),
+          stock: fallbackStock,
+          productName: item.productTitle,
+        );
+
+        if (refreshedProductIds.add(item.productId)) {
+          try {
+            final refreshedProduct = await ShopRemoteDataSource.instance
+                .getProductById(item.productId);
+            Product.setAuthoritativeStock(
+              item.productId.toString(),
+              stock: refreshedProduct.stock,
+              productName: item.productTitle,
+            );
+          } catch (_) {
+            // The successful checkout and local fallback remain valid if the
+            // follow-up catalog refresh is temporarily unavailable.
+          }
+        }
+      }
 
       // Clear the cart upon successful payment
       await CartController.instance.clearCart();
@@ -271,7 +300,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
                                     child: Image.network(
-                                      item.productImage,
+                                      resolveBackendMediaUrl(item.productImage),
                                       width: 44,
                                       height: 44,
                                       fit: BoxFit.cover,
