@@ -29,10 +29,12 @@ class FollowersFollowingScreen extends StatefulWidget {
   });
 
   @override
-  State<FollowersFollowingScreen> createState() => _FollowersFollowingScreenState();
+  State<FollowersFollowingScreen> createState() =>
+      _FollowersFollowingScreenState();
 }
 
-class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> with SingleTickerProviderStateMixin {
+class _FollowersFollowingScreenState extends State<FollowersFollowingScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
 
@@ -42,6 +44,9 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
   bool _isLoadingFollowing = false;
   String _searchQuery = '';
 
+  // Kept only for compatibility with older local state; remote profile data
+  // is now the sole source for these lists.
+  // ignore: unused_field
   static final List<UserModel> _fallbackFollowers = [
     UserModel(
       id: 2,
@@ -49,7 +54,8 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
       email: 'bunheng@vilo.app',
       displayName: 'Lim Bunheng',
       bio: 'Video Engine & Feed Specialist | Vilo Team',
-      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80',
+      avatarUrl:
+          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80',
       isVerified: true,
       isFollowing: true,
       followsYou: true,
@@ -62,7 +68,8 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
       email: 'rithysak@vilo.app',
       displayName: 'Sok Rithysak',
       bio: 'Mobile UI/UX Developer & Orders Lead',
-      avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80',
+      avatarUrl:
+          'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80',
       isVerified: true,
       isFollowing: false,
       followsYou: true,
@@ -75,7 +82,8 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
       email: 'setkimliza@vilo.app',
       displayName: 'Set Kimliza',
       bio: 'Social Stories & Real-Time Chat Specialist',
-      avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80',
+      avatarUrl:
+          'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80',
       isVerified: true,
       isFollowing: false,
       followsYou: true,
@@ -88,7 +96,8 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
       email: 'trenmono@vilo.app',
       displayName: 'Tren Mono',
       bio: 'Backend & Systems Architect | Vilo Team',
-      avatarUrl: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop&q=80',
+      avatarUrl:
+          'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop&q=80',
       isVerified: true,
       isFollowing: false,
       followsYou: true,
@@ -101,7 +110,8 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
       email: 'tryphien@vilo.app',
       displayName: 'Try Phien',
       bio: 'Creative Media & Content Producer',
-      avatarUrl: 'https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=500&auto=format&fit=crop&q=80',
+      avatarUrl:
+          'https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=500&auto=format&fit=crop&q=80',
       isVerified: true,
       isFollowing: false,
       followsYou: true,
@@ -114,7 +124,8 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
       email: 'nenseanghai@vilo.app',
       displayName: 'Nen Seanghai',
       bio: 'Mobile UI/UX & Responsive Layouts',
-      avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=500&auto=format&fit=crop&q=80',
+      avatarUrl:
+          'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=500&auto=format&fit=crop&q=80',
       isVerified: true,
       isFollowing: false,
       followsYou: true,
@@ -127,7 +138,8 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
       email: 'sophia@vilo.app',
       displayName: 'Sophia Vance',
       bio: 'Digital Artist & Visual Storyteller',
-      avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80',
+      avatarUrl:
+          'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80',
       isVerified: true,
       isFollowing: true,
       followsYou: true,
@@ -136,6 +148,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
     ),
   ];
 
+  // ignore: unused_field
   static final List<UserModel> _fallbackFollowing = [
     UserModel(
       id: 2,
@@ -143,7 +156,8 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
       email: 'bunheng@vilo.app',
       displayName: 'Lim Bunheng',
       bio: 'Video Engine & Feed Specialist | Vilo Team',
-      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80',
+      avatarUrl:
+          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80',
       isVerified: true,
       isFollowing: true,
       followsYou: true,
@@ -156,7 +170,8 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
       email: 'sophia@vilo.app',
       displayName: 'Sophia Vance',
       bio: 'Digital Artist & Visual Storyteller',
-      avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80',
+      avatarUrl:
+          'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80',
       isVerified: true,
       isFollowing: true,
       followsYou: true,
@@ -169,7 +184,8 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
       email: 'rithysak@vilo.app',
       displayName: 'Sok Rithysak',
       bio: 'Mobile UI/UX Developer & Orders Lead',
-      avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80',
+      avatarUrl:
+          'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80',
       isVerified: true,
       isFollowing: true,
       followsYou: true,
@@ -182,7 +198,8 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
       email: 'davi@vilo.app',
       displayName: 'David Miller',
       bio: 'Lo-fi producer & sound designer',
-      avatarUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500&auto=format&fit=crop&q=80',
+      avatarUrl:
+          'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500&auto=format&fit=crop&q=80',
       isVerified: true,
       isFollowing: true,
       followsYou: false,
@@ -192,14 +209,19 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
   ];
 
   int get _displayFollowersCount {
-    if (_followers.isNotEmpty) return _followers.length;
-    if (widget.initialFollowersCount != null) return widget.initialFollowersCount!;
+    if (!_isLoadingFollowers) return _followers.length;
+    if (widget.initialFollowersCount != null)
+      return widget.initialFollowersCount!;
     return 0;
   }
 
   int get _displayFollowingCount {
-    if (_following.isNotEmpty) return _following.where((u) => u.isFollowing).length;
-    if (widget.initialFollowingCount != null) return widget.initialFollowingCount!;
+    // This list is the target user's following list. `isFollowing` describes
+    // whether the logged-in viewer follows each listed account, so filtering
+    // by it undercounted other users' following totals.
+    if (!_isLoadingFollowing) return _following.length;
+    if (widget.initialFollowingCount != null)
+      return widget.initialFollowingCount!;
     return 0;
   }
 
@@ -212,12 +234,21 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
       initialIndex: widget.initialTabIndex.clamp(0, 1),
     );
 
-    final isMe = (widget.userId == null || widget.userId == ProfileSyncService.instance.cachedMyProfile?.id);
+    final isMe =
+        (widget.userId == null ||
+        widget.userId == ProfileSyncService.instance.cachedMyProfile?.id);
     final cachedF = isMe ? ProfileSyncService.instance.cachedFollowers : null;
     final cachedFl = isMe ? ProfileSyncService.instance.cachedFollowing : null;
 
-    _followers = widget.initialFollowers ?? (cachedF != null ? List.from(cachedF) : List.from(_fallbackFollowers));
-    _following = widget.initialFollowing ?? (cachedFl != null ? List.from(cachedFl) : List.from(_fallbackFollowing));
+    // Do not show shared mock/fallback lists for another user's profile. They
+    // made the count look like a different account while the real list was
+    // still loading (or when the request failed).
+    _followers =
+        widget.initialFollowers ??
+        (cachedF != null ? List.from(cachedF) : <UserModel>[]);
+    _following =
+        widget.initialFollowing ??
+        (cachedFl != null ? List.from(cachedFl) : <UserModel>[]);
 
     _isLoadingFollowers = _followers.isEmpty;
     _isLoadingFollowing = _following.isEmpty;
@@ -233,8 +264,24 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
   }
 
   Future<void> _fetchLists() async {
-    final uid = widget.userId;
-    if (uid == null) return;
+    int? uid = widget.userId;
+    if (uid == null && widget.username.trim().isNotEmpty) {
+      try {
+        final user = await ProfileRemoteDataSource.instance.getUser(
+          widget.username,
+        );
+        uid = user.id;
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _isLoadingFollowers = false;
+            _isLoadingFollowing = false;
+          });
+        }
+        return;
+      }
+    }
+    if (uid == null || uid <= 0) return;
 
     if (mounted) {
       setState(() {
@@ -245,48 +292,55 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
 
     final isMe = (uid == ProfileSyncService.instance.cachedMyProfile?.id);
 
-    final followersFuture = ProfileRemoteDataSource.instance.getFollowers(uid).then((fList) {
-      if (mounted) {
-        setState(() {
-          _followers = fList;
-          _isLoadingFollowers = false;
+    final followersFuture = ProfileRemoteDataSource.instance
+        .getFollowers(uid)
+        .then((fList) {
+          if (mounted) {
+            setState(() {
+              _followers = fList;
+              _isLoadingFollowers = false;
+            });
+          }
+          if (isMe) {
+            ProfileSyncService.instance.cachedFollowers = List.from(fList);
+          }
+        })
+        .catchError((_) {
+          if (mounted) {
+            setState(() {
+              _isLoadingFollowers = false;
+            });
+          }
         });
-      }
-      if (isMe) {
-        ProfileSyncService.instance.cachedFollowers = List.from(fList);
-      }
-    }).catchError((_) {
-      if (mounted) {
-        setState(() {
-          if (_followers.isEmpty) _followers = List.from(_fallbackFollowers);
-          _isLoadingFollowers = false;
-        });
-      }
-    });
 
-    final followingFuture = ProfileRemoteDataSource.instance.getFollowing(uid).then((flList) {
-      if (mounted) {
-        setState(() {
-          _following = flList;
-          _isLoadingFollowing = false;
+    final followingFuture = ProfileRemoteDataSource.instance
+        .getFollowing(uid)
+        .then((flList) {
+          if (mounted) {
+            setState(() {
+              _following = flList;
+              _isLoadingFollowing = false;
+            });
+          }
+          if (isMe) {
+            ProfileSyncService.instance.cachedFollowing = List.from(flList);
+          }
+        })
+        .catchError((_) {
+          if (mounted) {
+            setState(() {
+              _isLoadingFollowing = false;
+            });
+          }
         });
-      }
-      if (isMe) {
-        ProfileSyncService.instance.cachedFollowing = List.from(flList);
-      }
-    }).catchError((_) {
-      if (mounted) {
-        setState(() {
-          if (_following.isEmpty) _following = List.from(_fallbackFollowing);
-          _isLoadingFollowing = false;
-        });
-      }
-    });
 
     await Future.wait([followersFuture, followingFuture]);
   }
 
-  Future<void> _toggleFollowUser(UserModel targetUser, bool isFollowersTab) async {
+  Future<void> _toggleFollowUser(
+    UserModel targetUser,
+    bool isFollowersTab,
+  ) async {
     HapticFeedback.lightImpact();
     final newStatus = !targetUser.isFollowing;
 
@@ -294,12 +348,16 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
       if (isFollowersTab) {
         final index = _followers.indexWhere((u) => u.id == targetUser.id);
         if (index != -1) {
-          _followers[index] = _followers[index].copyWith(isFollowing: newStatus);
+          _followers[index] = _followers[index].copyWith(
+            isFollowing: newStatus,
+          );
         }
       } else {
         final index = _following.indexWhere((u) => u.id == targetUser.id);
         if (index != -1) {
-          _following[index] = _following[index].copyWith(isFollowing: newStatus);
+          _following[index] = _following[index].copyWith(
+            isFollowing: newStatus,
+          );
         }
       }
     });
@@ -330,12 +388,16 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
           if (isFollowersTab) {
             final index = _followers.indexWhere((u) => u.id == targetUser.id);
             if (index != -1) {
-              _followers[index] = _followers[index].copyWith(isFollowing: !newStatus);
+              _followers[index] = _followers[index].copyWith(
+                isFollowing: !newStatus,
+              );
             }
           } else {
             final index = _following.indexWhere((u) => u.id == targetUser.id);
             if (index != -1) {
-              _following[index] = _following[index].copyWith(isFollowing: !newStatus);
+              _following[index] = _following[index].copyWith(
+                isFollowing: !newStatus,
+              );
             }
           }
         });
@@ -361,7 +423,10 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
         backgroundColor: PulseColors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: PulseColors.onSurface),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: PulseColors.onSurface,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text('@${widget.username}', style: PulseTypography.bodyLg),
@@ -380,7 +445,10 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
               indicatorWeight: 2,
               labelColor: Colors.white,
               unselectedLabelColor: Colors.grey,
-              labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              labelStyle: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
               tabs: [
                 Tab(text: '$_displayFollowersCount Followers'),
                 Tab(text: '$_displayFollowingCount Following'),
@@ -404,7 +472,11 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
-                  const Icon(Icons.search_rounded, color: Colors.white54, size: 20),
+                  const Icon(
+                    Icons.search_rounded,
+                    color: Colors.white54,
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: TextField(
@@ -413,7 +485,10 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
                       onChanged: (val) => setState(() => _searchQuery = val),
                       decoration: const InputDecoration(
                         hintText: 'Search followers or following...',
-                        hintStyle: TextStyle(color: Colors.white38, fontSize: 14),
+                        hintStyle: TextStyle(
+                          color: Colors.white38,
+                          fontSize: 14,
+                        ),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
@@ -426,7 +501,11 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
                         _searchController.clear();
                         setState(() => _searchQuery = '');
                       },
-                      child: const Icon(Icons.close_rounded, color: Colors.white54, size: 18),
+                      child: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white54,
+                        size: 18,
+                      ),
                     ),
                 ],
               ),
@@ -438,8 +517,16 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildUserList(_filterList(_followers), isFollowersTab: true, isLoading: _isLoadingFollowers),
-                _buildUserList(_filterList(_following), isFollowersTab: false, isLoading: _isLoadingFollowing),
+                _buildUserList(
+                  _filterList(_followers),
+                  isFollowersTab: true,
+                  isLoading: _isLoadingFollowers,
+                ),
+                _buildUserList(
+                  _filterList(_following),
+                  isFollowersTab: false,
+                  isLoading: _isLoadingFollowing,
+                ),
               ],
             ),
           ),
@@ -448,9 +535,15 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
     );
   }
 
-  Widget _buildUserList(List<UserModel> users, {required bool isFollowersTab, required bool isLoading}) {
+  Widget _buildUserList(
+    List<UserModel> users, {
+    required bool isFollowersTab,
+    required bool isLoading,
+  }) {
     if (isLoading && users.isEmpty) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2));
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+      );
     }
 
     if (users.isEmpty) {
@@ -459,7 +552,9 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              isFollowersTab ? Icons.people_outline_rounded : Icons.person_add_outlined,
+              isFollowersTab
+                  ? Icons.people_outline_rounded
+                  : Icons.person_add_outlined,
               color: Colors.white24,
               size: 64,
             ),
@@ -467,15 +562,24 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
             Text(
               _searchQuery.isNotEmpty
                   ? 'No matching users found'
-                  : (isFollowersTab ? 'No followers yet' : 'Not following anyone yet'),
-              style: const TextStyle(color: Colors.white70, fontSize: 15, fontWeight: FontWeight.w600),
+                  : (isFollowersTab
+                        ? 'No followers yet'
+                        : 'Not following anyone yet'),
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
               isFollowersTab
                   ? 'Users who follow this profile will appear here'
                   : 'Profiles followed by this account will appear here',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.38), fontSize: 13),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.38),
+                fontSize: 13,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -488,13 +592,16 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
       color: Colors.white,
       backgroundColor: const Color(0xFF1E1E24),
       child: ListView.separated(
-        key: PageStorageKey('followers_following_list_${isFollowersTab ? "followers" : "following"}'),
+        key: PageStorageKey(
+          'followers_following_list_${isFollowersTab ? "followers" : "following"}',
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         itemCount: users.length,
         separatorBuilder: (_, _) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           final user = users[index];
-          final avatarUrl = user.avatarUrl ??
+          final avatarUrl =
+              user.avatarUrl ??
               'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80';
 
           return Container(
@@ -518,7 +625,11 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) => Container(
                           color: PulseColors.surfaceContainer,
-                          child: const Icon(Icons.person, color: Colors.white70, size: 28),
+                          child: const Icon(
+                            Icons.person,
+                            color: Colors.white70,
+                            size: 28,
+                          ),
                         ),
                       ),
                     ),
@@ -537,7 +648,9 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
                           children: [
                             Flexible(
                               child: Text(
-                                user.displayName.isNotEmpty ? user.displayName : user.username,
+                                user.displayName.isNotEmpty
+                                    ? user.displayName
+                                    : user.username,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -549,7 +662,11 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
                             ),
                             if (user.isVerified) ...[
                               const SizedBox(width: 4),
-                              const Icon(Icons.verified_rounded, color: Color(0xFF2F80ED), size: 14),
+                              const Icon(
+                                Icons.verified_rounded,
+                                color: Color(0xFF2F80ED),
+                                size: 14,
+                              ),
                             ],
                           ],
                         ),
@@ -573,11 +690,18 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
                 GestureDetector(
                   onTap: () => _toggleFollowUser(user, isFollowersTab),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 7,
+                    ),
                     decoration: BoxDecoration(
-                      color: user.isFollowing ? PulseColors.actionSecondary : Colors.white,
+                      color: user.isFollowing
+                          ? PulseColors.actionSecondary
+                          : Colors.white,
                       borderRadius: BorderRadius.circular(20),
-                      border: user.isFollowing ? Border.all(color: PulseColors.surfaceStroke) : null,
+                      border: user.isFollowing
+                          ? Border.all(color: PulseColors.surfaceStroke)
+                          : null,
                     ),
                     child: Text(
                       user.isFollowing ? 'Following' : 'Follow',
@@ -599,8 +723,13 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
 
   void _openPublicProfile(UserModel user) async {
     ProfileRemoteDataSource.instance.cacheUser(user);
-    final cached = FeedRemoteDataSource.instance.getCachedUserVideos(user.username) ??
-        (user.id > 0 ? FeedRemoteDataSource.instance.getCachedUserVideos(user.id.toString()) : null);
+    final cached =
+        FeedRemoteDataSource.instance.getCachedUserVideos(user.username) ??
+        (user.id > 0
+            ? FeedRemoteDataSource.instance.getCachedUserVideos(
+                user.id.toString(),
+              )
+            : null);
 
     await Navigator.of(context).push(
       MaterialPageRoute(

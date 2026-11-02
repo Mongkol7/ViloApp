@@ -42,7 +42,7 @@ class VideoFeedPage extends StatefulWidget {
 }
 
 class _VideoFeedPageState extends State<VideoFeedPage>
-    with AutomaticKeepAliveClientMixin {
+    with RouteAware, AutomaticKeepAliveClientMixin {
   static final Map<String, int> _savedPageIndices = {};
 
   final FeedRemoteDataSource _dataSource = FeedRemoteDataSource.instance;
@@ -57,6 +57,7 @@ class _VideoFeedPageState extends State<VideoFeedPage>
   bool _isLoadingMore = false;
   bool _isRecyclingForYou = false;
   int? _feedSeed;
+  bool _isRouteVisible = true;
 
   // Keep only the next couple of controllers warm. This avoids opening a
   // connection for every item in a long feed while making the next swipe
@@ -143,7 +144,35 @@ class _VideoFeedPageState extends State<VideoFeedPage>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null) {
+      routeObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didPushNext() {
+    // The feed is kept alive inside the main IndexedStack, so its isActive
+    // flag can remain true while a profile or chat route is above it.
+    _isRouteVisible = false;
+    _clearPrefetchCache();
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didPopNext() {
+    _isRouteVisible = true;
+    if (mounted) {
+      setState(() {});
+      _scheduleVideoPrefetch();
+    }
+  }
+
+  @override
   void dispose() {
+    routeObserver.unsubscribe(this);
     VideoFeedManager.instance.latestUploadedVideoNotifier.removeListener(
       _onNewVideoUploaded,
     );
@@ -752,7 +781,7 @@ class _VideoFeedPageState extends State<VideoFeedPage>
                     video: video,
                     preloadedController: _takePrefetchedController(video.id),
                     isCurrentPage: _currentPage == index,
-                    isActive: widget.isActive,
+                    isActive: widget.isActive && _isRouteVisible,
                     canDelete: widget.canDelete,
                     isStandalone: _isStandalone,
                     onLikeTap: () => _onLikeToggled(index),

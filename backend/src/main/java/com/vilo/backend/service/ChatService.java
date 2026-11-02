@@ -3,6 +3,7 @@ package com.vilo.backend.service;
 import com.vilo.backend.dto.ChatMessageRequest;
 import com.vilo.backend.dto.ChatMessageResponse;
 import com.vilo.backend.entity.ChatMessageEntity;
+import com.vilo.backend.entity.ChatConversationRequestEntity;
 import com.vilo.backend.entity.User;
 import com.vilo.backend.entity.ChatMessageDeletionEntity;
 import com.vilo.backend.entity.ChatConversationHiddenEntity;
@@ -12,6 +13,7 @@ import com.vilo.backend.exception.ResourceNotFoundException;
 import com.vilo.backend.repository.ChatMessageRepository;
 import com.vilo.backend.repository.ChatMessageDeletionRepository;
 import com.vilo.backend.repository.ChatConversationHiddenRepository;
+import com.vilo.backend.repository.ChatConversationRequestRepository;
 import com.vilo.backend.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.ArrayList;
 import java.time.Instant;
@@ -30,15 +33,18 @@ public class ChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatMessageDeletionRepository chatMessageDeletionRepository;
     private final ChatConversationHiddenRepository chatConversationHiddenRepository;
+    private final ChatConversationRequestRepository chatConversationRequestRepository;
     private final UserRepository userRepository;
 
     public ChatService(ChatMessageRepository chatMessageRepository,
                        ChatMessageDeletionRepository chatMessageDeletionRepository,
                        ChatConversationHiddenRepository chatConversationHiddenRepository,
+                       ChatConversationRequestRepository chatConversationRequestRepository,
                        UserRepository userRepository) {
         this.chatMessageRepository = chatMessageRepository;
         this.chatMessageDeletionRepository = chatMessageDeletionRepository;
         this.chatConversationHiddenRepository = chatConversationHiddenRepository;
+        this.chatConversationRequestRepository = chatConversationRequestRepository;
         this.userRepository = userRepository;
     }
 
@@ -46,7 +52,8 @@ public class ChatService {
     public ChatMessageResponse saveMessage(User currentUser, ChatMessageRequest request) {
         ChatMessageEntity entity = new ChatMessageEntity();
         entity.setUser(currentUser);
-        entity.setThreadId(normalizeThreadId(currentUser, request.getThreadId(), request.getRecipientHandle()));
+        String normalizedThreadId = normalizeThreadId(currentUser, request.getThreadId(), request.getRecipientHandle());
+        entity.setThreadId(normalizedThreadId);
         entity.setRecipientHandle(canonicalRecipientHandle(request.getRecipientHandle()));
         entity.setMessageText(request.getMessageText());
         entity.setProductTitle(request.getProductTitle());
@@ -62,16 +69,24 @@ public class ChatService {
         entity.setSharedVideoCaption(request.getSharedVideoCaption());
         entity.setIsMe(true);
 
+        User recipient = resolveRecipient(request.getRecipientHandle());
+        ensureMessageRequest(currentUser, recipient, normalizedThreadId);
         chatConversationHiddenRepository.deleteByThreadIdAndUserId(entity.getThreadId(), currentUser.getId());
+        // A new incoming message must make a previously hidden/declined
+        // conversation visible again for the recipient as well.
+        if (recipient != null) {
+            chatConversationHiddenRepository.deleteByThreadIdAndUserId(
+                    entity.getThreadId(), recipient.getId());
+        }
         ChatMessageEntity saved = chatMessageRepository.save(entity);
-        return ChatMessageResponse.fromEntity(saved, currentUser, userRepository);
+        return toResponse(saved, currentUser);
     }
 
     @Transactional(readOnly = true)
     public List<ChatMessageResponse> getMessages(User currentUser) {
         return visibleMessages(chatMessageRepository.findUserMessages(currentUser.getId(), conversationHandlesFor(currentUser)), currentUser)
                 .stream()
-                .map(m -> ChatMessageResponse.fromEntity(m, currentUser, userRepository))
+                .map(m -> toResponse(m, currentUser))
                 .collect(Collectors.toList());
     }
 
@@ -79,7 +94,7 @@ public class ChatService {
     public List<ChatMessageResponse> getMessagesByThread(User currentUser, String threadId) {
         return visibleMessages(chatMessageRepository.findThreadMessages(threadId, currentUser.getId(), conversationHandlesFor(currentUser)), currentUser)
                 .stream()
-                .map(m -> ChatMessageResponse.fromEntity(m, currentUser, userRepository))
+                .map(m -> toResponse(m, currentUser))
                 .collect(Collectors.toList());
     }
 
@@ -110,7 +125,42 @@ public class ChatService {
             throw new BadRequestException("Deletion scope must be ME or EVERYONE");
         }
 
-        return ChatMessageResponse.fromEntity(message, currentUser, userRepository);
+        return toResponse(message, currentUser);
+    }
+
+    @Transactional
+    public int markThreadRead(User currentUser, String threadId) {
+        List<ChatMessageEntity> messages = chatMessageRepository.findThreadMessages(
+                threadId, currentUser.getId(), conversationHandlesFor(currentUser));
+        Instant now = Instant.now();
+        int changed = 0;
+        for (ChatMessageEntity message : messages) {
+            boolean incoming = message.getUser() != null
+                    && !message.getUser().getId().equals(currentUser.getId())
+                    && conversationHandlesFor(currentUser).contains(
+                            message.getRecipientHandle().toLowerCase(Locale.ROOT));
+            if (incoming && message.getReadAt() == null) {
+                message.setReadAt(now);
+                changed++;
+            }
+        }
+        if (changed > 0) chatMessageRepository.saveAll(messages);
+        return changed;
+    }
+
+    @Transactional
+    public void acceptMessageRequest(User currentUser, String threadId) {
+        ChatConversationRequestEntity request = getMessageRequest(currentUser, threadId);
+        request.setStatus("ACCEPTED");
+        chatConversationRequestRepository.save(request);
+    }
+
+    @Transactional
+    public void declineMessageRequest(User currentUser, String threadId) {
+        ChatConversationRequestEntity request = getMessageRequest(currentUser, threadId);
+        request.setStatus("DECLINED");
+        chatConversationRequestRepository.save(request);
+        hideConversation(currentUser, threadId);
     }
 
     @Transactional
@@ -159,6 +209,91 @@ public class ChatService {
             visible.add(message);
         }
         return visible;
+    }
+
+    private ChatMessageResponse toResponse(ChatMessageEntity entity, User currentUser) {
+        ChatMessageResponse response = ChatMessageResponse.fromEntity(entity, currentUser, userRepository);
+        Optional<ChatConversationRequestEntity> request =
+                chatConversationRequestRepository.findByThreadIdAndRecipientId(
+                        entity.getThreadId(), currentUser.getId());
+        if (request.isEmpty()) {
+            request = chatConversationRequestRepository.findFirstByThreadIdAndStatus(
+                    entity.getThreadId(), "ACCEPTED");
+        }
+        if (request.isPresent()) {
+            String status = request.get().getStatus();
+            response.setRequestStatus(status);
+            response.setMessageRequest("PENDING".equalsIgnoreCase(status)
+                    && !Boolean.TRUE.equals(response.getIsMe()));
+        } else if (!Boolean.TRUE.equals(response.getIsMe())
+                && entity.getUser() != null
+                && !recipientFollowsSender(currentUser, entity.getUser())
+                && !isOrderOrSystemMessage(entity)) {
+            // Older direct messages were stored before the request table was
+            // introduced. Classify them consistently on read so they still
+            // appear in Message Requests instead of silently becoming normal
+            // inbox conversations.
+            response.setRequestStatus("PENDING");
+            response.setMessageRequest(true);
+        }
+        return response;
+    }
+
+    private boolean recipientFollowsSender(User recipient, User sender) {
+        if (recipient == null || sender == null
+                || recipient.getId() == null || sender.getId() == null) {
+            return false;
+        }
+        // The authenticated User object can be detached from the Hibernate
+        // session. Query the relationship directly instead of lazy-loading
+        // User.following, which previously caused GET /conversations to fail
+        // with LazyInitializationException.
+        return userRepository.existsFollowingByUserIdAndTargetId(
+                recipient.getId(), sender.getId());
+    }
+
+    private void ensureMessageRequest(User sender, User recipient, String threadId) {
+        if (recipient == null || sender == null || recipient.getId().equals(sender.getId())) return;
+        // Once either participant accepts the request, the whole conversation
+        // is allowed to continue. Do not turn the reply into a second request
+        // for the original sender.
+        if (chatConversationRequestRepository
+                .findFirstByThreadIdAndStatus(threadId, "ACCEPTED")
+                .isPresent()) {
+            return;
+        }
+        boolean recipientFollowsSender = recipientFollowsSender(recipient, sender);
+        if (recipientFollowsSender) return;
+
+        ChatConversationRequestEntity request = chatConversationRequestRepository
+                .findByThreadIdAndRecipientId(threadId, recipient.getId())
+                .orElseGet(() -> new ChatConversationRequestEntity(threadId, sender, recipient));
+        if (!"ACCEPTED".equalsIgnoreCase(request.getStatus())) {
+            request.setStatus("PENDING");
+            chatConversationRequestRepository.save(request);
+        }
+    }
+
+    private ChatConversationRequestEntity getMessageRequest(User currentUser, String threadId) {
+        ChatConversationRequestEntity request = chatConversationRequestRepository
+                .findByThreadIdAndRecipientId(threadId, currentUser.getId())
+                .orElseGet(() -> {
+                    List<ChatMessageEntity> messages = chatMessageRepository.findThreadMessages(
+                            threadId, currentUser.getId(), conversationHandlesFor(currentUser));
+                    ChatMessageEntity incoming = messages.stream()
+                            .filter(message -> message.getUser() != null
+                                    && !message.getUser().getId().equals(currentUser.getId())
+                                    && !isOrderOrSystemMessage(message))
+                            .findFirst()
+                            .orElseThrow(() -> new ResourceNotFoundException("Message request not found"));
+                    ChatConversationRequestEntity created = new ChatConversationRequestEntity(
+                            threadId, incoming.getUser(), currentUser);
+                    return chatConversationRequestRepository.save(created);
+                });
+        if (!"PENDING".equalsIgnoreCase(request.getStatus())) {
+            throw new BadRequestException("This message request is no longer pending");
+        }
+        return request;
     }
 
     private boolean isParticipant(User currentUser, ChatMessageEntity message) {

@@ -50,6 +50,7 @@ public class OrderService {
         // 1. Validate stock and calculate total
         for (CartItem item : cartItems) {
             Product product = item.getProduct();
+            ensureNotOwnProduct(user, product);
             if (product.getStock() < item.getQuantity()) {
                 throw new BadRequestException("Insufficient stock for product: " + product.getTitle() +
                         " (Requested: " + item.getQuantity() + ", Available: " + product.getStock() + ")");
@@ -133,6 +134,7 @@ public class OrderService {
             Product product = productRepository.findById(itemRequest.getProductId())
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Product not found with id: " + itemRequest.getProductId()));
+            ensureNotOwnProduct(user, product);
             products.put(product.getId(), product);
             quantities.merge(product.getId(), itemRequest.getQuantity(), Integer::sum);
         }
@@ -222,6 +224,13 @@ public class OrderService {
         }
         order.setStatus(OrderStatus.CANCELLED);
         return OrderResponse.fromEntity(orderRepository.save(order));
+    }
+
+    private void ensureNotOwnProduct(User buyer, Product product) {
+        if (product.getSeller() != null && product.getSeller().getId() != null
+                && product.getSeller().getId().equals(buyer.getId())) {
+            throw new BadRequestException("You cannot purchase your own product");
+        }
     }
 
     @Transactional(readOnly = true)

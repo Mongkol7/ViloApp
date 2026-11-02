@@ -175,6 +175,15 @@ class CartController extends ChangeNotifier {
   }) async {
     if (quantity <= 0) return false;
 
+    if (ProfileSyncService.instance.isCurrentUser(
+      username: product.sellerUsername ?? product.sellerName,
+      id: product.sellerId?.toString(),
+    )) {
+      _errorMessage = 'You cannot add your own product to the cart.';
+      notifyListeners();
+      return false;
+    }
+
     final targetId = productStringId ?? product.id.toString();
     final effectiveStock = Product.getEffectiveStock(targetId, product.stock);
     if (effectiveStock <= 0) return false;
@@ -320,6 +329,7 @@ class CartController extends ChangeNotifier {
       sellerName: product.seller ?? 'TechHorizon Global',
       sellerUsername: product.seller,
       sellerAvatar: product.sellerAvatar,
+      sellerId: int.tryParse(product.sellerId ?? ''),
       images: [product.imageUrl],
     );
     return addToCart(

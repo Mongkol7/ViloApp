@@ -58,8 +58,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           email: '',
           displayName: 'User',
           bio: '',
-          avatarUrl:
-              'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+          avatarUrl: null,
           isVerified: false,
           followersCount: 0,
           followingCount: 0,
@@ -682,10 +681,10 @@ class _ProfileScreenState extends State<ProfileScreen>
     final currentAvatarUrl =
         (_user?.avatarUrl != null && _user!.avatarUrl!.trim().isNotEmpty)
         ? _user!.avatarUrl!.trim()
-        : ProfileMockData.avatarUrl;
+        : '';
     final currentBio = _user?.bio != null
         ? (_user!.bio!.trim().isNotEmpty ? _user!.bio!.trim() : 'No bio yet.')
-        : ProfileMockData.bio;
+        : 'No bio yet.';
     final followersDisplay = _formatCount(_user?.followersCount ?? 0);
     final followingDisplay = _formatCount(_user?.followingCount ?? 0);
     final totalLikes = _myVideos.fold<int>(0, (sum, v) => sum + v.likeCount);

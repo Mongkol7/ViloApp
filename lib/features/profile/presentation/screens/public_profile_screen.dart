@@ -590,7 +590,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
         ? _loadedUser!.avatarUrl!
         : (widget.avatarUrl?.isNotEmpty == true
               ? widget.avatarUrl!
-              : ProfileMockData.avatarUrl);
+              : '');
     final bio = _loadedUser?.bio != null
         ? (_loadedUser!.bio!.trim().isNotEmpty
               ? _loadedUser!.bio!.trim()

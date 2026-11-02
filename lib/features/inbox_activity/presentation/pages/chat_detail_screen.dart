@@ -194,9 +194,88 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
                 _messages = List.from(updated.messages);
               });
             }
+            unawaited(manager.markThreadRead(_thread.id));
           }
         })
         .catchError((_) {});
+    unawaited(manager.markThreadRead(_thread.id));
+  }
+
+  DateTime? _messageDate(ChatMessage message) => message.createdAt;
+
+  bool _sameMessageDay(ChatMessage first, ChatMessage second) {
+    final firstDate = _messageDate(first)?.toLocal();
+    final secondDate = _messageDate(second)?.toLocal();
+    if (firstDate == null || secondDate == null) return true;
+    return firstDate.year == secondDate.year &&
+        firstDate.month == secondDate.month &&
+        firstDate.day == secondDate.day;
+  }
+
+  String _formatMessageTime(ChatMessage message) {
+    final date = _messageDate(message)?.toLocal();
+    if (date == null) return message.timestamp;
+    final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$hour:$minute ${date.hour >= 12 ? 'PM' : 'AM'}';
+  }
+
+  String _formatMessageDate(ChatMessage message) {
+    final date = _messageDate(message)?.toLocal();
+    if (date == null) return message.timestamp;
+    final today = DateTime.now();
+    final day = DateTime(today.year, today.month, today.day);
+    final messageDay = DateTime(date.year, date.month, date.day);
+    final difference = day.difference(messageDay).inDays;
+    if (difference == 0) return 'Today';
+    if (difference == 1) return 'Yesterday';
+    const months = <String>[
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
+  }
+
+  Widget _buildMessageMeta(ChatMessage message, {required bool isFromMe}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(
+        '${_formatMessageTime(message)}${isFromMe ? (message.seen ? '  •  Seen' : '  •  Sent') : ''}',
+        style: const TextStyle(
+          fontFamily: 'Inter',
+          fontSize: 11,
+          fontWeight: FontWeight.w400,
+          color: Color(0xFF8E8E93),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDateSeparator(ChatMessage message) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12, top: 2),
+      child: Center(
+        child: Text(
+          _formatMessageDate(message),
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF8E8E93),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _saveDraft(String draft) async {
@@ -240,6 +319,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
       isMe: true,
       senderHandle: myHandle,
       timestamp: 'Just now',
+      createdAt: DateTime.now().toUtc(),
+      seen: false,
       status: 'Sent',
       contentType: isLink ? 'LINK' : 'TEXT',
       linkUrl: isLink ? text : null,
@@ -260,6 +341,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
       await InboxMessageManager.instance.addMessageToThread(
         widget.thread.id,
         newMsg,
+        fallbackThread: _thread,
       );
       await InboxMessageManager.instance.saveDraft(widget.thread.id, '');
     } catch (error) {
@@ -284,6 +366,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
       isMe: true,
       senderHandle: myHandle,
       timestamp: 'Just now',
+      createdAt: DateTime.now().toUtc(),
+      seen: false,
       status: 'Sent',
       imageUrl: imageUrls.first,
       imageUrls: imageUrls,
@@ -300,6 +384,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
       await InboxMessageManager.instance.addMessageToThread(
         widget.thread.id,
         newMsg,
+        fallbackThread: _thread,
       );
       await InboxMessageManager.instance.saveDraft(widget.thread.id, '');
     } catch (error) {
@@ -559,24 +644,20 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
                 ...List.generate(_messages.length, (index) {
                   final messageIndex = _messages.length - 1 - index;
                   final message = _messages[messageIndex];
-                  return _buildMessageBubble(message, occurrence: messageIndex);
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildMessageBubble(message, occurrence: messageIndex),
+                      if (message.createdAt != null &&
+                          (messageIndex == 0 ||
+                              !_sameMessageDay(
+                                message,
+                                _messages[messageIndex - 1],
+                              )))
+                        _buildDateSeparator(message),
+                    ],
+                  );
                 }),
-
-                // Date Header at top of conversation
-                Center(
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 20),
-                    child: const Text(
-                      'Today',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: Color(0xFF8E8E93),
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -858,18 +939,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
                 const SizedBox(height: 5),
                 _buildOrderCountdown(message),
               ],
-              if (message.status != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  message.status!,
-                  style: const TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 11,
-                    fontWeight: FontWeight.w400,
-                    color: Color(0xFF8E8E93),
-                  ),
-                ),
-              ],
+              _buildMessageMeta(message, isFromMe: true),
             ],
           ),
         ),
@@ -1055,6 +1125,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
                         const SizedBox(height: 5),
                         _buildOrderCountdown(message),
                       ],
+                      _buildMessageMeta(message, isFromMe: false),
                     ],
                   ),
                 ),
@@ -1564,6 +1635,51 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
     }
   }
 
+  Future<bool> _syncBackendOrderInventory(ChatMessage message) async {
+    final items = <Map<String, dynamic>>[];
+    if (message.orderItems != null && message.orderItems!.isNotEmpty) {
+      items.addAll(message.orderItems!);
+    } else if (message.orderProductId != null &&
+        message.orderProductId!.trim().isNotEmpty) {
+      items.add({
+        'id': message.orderProductId,
+        'title': message.orderProductTitle,
+        'quantity': message.orderQuantity ?? 1,
+      });
+    }
+
+    var synchronized = true;
+    for (final item in items) {
+      final productId = int.tryParse(item['id']?.toString() ?? '');
+      if (productId == null) continue;
+      final productName = item['title']?.toString();
+      try {
+        final product = await ShopRemoteDataSource.instance.getProductById(
+          productId,
+        );
+        Product.setAuthoritativeStock(
+          productId.toString(),
+          stock: product.stock,
+          salesCount: product.salesCount,
+          productName: productName,
+        );
+      } catch (_) {
+        synchronized = false;
+        Product.restoreStock(
+          productId.toString(),
+          (item['quantity'] as num?)?.toInt() ?? 1,
+          productName: productName,
+        );
+        Product.deductSoldCount(
+          productId.toString(),
+          (item['quantity'] as num?)?.toInt() ?? 1,
+          productName: productName,
+        );
+      }
+    }
+    return synchronized;
+  }
+
   ChatMessage _buildCancelledOrderMessage(ChatMessage message) {
     final nowUtc = DateTime.now().toUtc();
     final phnomPenh = nowUtc.add(const Duration(hours: 7));
@@ -1668,9 +1784,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
 
     // 1. Restore local stock for legacy/local-only orders.
     var stockRestored = true;
-    if (!persistedOrderCancelled &&
-        message.orderItems != null &&
-        message.orderItems!.isNotEmpty) {
+    if (persistedOrderCancelled) {
+      stockRestored = await _syncBackendOrderInventory(message);
+    } else if (message.orderItems != null && message.orderItems!.isNotEmpty) {
       for (final item in message.orderItems!) {
         final pId = item['id']?.toString() ?? '';
         final pTitle = item['title']?.toString();
@@ -1941,23 +2057,27 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> with RouteAware {
   }
 
   Widget _buildChatAvatar(String url) {
-    url = resolveBackendMediaUrl(url);
-    if (url.startsWith('assets/')) {
+    final cleanUrl = url.trim();
+    if (cleanUrl.isEmpty) {
+      return const Icon(Icons.person, color: Colors.white, size: 20);
+    }
+    final resolvedUrl = resolveBackendMediaUrl(cleanUrl);
+    if (resolvedUrl.startsWith('assets/')) {
       return Image.asset(
-        url,
+        resolvedUrl,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) =>
-            const Icon(Icons.storefront_rounded, color: Colors.white, size: 20),
+            const Icon(Icons.person, color: Colors.white, size: 20),
       );
     }
-    if (url.startsWith('http')) {
+    if (resolvedUrl.startsWith('http')) {
       return Image.network(
-        url,
+        resolvedUrl,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) =>
-            const Icon(Icons.storefront_rounded, color: Colors.white, size: 20),
+            const Icon(Icons.person, color: Colors.white, size: 20),
       );
     }
-    return const Icon(Icons.storefront_rounded, color: Colors.white, size: 20);
+    return const Icon(Icons.person, color: Colors.white, size: 20);
   }
 }

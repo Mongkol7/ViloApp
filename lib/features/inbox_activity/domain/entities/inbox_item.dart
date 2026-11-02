@@ -135,6 +135,8 @@ class DirectMessageThread {
   final String? senderAvatar;
   final String? recipientHandle;
   final String? recipientAvatar;
+  final bool isMessageRequest;
+  final String? requestStatus;
 
   const DirectMessageThread({
     required this.id,
@@ -149,6 +151,8 @@ class DirectMessageThread {
     this.senderAvatar,
     this.recipientHandle,
     this.recipientAvatar,
+    this.isMessageRequest = false,
+    this.requestStatus,
   });
 
   DirectMessageThread copyWith({
@@ -164,6 +168,8 @@ class DirectMessageThread {
     String? senderAvatar,
     String? recipientHandle,
     String? recipientAvatar,
+    bool? isMessageRequest,
+    String? requestStatus,
   }) {
     return DirectMessageThread(
       id: id ?? this.id,
@@ -178,6 +184,8 @@ class DirectMessageThread {
       senderAvatar: senderAvatar ?? this.senderAvatar,
       recipientHandle: recipientHandle ?? this.recipientHandle,
       recipientAvatar: recipientAvatar ?? this.recipientAvatar,
+      isMessageRequest: isMessageRequest ?? this.isMessageRequest,
+      requestStatus: requestStatus ?? this.requestStatus,
     );
   }
 
@@ -199,6 +207,8 @@ class DirectMessageThread {
       senderAvatar: json['senderAvatar'] as String?,
       recipientHandle: json['recipientHandle'] as String?,
       recipientAvatar: json['recipientAvatar'] as String?,
+      isMessageRequest: json['isMessageRequest'] as bool? ?? false,
+      requestStatus: json['requestStatus'] as String?,
     );
   }
 
@@ -215,6 +225,8 @@ class DirectMessageThread {
     'senderAvatar': senderAvatar,
     'recipientHandle': recipientHandle,
     'recipientAvatar': recipientAvatar,
+    'isMessageRequest': isMessageRequest,
+    'requestStatus': requestStatus,
   };
 }
 
@@ -223,6 +235,10 @@ class ChatMessage {
   final String text;
   final bool isMe;
   final String timestamp;
+  final DateTime? createdAt;
+  final bool seen;
+  final bool isMessageRequest;
+  final String? requestStatus;
   final String? status;
   final String? imageUrl;
   final List<String>? imageUrls;
@@ -252,6 +268,10 @@ class ChatMessage {
     required this.text,
     required this.isMe,
     required this.timestamp,
+    this.createdAt,
+    this.seen = false,
+    this.isMessageRequest = false,
+    this.requestStatus,
     this.status = 'Sent',
     this.imageUrl,
     this.imageUrls,
@@ -326,6 +346,10 @@ class ChatMessage {
     String? text,
     bool? isMe,
     String? timestamp,
+    DateTime? createdAt,
+    bool? seen,
+    bool? isMessageRequest,
+    String? requestStatus,
     String? status,
     String? imageUrl,
     List<String>? imageUrls,
@@ -356,6 +380,10 @@ class ChatMessage {
       text: text ?? this.text,
       isMe: isMe ?? this.isMe,
       timestamp: timestamp ?? this.timestamp,
+      createdAt: createdAt ?? this.createdAt,
+      seen: seen ?? this.seen,
+      isMessageRequest: isMessageRequest ?? this.isMessageRequest,
+      requestStatus: requestStatus ?? this.requestStatus,
       status: status ?? this.status,
       imageUrl: clearRichContent ? null : (imageUrl ?? this.imageUrl),
       imageUrls: clearRichContent ? null : (imageUrls ?? this.imageUrls),
@@ -411,6 +439,12 @@ class ChatMessage {
       text: json['text'] as String? ?? '',
       isMe: json['isMe'] as bool? ?? false,
       timestamp: json['timestamp'] as String? ?? '',
+      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? ''),
+      seen: json['seen'] as bool? ?? (json['readAt'] != null),
+      isMessageRequest:
+          json['messageRequest'] as bool? ??
+          (json['isMessageRequest'] as bool? ?? false),
+      requestStatus: json['requestStatus'] as String?,
       status: json['status'] as String?,
       imageUrl: rawImageUrl is String
           ? rawImageUrl
@@ -448,6 +482,10 @@ class ChatMessage {
     'text': text,
     'isMe': isMe,
     'timestamp': timestamp,
+    'createdAt': createdAt?.toIso8601String(),
+    'seen': seen,
+    'messageRequest': isMessageRequest,
+    'requestStatus': requestStatus,
     'status': status,
     'imageUrl': imageUrl,
     'imageUrls': imageUrls,

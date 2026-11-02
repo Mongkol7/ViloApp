@@ -831,7 +831,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           ),
                         ),
                       ),
-                      if (account.isVerified || isMe) ...[
+                      if (account.isVerified) ...[
                         const SizedBox(width: 4),
                         const Icon(
                           Icons.verified_rounded,

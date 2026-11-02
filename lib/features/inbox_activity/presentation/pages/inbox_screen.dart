@@ -335,10 +335,18 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                     ),
                   );
                 }
+                final requestThreads = threads
+                    .where((thread) => thread.isMessageRequest)
+                    .toList();
+                final regularThreads = threads
+                    .where((thread) => !thread.isMessageRequest)
+                    .toList();
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    for (final thread in threads)
+                    if (requestThreads.isNotEmpty)
+                      _buildMessageRequestsSection(context, requestThreads),
+                    for (final thread in regularThreads)
                       _buildMessageThreadTile(context, thread),
                   ],
                 );
@@ -348,6 +356,169 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
         ),
       ),
     );
+  }
+
+  Widget _buildMessageRequestsSection(
+    BuildContext context,
+    List<DirectMessageThread> requests,
+  ) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF17171A),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(14, 4, 14, 8),
+            child: Text(
+              'MESSAGE REQUESTS',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF8E8E93),
+                letterSpacing: 1.1,
+              ),
+            ),
+          ),
+          for (final thread in requests)
+            _buildMessageRequestTile(context, thread),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessageRequestTile(
+    BuildContext context,
+    DirectMessageThread thread,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipOval(
+            child: SizedBox(
+              width: 46,
+              height: 46,
+              child: _buildAvatarImage(thread.avatarUrl),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  thread.username,
+                  style: const TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  thread.lastMessage,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 13,
+                    color: Color(0xFFB5B5BC),
+                  ),
+                ),
+                const SizedBox(height: 9),
+                Row(
+                  children: [
+                    _requestActionButton(
+                      label: 'Accept',
+                      filled: true,
+                      onPressed: () => _acceptMessageRequest(thread),
+                    ),
+                    const SizedBox(width: 8),
+                    _requestActionButton(
+                      label: 'Delete',
+                      filled: false,
+                      onPressed: () => _declineMessageRequest(thread),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _requestActionButton({
+    required String label,
+    required bool filled,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      height: 32,
+      child: filled
+          ? ElevatedButton(
+              onPressed: onPressed,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2F80ED),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text(label),
+            )
+          : OutlinedButton(
+              onPressed: onPressed,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text(label),
+            ),
+    );
+  }
+
+  Future<void> _acceptMessageRequest(DirectMessageThread thread) async {
+    try {
+      await InboxMessageManager.instance.acceptMessageRequest(thread.id);
+      if (!mounted) return;
+      final updated =
+          InboxMessageManager.instance.getThread(thread.id) ?? thread;
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => ChatDetailScreen(thread: updated)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not accept message request: $error')),
+      );
+    }
+  }
+
+  Future<void> _declineMessageRequest(DirectMessageThread thread) async {
+    try {
+      await InboxMessageManager.instance.declineMessageRequest(thread.id);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete message request: $error')),
+      );
+    }
   }
 
   Widget _buildStoryCircle(BuildContext context, StoryItem story) {
@@ -684,6 +855,9 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
     BuildContext context,
     DirectMessageThread thread,
   ) {
+    final hasUnread = thread.messages.any(
+      (message) => !message.isMe && !message.seen,
+    );
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -776,6 +950,17 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
                 ),
               ),
 
+              if (hasUnread)
+                Container(
+                  width: 8,
+                  height: 8,
+                  margin: const EdgeInsets.only(right: 4),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF2F80ED),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+
               // Right Camera Action Icon
               PopupMenuButton<String>(
                 icon: const Icon(
@@ -813,19 +998,26 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
   }
 
   Widget _buildAvatarImage(String url) {
-    if (url.startsWith('assets/')) {
+    final cleanUrl = url.trim();
+    if (cleanUrl.isEmpty) {
+      return Container(
+        color: AppColors.surface,
+        child: const Icon(Icons.person, color: Colors.white),
+      );
+    }
+    if (cleanUrl.startsWith('assets/')) {
       return Image.asset(
-        url,
+        cleanUrl,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) => Container(
           color: AppColors.surface,
-          child: const Icon(Icons.storefront_rounded, color: Colors.white),
+          child: const Icon(Icons.person, color: Colors.white),
         ),
       );
     }
-    if (url.startsWith('http')) {
+    if (cleanUrl.startsWith('http')) {
       return Image.network(
-        url,
+        cleanUrl,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) => Container(
           color: AppColors.surface,
@@ -834,8 +1026,8 @@ class _InboxScreenState extends State<InboxScreen> with RouteAware {
       );
     }
     return Container(
-      color: const Color(0xFF2F80ED),
-      child: const Icon(Icons.storefront_rounded, color: Colors.white),
+      color: AppColors.surface,
+      child: const Icon(Icons.person, color: Colors.white),
     );
   }
 }

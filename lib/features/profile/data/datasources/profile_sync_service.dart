@@ -169,7 +169,7 @@ class ProfileSyncService {
     if (cached != null && cached.trim().isNotEmpty) {
       return cached.trim();
     }
-    return ProfileMockData.avatarUrl;
+    return '';
   }
 
   /// Returns the current active user's display name

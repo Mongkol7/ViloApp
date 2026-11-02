@@ -232,6 +232,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   Future<void> _handleAddToCart() async {
+    if (_isOwner) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You cannot purchase your own product.')),
+      );
+      return;
+    }
     HapticFeedback.mediumImpact();
     setState(() => _isAddingToCart = true);
 
@@ -1171,7 +1177,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: _isAddingToCart ? null : _handleAddToCart,
+                          onPressed: _isOwner || _isAddingToCart
+                              ? null
+                              : _handleAddToCart,
                           icon: _isAddingToCart
                               ? const SizedBox(
                                   width: 14,
@@ -1179,7 +1187,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                   child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2),
                                 )
                               : const Icon(Icons.add_shopping_cart_rounded, size: 16),
-                          label: Text(_isAddingToCart ? 'Adding...' : 'Add to cart'),
+                          label: Text(
+                            _isOwner
+                                ? 'Your product'
+                                : (_isAddingToCart ? 'Adding...' : 'Add to cart'),
+                          ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: Colors.black,
@@ -1993,7 +2005,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 child: SizedBox(
                   height: 44,
                   child: ElevatedButton.icon(
-                    onPressed: _isAddingToCart ? null : _handleAddToCart,
+                    onPressed: _isOwner || _isAddingToCart
+                        ? null
+                        : _handleAddToCart,
                     icon: _isAddingToCart
                         ? const SizedBox(
                             width: 14,
@@ -2001,7 +2015,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2),
                           )
                         : const Icon(Icons.add_shopping_cart_rounded, color: Colors.black, size: 16),
-                    label: Text(_isAddingToCart ? 'Adding...' : 'Add to Cart'),
+                    label: Text(
+                      _isOwner
+                          ? 'Your product'
+                          : (_isAddingToCart ? 'Adding...' : 'Add to Cart'),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: Colors.black,

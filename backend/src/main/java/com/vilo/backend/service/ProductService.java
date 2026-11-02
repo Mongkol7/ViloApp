@@ -111,12 +111,16 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductResponse deductStock(Long id, int quantity) {
+    public ProductResponse deductStock(User buyer, Long id, int quantity) {
         if (quantity <= 0) {
             throw new BadRequestException("Quantity must be greater than zero");
         }
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + id));
+        if (product.getSeller() != null && product.getSeller().getId() != null
+                && product.getSeller().getId().equals(buyer.getId())) {
+            throw new BadRequestException("You cannot purchase your own product");
+        }
         if (product.getStock() < quantity) {
             throw new BadRequestException("Insufficient stock for product: " + product.getTitle() +
                     " (Requested: " + quantity + ", Available: " + product.getStock() + ")");

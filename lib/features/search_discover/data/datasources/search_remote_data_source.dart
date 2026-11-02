@@ -232,9 +232,11 @@ class SearchRemoteDataSource {
         final rawUsername = u['username']?.toString() ?? '';
         final username = rawUsername.startsWith('@') ? rawUsername : '@$rawUsername';
         final displayName = u['displayName']?.toString() ?? rawUsername;
-        final followers = u['followersCount'] != null && u['followersCount'] != 0
-            ? '${u['followersCount']} followers'
-            : (u['followerCountFormatted']?.toString() ?? '12.4K followers');
+        final rawFollowersCount = u['followersCount'];
+        final followersCount = rawFollowersCount is num
+            ? rawFollowersCount.toInt()
+            : int.tryParse(rawFollowersCount?.toString() ?? '') ?? 0;
+        final followers = '$followersCount followers';
 
         final isMe = ProfileSyncService.instance.isCurrentUser(
           username: username,
@@ -244,7 +246,7 @@ class SearchRemoteDataSource {
             ? ProfileSyncService.instance.currentUserAvatar
             : ((u['avatarUrl'] != null && u['avatarUrl'].toString().isNotEmpty)
                 ? u['avatarUrl'].toString()
-                : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150');
+                : '');
         final effectiveDisplayName = isMe
             ? ProfileSyncService.instance.currentUserDisplayName
             : displayName;

@@ -80,6 +80,39 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
     );
   }
 
+  Future<void> _syncBackendOrderInventory(OrderModel order) async {
+    for (final item in order.items) {
+      final productId = item.productId;
+      if (productId == null) continue;
+
+      try {
+        final product = await ShopRemoteDataSource.instance.getProductById(
+          productId,
+        );
+        Product.setAuthoritativeStock(
+          productId.toString(),
+          stock: product.stock,
+          salesCount: product.salesCount,
+          productName: item.productTitle,
+        );
+      } catch (_) {
+        // The server cancellation already restored inventory. If the follow-up
+        // catalog request is unavailable, reconcile the local reservation so
+        // the UI does not remain stuck at the pre-cancellation value.
+        Product.restoreStock(
+          productId.toString(),
+          item.quantity,
+          productName: item.productTitle,
+        );
+        Product.deductSoldCount(
+          productId.toString(),
+          item.quantity,
+          productName: item.productTitle,
+        );
+      }
+    }
+  }
+
   Future<void> _confirmCancelOrder(OrderModel order) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -144,6 +177,7 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
         } else {
           try {
             await ShopRemoteDataSource.instance.cancelOrder(order.id);
+            await _syncBackendOrderInventory(order);
           } catch (error) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(

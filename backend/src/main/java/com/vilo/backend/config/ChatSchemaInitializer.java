@@ -32,6 +32,7 @@ public class ChatSchemaInitializer {
         jdbcTemplate.execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS shared_video_caption TEXT");
         jdbcTemplate.execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS deleted_for_everyone BOOLEAN NOT NULL DEFAULT FALSE");
         jdbcTemplate.execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE");
+        jdbcTemplate.execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS read_at TIMESTAMP WITH TIME ZONE");
 
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS chat_message_deletions (
@@ -66,5 +67,17 @@ public class ChatSchemaInitializer {
                 )
                 """);
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_notifications_recipient_created ON notifications (recipient_id, created_at DESC)");
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS chat_conversation_requests (
+                    id BIGSERIAL PRIMARY KEY,
+                    thread_id VARCHAR(100) NOT NULL,
+                    sender_user_id BIGINT NOT NULL,
+                    recipient_user_id BIGINT NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+                    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT uk_chat_request_thread_recipient UNIQUE (thread_id, recipient_user_id)
+                )
+                """);
     }
 }

@@ -72,6 +72,9 @@ public class ChatMessageEntity {
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 
+    @Column(name = "read_at")
+    private Instant readAt;
+
     public ChatMessageEntity() {}
 
     public ChatMessageEntity(Long id, User user, String threadId, String recipientHandle, String messageText, String productTitle, String productPrice, Boolean isMe, Instant createdAt) {
@@ -249,5 +252,13 @@ public class ChatMessageEntity {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public Instant getReadAt() {
+        return readAt;
+    }
+
+    public void setReadAt(Instant readAt) {
+        this.readAt = readAt;
     }
 }

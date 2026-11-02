@@ -25,4 +25,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @org.springframework.data.jpa.repository.Query("SELECT f.id FROM User u JOIN u.following f WHERE u.id = :userId")
     java.util.List<Long> findFollowingIdsByUserId(@org.springframework.data.repository.query.Param("userId") Long userId);
+
+    @org.springframework.data.jpa.repository.Query("SELECT CASE WHEN COUNT(f) > 0 THEN true ELSE false END FROM User u JOIN u.following f WHERE u.id = :followerId AND f.id = :targetId")
+    boolean existsFollowingByUserIdAndTargetId(
+            @org.springframework.data.repository.query.Param("followerId") Long followerId,
+            @org.springframework.data.repository.query.Param("targetId") Long targetId);
 }

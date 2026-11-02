@@ -34,6 +34,10 @@ public class ChatMessageResponse {
     private String sharedVideoCreator;
     private String sharedVideoCaption;
     private Boolean deletedForEveryone;
+    private Instant readAt;
+    private Boolean seen;
+    private Boolean messageRequest = false;
+    private String requestStatus;
     @JsonProperty("isMe")
     private Boolean isMe;
     private Instant createdAt;
@@ -83,6 +87,8 @@ public class ChatMessageResponse {
         res.setSharedVideoCreator(entity.getSharedVideoCreator());
         res.setSharedVideoCaption(entity.getSharedVideoCaption());
         res.setDeletedForEveryone(Boolean.TRUE.equals(entity.getDeletedForEveryone()));
+        res.setReadAt(entity.getReadAt());
+        res.setSeen(entity.getReadAt() != null);
         if (Boolean.TRUE.equals(entity.getDeletedForEveryone())) {
             res.setMessageText("Message deleted");
             res.setImageUrl(null);
@@ -248,6 +254,15 @@ public class ChatMessageResponse {
     public void setPeerAvatarUrl(String peerAvatarUrl) {
         this.peerAvatarUrl = peerAvatarUrl;
     }
+
+    public Instant getReadAt() { return readAt; }
+    public void setReadAt(Instant readAt) { this.readAt = readAt; }
+    public Boolean getSeen() { return seen; }
+    public void setSeen(Boolean seen) { this.seen = seen; }
+    public Boolean getMessageRequest() { return messageRequest; }
+    public void setMessageRequest(Boolean messageRequest) { this.messageRequest = messageRequest; }
+    public String getRequestStatus() { return requestStatus; }
+    public void setRequestStatus(String requestStatus) { this.requestStatus = requestStatus; }
 
     public String getMessageText() {
         return messageText;

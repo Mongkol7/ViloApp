@@ -79,10 +79,11 @@ public class ProductController {
 
     @PostMapping("/{id}/deduct-stock")
     public ResponseEntity<ApiResponse<ProductResponse>> deductStock(
+            @AuthenticationPrincipal User currentUser,
             @PathVariable Long id,
             @RequestParam(defaultValue = "1") int quantity
     ) {
-        ProductResponse product = productService.deductStock(id, quantity);
+        ProductResponse product = productService.deductStock(currentUser, id, quantity);
         return ResponseEntity.ok(ApiResponse.ok("Stock deducted successfully", product));
     }
 

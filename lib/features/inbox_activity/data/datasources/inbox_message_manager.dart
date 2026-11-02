@@ -251,6 +251,12 @@ class InboxMessageManager {
             (existing.id.startsWith('dm_') || !thread.id.startsWith('dm_'))
             ? existing.id
             : thread.id;
+        final requestAccepted =
+            existing.requestStatus?.toUpperCase() == 'ACCEPTED' ||
+            thread.requestStatus?.toUpperCase() == 'ACCEPTED';
+        final requestPending =
+            existing.requestStatus?.toUpperCase() == 'PENDING' ||
+            thread.requestStatus?.toUpperCase() == 'PENDING';
         final hasNewerAvatar =
             thread.avatarUrl.isNotEmpty &&
             !thread.avatarUrl.contains('dicebear') &&
@@ -263,6 +269,16 @@ class InboxMessageManager {
               ? thread.lastMessage
               : existing.lastMessage,
           avatarUrl: hasNewerAvatar ? thread.avatarUrl : existing.avatarUrl,
+          isMessageRequest: requestAccepted
+              ? false
+              : requestPending ||
+                    existing.isMessageRequest ||
+                    thread.isMessageRequest,
+          requestStatus: requestAccepted
+              ? 'ACCEPTED'
+              : requestPending
+              ? 'PENDING'
+              : (thread.requestStatus ?? existing.requestStatus),
         );
       }
     }
@@ -447,8 +463,12 @@ class InboxMessageManager {
         senderAvatar: thread.senderAvatar ?? existing.senderAvatar,
         recipientHandle: thread.recipientHandle ?? existing.recipientHandle,
         recipientAvatar: thread.recipientAvatar ?? existing.recipientAvatar,
+        isMessageRequest: thread.requestStatus != null
+            ? thread.isMessageRequest
+            : existing.isMessageRequest,
+        requestStatus: thread.requestStatus ?? existing.requestStatus,
         messages: newMessages,
-      );
+       );
 
       _threads.removeAt(existingIndex);
     } else {
@@ -487,8 +507,19 @@ class InboxMessageManager {
   }
 
   /// Appends an individual message to an existing or new thread and brings it to the top.
-  Future<void> addMessageToThread(String threadId, ChatMessage message) async {
-    final index = _threads.indexWhere((t) => t.id == threadId);
+  Future<void> addMessageToThread(
+    String threadId,
+    ChatMessage message, {
+    DirectMessageThread? fallbackThread,
+  }) async {
+    var index = _threads.indexWhere((t) => t.id == threadId);
+    if (index == -1 && fallbackThread != null) {
+      // A newly opened profile chat starts as an empty placeholder. A remote
+      // refresh may remove that placeholder before the first message is sent.
+      // Reinsert it from the active chat so the first message is not dropped.
+      addOrUpdateThread(fallbackThread);
+      index = _threads.indexWhere((t) => t.id == threadId);
+    }
     if (index != -1) {
       final thread = _threads[index];
       final updatedMessages = List<ChatMessage>.from(thread.messages)
@@ -525,6 +556,76 @@ class InboxMessageManager {
   }
 
   Future<void> refreshFromRemote() => _syncFromRemoteDatabase();
+
+  Future<void> markThreadRead(String threadId) async {
+    if (!await TokenStorage.instance.hasValidToken()) return;
+    try {
+      await ApiClient.instance.patch(
+        '/chats/conversations/${Uri.encodeComponent(threadId)}/read',
+        requireAuth: true,
+      );
+      final index = _threads.indexWhere((thread) => thread.id == threadId);
+      if (index == -1) return;
+      final thread = _threads[index];
+      final updatedMessages = thread.messages
+          .map(
+            (message) => message.isMe ? message : message.copyWith(seen: true),
+          )
+          .toList();
+      _threads[index] = thread.copyWith(messages: updatedMessages);
+      threadsNotifier.value = _threads.map(resolveThreadForActiveUser).toList();
+      _persistInBackground();
+    } catch (error) {
+      debugPrint('[InboxMessageManager] Unable to mark chat as read: $error');
+    }
+  }
+
+  Future<void> acceptMessageRequest(String threadId) async {
+    final index = _threads.indexWhere((thread) => thread.id == threadId);
+    if (index == -1) return;
+    final previous = _threads[index];
+    _threads[index] = previous.copyWith(
+      isMessageRequest: false,
+      requestStatus: 'ACCEPTED',
+    );
+    threadsNotifier.value = _threads.map(resolveThreadForActiveUser).toList();
+    await _persist();
+    if (!await TokenStorage.instance.hasValidToken()) return;
+    try {
+      await ApiClient.instance.post(
+        '/chats/conversations/${Uri.encodeComponent(threadId)}/request/accept',
+        requireAuth: true,
+      );
+    } catch (error) {
+      _threads[index] = previous;
+      threadsNotifier.value = _threads.map(resolveThreadForActiveUser).toList();
+      await _persist();
+      rethrow;
+    }
+  }
+
+  Future<void> declineMessageRequest(String threadId) async {
+    final index = _threads.indexWhere((thread) => thread.id == threadId);
+    if (index == -1) return;
+    final previous = _threads.removeAt(index);
+    threadsNotifier.value = _threads.map(resolveThreadForActiveUser).toList();
+    await _persist();
+    if (!await TokenStorage.instance.hasValidToken()) return;
+    try {
+      await ApiClient.instance.post(
+        '/chats/conversations/${Uri.encodeComponent(threadId)}/request/decline',
+        requireAuth: true,
+      );
+    } catch (error) {
+      _threads.insert(
+        index < _threads.length ? index : _threads.length,
+        previous,
+      );
+      threadsNotifier.value = _threads.map(resolveThreadForActiveUser).toList();
+      await _persist();
+      rethrow;
+    }
+  }
 
   Future<String> uploadChatPhoto(
     List<int> bytes, {
@@ -901,37 +1002,6 @@ class InboxMessageManager {
     _persistInBackground();
   }
 
-  static final Map<String, String> knownPlatformUsers = {
-    'mongkol':
-        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80',
-    'bunheng':
-        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80',
-    'rithysak':
-        'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80',
-    'setkimliza':
-        'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80',
-    'trenmono':
-        'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop&q=80',
-    'tryphien':
-        'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500&auto=format&fit=crop&q=80',
-    'nenseanghai':
-        'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=500&auto=format&fit=crop&q=80',
-    'admin':
-        'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=500&auto=format&fit=crop&q=80',
-    'craftsman_bob':
-        'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500',
-    'serey':
-        'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500',
-    'techhorizon global':
-        'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80',
-    'techgear official':
-        'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200',
-    'god gear official':
-        'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=200',
-    'master tech':
-        'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=200',
-  };
-
   static final Set<String> _pendingUserPrefetches = {};
 
   static void _prefetchUserAvatar(String cleanHandle) {
@@ -985,9 +1055,7 @@ class InboxMessageManager {
         !candidateAvatar.contains('tote')) {
       return resolveBackendMediaUrl(candidateAvatar.trim());
     }
-    if (clean.isEmpty) {
-      return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
-    }
+    if (clean.isEmpty) return '';
 
     final activeProfile =
         ProfileSyncService.instance.cachedMyProfile ??
@@ -1004,14 +1072,12 @@ class InboxMessageManager {
       if (myAvatar.isNotEmpty) return myAvatar;
     }
 
-    if (knownPlatformUsers.containsKey(clean)) {
-      return knownPlatformUsers[clean]!;
-    }
-
     // Trigger prefetch in the background so genuine database avatar loads
     _prefetchUserAvatar(clean);
 
-    return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
+    // No profile image is a valid state for a newly registered account.
+    // Let the inbox render its person placeholder instead of showing mock data.
+    return '';
   }
 
   /// Resolves a genuine creator avatar URL rather than a product thumbnail (backward-compatible alias).
@@ -1108,6 +1174,10 @@ class InboxMessageManager {
         }
 
         final isMe = item['isMe'] as bool? ?? true;
+        final requestStatus = item['requestStatus'] as String?;
+        final isMessageRequest =
+            item['messageRequest'] as bool? ??
+            (requestStatus?.toUpperCase() == 'PENDING' && !isMe);
         final rawPeer =
             (item['peerUsername'] as String? ??
                     (isMe
@@ -1150,21 +1220,27 @@ class InboxMessageManager {
         final senderAvatar = item['senderAvatar'] as String?;
         final recipientAvatar = item['recipientAvatar'] as String?;
 
-        final rawCreatedAt = item['orderCreatedAtMs'] ?? item['createdAt'];
+        final rawCreatedAt = item['createdAt'];
+        final parsedCreatedAt = rawCreatedAt == null
+            ? null
+            : DateTime.tryParse(rawCreatedAt.toString());
         int? createdAtMs;
-        if (rawCreatedAt != null) {
-          if (rawCreatedAt is int) {
-            createdAtMs = rawCreatedAt;
-          } else if (rawCreatedAt is num) {
-            createdAtMs = rawCreatedAt.toInt();
+        final rawOrderCreatedAt = item['orderCreatedAtMs'];
+        if (rawOrderCreatedAt != null) {
+          if (rawOrderCreatedAt is int) {
+            createdAtMs = rawOrderCreatedAt;
+          } else if (rawOrderCreatedAt is num) {
+            createdAtMs = rawOrderCreatedAt.toInt();
           } else {
-            final parsed = DateTime.tryParse(rawCreatedAt.toString());
-            if (parsed != null) {
-              createdAtMs = parsed.millisecondsSinceEpoch;
-            } else {
-              createdAtMs = int.tryParse(rawCreatedAt.toString());
-            }
+            createdAtMs = int.tryParse(rawOrderCreatedAt.toString());
           }
+        } else if (parsedCreatedAt != null &&
+            ((item['isOrder'] as bool?) == true ||
+                (item['orderReference'] as String?)?.trim().isNotEmpty ==
+                    true)) {
+          createdAtMs = parsedCreatedAt.millisecondsSinceEpoch;
+        } else if (rawCreatedAt is int) {
+          createdAtMs = rawCreatedAt;
         }
 
         final bool isOrderInquiry =
@@ -1205,6 +1281,10 @@ class InboxMessageManager {
           remoteId: remoteNumericId,
           senderHandle: senderHandle,
           timestamp: 'Recently',
+          createdAt: parsedCreatedAt,
+          seen: item['seen'] as bool? ?? item['readAt'] != null,
+          isMessageRequest: isMessageRequest,
+          requestStatus: requestStatus,
           status: 'Sent',
           imageUrl: parsedImages.isNotEmpty ? parsedImages.first : null,
           imageUrls: parsedImages.isNotEmpty ? parsedImages : null,
@@ -1293,6 +1373,8 @@ class InboxMessageManager {
               timeAgo: 'Recently',
               isVerified: true,
               messages: [remoteMessage],
+              isMessageRequest: remoteMessage.isMessageRequest,
+              requestStatus: remoteMessage.requestStatus,
             ),
           );
           hasChanges = true;
@@ -1412,6 +1494,10 @@ class InboxMessageManager {
             id: msgId,
             remoteId: remoteNumericId,
             text: remoteMessage.text,
+            createdAt: remoteMessage.createdAt,
+            seen: remoteMessage.seen,
+            isMessageRequest: remoteMessage.isMessageRequest,
+            requestStatus: remoteMessage.requestStatus,
             imageUrl: remoteMessage.imageUrl,
             imageUrls: remoteMessage.imageUrls,
             contentType: remoteMessage.contentType,
@@ -1448,6 +1534,10 @@ class InboxMessageManager {
               ? recipient
               : existing.recipientHandle,
           recipientAvatar: recipientAvatar ?? existing.recipientAvatar,
+          isMessageRequest: remoteMessage.requestStatus != null
+              ? remoteMessage.isMessageRequest
+              : existing.isMessageRequest,
+          requestStatus: remoteMessage.requestStatus ?? existing.requestStatus,
           messages: resolvedMessages,
           lastMessage: hasMessage ? existing.lastMessage : msgText,
           timeAgo: hasMessage ? existing.timeAgo : 'Recently',
@@ -1516,13 +1606,14 @@ class InboxMessageManager {
       final handle = canonicalHandle(thread.username);
       if (handle.isEmpty) continue;
       try {
-        var user = ProfileRemoteDataSource.instance.getCachedUser(handle);
-        user ??= await ProfileRemoteDataSource.instance.getUser(handle);
+        // Always ask the canonical profile endpoint first so a changed avatar
+        // is reflected in message requests immediately. ProfileRemoteDataSource
+        // falls back to its cache only when the request cannot be completed.
+        final user = await ProfileRemoteDataSource.instance.getUser(handle);
         final avatar = user.avatarUrl?.trim() ?? '';
         final username = user.username.trim().isNotEmpty
             ? '@${user.username.replaceAll('@', '').trim()}'
             : thread.username;
-        if (avatar.isEmpty) continue;
         if (thread.avatarUrl != avatar || thread.username != username) {
           _threads[i] = thread.copyWith(username: username, avatarUrl: avatar);
           changed = true;

@@ -68,6 +68,11 @@ public class CartService {
         Product product = productRepository.findById(request.getProductId())
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + request.getProductId()));
 
+        if (product.getSeller() != null && product.getSeller().getId() != null
+                && product.getSeller().getId().equals(user.getId())) {
+            throw new BadRequestException("You cannot add your own product to the cart");
+        }
+
         if (product.getStock() < request.getQuantity()) {
             throw new BadRequestException("Requested quantity exceeds available stock (" + product.getStock() + ")");
         }

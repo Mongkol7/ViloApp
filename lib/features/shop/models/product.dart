@@ -735,6 +735,7 @@ class Product {
     String productId, {
     required int stock,
     String? productName,
+    int? salesCount,
   }) {
     final cleanId = productId.trim();
     if (cleanId.isEmpty) return;
@@ -784,11 +785,75 @@ class Product {
       }
     }
 
+    if (salesCount != null) {
+      setAuthoritativeSoldCount(
+        productId,
+        salesCount: salesCount,
+        productName: productName,
+      );
+    }
+
     for (final key in keys) {
       final details = _productDetailsOverrides[key];
       if (details != null) details['stock'] = updated;
     }
 
+    stockUpdateNotifier.value++;
+    _persistInventoryOverrides();
+  }
+
+  /// Stores the sales count returned by the backend, clearing any temporary
+  /// local increment that was made while an order was pending.
+  static void setAuthoritativeSoldCount(
+    String productId, {
+    required int salesCount,
+    String? productName,
+  }) {
+    final cleanId = productId.trim();
+    if (cleanId.isEmpty) return;
+    final updated = salesCount.clamp(0, 999999).toInt();
+    final keys = <String>{cleanId};
+    if (productName != null && productName.trim().isNotEmpty) {
+      keys.add(productName.trim().toLowerCase());
+    }
+
+    for (final product in [
+      ...userAddedProducts,
+      ...creatorProducts,
+      ...screenshotFeedProducts,
+      ...screenshotTopSellers,
+    ]) {
+      final idMatches =
+          keys.contains(product.id) ||
+          keys.contains(product.id.hashCode.abs().toString()) ||
+          keys.contains(product.id.hashCode.toString());
+      final nameMatches =
+          productName != null &&
+          product.name.trim().toLowerCase() == productName.trim().toLowerCase();
+      if (idMatches || nameMatches) {
+        keys
+          ..add(product.id)
+          ..add(product.id.hashCode.abs().toString())
+          ..add(product.id.hashCode.toString())
+          ..add(product.name.trim().toLowerCase());
+      }
+    }
+
+    for (final key in keys) {
+      _soldOverrides[key] = updated;
+    }
+    for (int i = 0; i < userAddedProducts.length; i++) {
+      final product = userAddedProducts[i];
+      final matches =
+          keys.contains(product.id) ||
+          keys.contains(product.id.hashCode.abs().toString()) ||
+          keys.contains(product.id.hashCode.toString()) ||
+          (productName != null &&
+              product.name.trim().toLowerCase() == productName.trim().toLowerCase());
+      if (matches) {
+        userAddedProducts[i] = product.copyWith(soldCount: updated);
+      }
+    }
     stockUpdateNotifier.value++;
     _persistInventoryOverrides();
   }

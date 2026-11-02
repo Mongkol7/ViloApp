@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/chats")
@@ -51,6 +52,33 @@ public class ChatController {
     ) {
         List<ChatMessageResponse> messages = chatService.getMessagesByThread(currentUser, threadId);
         return ResponseEntity.ok(ApiResponse.ok("Thread messages retrieved successfully", messages));
+    }
+
+    @PatchMapping("/conversations/{threadId}/read")
+    public ResponseEntity<ApiResponse<Map<String, Integer>>> markThreadRead(
+            @AuthenticationPrincipal User currentUser,
+            @PathVariable String threadId
+    ) {
+        int updated = chatService.markThreadRead(currentUser, threadId);
+        return ResponseEntity.ok(ApiResponse.ok("Conversation marked as read", Map.of("updated", updated)));
+    }
+
+    @PostMapping("/conversations/{threadId}/request/accept")
+    public ResponseEntity<ApiResponse<Void>> acceptMessageRequest(
+            @AuthenticationPrincipal User currentUser,
+            @PathVariable String threadId
+    ) {
+        chatService.acceptMessageRequest(currentUser, threadId);
+        return ResponseEntity.ok(ApiResponse.ok("Message request accepted", null));
+    }
+
+    @PostMapping("/conversations/{threadId}/request/decline")
+    public ResponseEntity<ApiResponse<Void>> declineMessageRequest(
+            @AuthenticationPrincipal User currentUser,
+            @PathVariable String threadId
+    ) {
+        chatService.declineMessageRequest(currentUser, threadId);
+        return ResponseEntity.ok(ApiResponse.ok("Message request declined", null));
     }
 
     @DeleteMapping("/messages/{messageId}")
